@@ -1538,30 +1538,41 @@
                     // XML Rows 생성
                     const xmlRows = [];
 
-                    // 1) 상단 방송 요약 타이틀 행 (4열 병합)
+                    // 1) 상단 대제목 행 (4열 병합)
                     xmlRows.push(`
-      <Row ss:Height="26">
+      <Row ss:Height="34">
         <Cell ss:MergeAcross="3" ss:StyleID="sTitle">
-          <Data ss:Type="String">방송일자: ${escXml(todayStr)}   |   총 낙찰: ${allRecords.length}건 (낙찰자: ${totalUsersCount}명)   |   총 매출: ${grandTotalWon.toLocaleString('ko-KR')}원</Data>
+          <Data ss:Type="String">🎬 유튜브 라이브 경매 낙찰 집계표</Data>
         </Cell>
       </Row>`);
 
-                    // 기본 크기 빈 줄
+                    // 2) 요약 메타 정보 카드 행 (좌: 방송일자, 우: 총 낙찰건수 및 총매출액)
                     xmlRows.push(`
-      <Row ss:Height="18">
+      <Row ss:Height="24">
+        <Cell ss:MergeAcross="1" ss:StyleID="sSummaryLeft">
+          <Data ss:Type="String">📅 방송일자: ${escXml(todayStr)}</Data>
+        </Cell>
+        <Cell ss:MergeAcross="1" ss:StyleID="sSummaryRight">
+          <Data ss:Type="String">👥 총 낙찰: ${allRecords.length}건 (${totalUsersCount}명)  │  💰 총매출: ${grandTotalWon.toLocaleString('ko-KR')}원</Data>
+        </Cell>
+      </Row>`);
+
+                    // 3) 상단 여백 빈 줄
+                    xmlRows.push(`
+      <Row ss:Height="10">
         <Cell ss:MergeAcross="3" ss:StyleID="sBlank"/>
       </Row>`);
 
-                    // 2) 테이블 헤더 행 (4개 열)
+                    // 4) 테이블 헤더 행 (4개 열)
                     xmlRows.push(`
-      <Row ss:Height="24">
+      <Row ss:Height="26">
         <Cell ss:StyleID="sHeader"><Data ss:Type="String">번호</Data></Cell>
         <Cell ss:StyleID="sHeader"><Data ss:Type="String">시간</Data></Cell>
         <Cell ss:StyleID="sHeader"><Data ss:Type="String">낙찰자</Data></Cell>
         <Cell ss:StyleID="sHeader"><Data ss:Type="String">낙찰가</Data></Cell>
       </Row>`);
 
-                    // 3) 데이터 행 + 소계 행 + 닉네임 그룹 구분선
+                    // 5) 데이터 행 + 소계 행 + 닉네임 그룹 구분선
                     let rowIndex = 0;
                     for (let i = 0; i < allRecords.length; i++) {
                         const r = allRecords[i];
@@ -1576,39 +1587,46 @@
                         const nickCount = nickTotals[nick]?.count || 1;
                         const priceNum = Math.round((parseFloat(r.price) || 0) * 10000);
 
+                        // 짝수/홀수 줄무늬 스타일 분기
+                        const isAlt = (rowIndex % 2 === 0);
+                        const styleCenter = isAlt ? 'sCenterAlt' : 'sCenter';
+                        const styleTime   = isAlt ? 'sTimeAlt'   : 'sTime';
+                        const styleNick   = isAlt ? 'sNickAlt'   : 'sNick';
+                        const stylePrice  = isAlt ? 'sPriceAlt'  : 'sPrice';
+
                         // 본문 데이터 행 (4열)
                         xmlRows.push(`
-      <Row ss:Height="21">
-        <Cell ss:StyleID="sCenter"><Data ss:Type="Number">${rowIndex}</Data></Cell>
-        <Cell ss:StyleID="sCenter"><Data ss:Type="String">${escXml(r.videoTime || r.time || '')}</Data></Cell>
-        <Cell ss:StyleID="sNick"><Data ss:Type="String">@${escXml(r.nickname || '')}</Data></Cell>
-        <Cell ss:StyleID="sPrice"><Data ss:Type="Number">${priceNum}</Data></Cell>
+      <Row ss:Height="22">
+        <Cell ss:StyleID="${styleCenter}"><Data ss:Type="Number">${rowIndex}</Data></Cell>
+        <Cell ss:StyleID="${styleTime}"><Data ss:Type="String">${escXml(r.videoTime || r.time || '')}</Data></Cell>
+        <Cell ss:StyleID="${styleNick}"><Data ss:Type="String">@${escXml(r.nickname || '')}</Data></Cell>
+        <Cell ss:StyleID="${stylePrice}"><Data ss:Type="Number">${priceNum}</Data></Cell>
       </Row>`);
 
                         // 닉네임별 소계 행 (번호, 시간, 닉네임 3개 열 병합 + 낙찰가 열에 소계 금액)
                         if (isLastOfNick) {
                             xmlRows.push(`
-      <Row ss:Height="23">
+      <Row ss:Height="24">
         <Cell ss:MergeAcross="2" ss:StyleID="sSubtotalLabel"><Data ss:Type="String">▶ @${escXml(nick || '익명')} 소계 (${nickCount}건)</Data></Cell>
         <Cell ss:StyleID="sSubtotalPrice"><Data ss:Type="Number">${nickSumWon}</Data></Cell>
       </Row>`);
 
-                            // 다음 그룹이 있으면 기본 크기 빈 행 (공백 칸)
+                            // 다음 그룹이 있으면 가벼운 구분 빈 행
                             if (i < allRecords.length - 1) {
                                 xmlRows.push(`
-      <Row ss:Height="18">
+      <Row ss:Height="10">
         <Cell ss:MergeAcross="3" ss:StyleID="sBlank"/>
       </Row>`);
                             }
                         }
                     }
 
-                    // 4) 하단 총합계 행
+                    // 6) 하단 총합계 행
                     xmlRows.push(`
-      <Row ss:Height="18">
+      <Row ss:Height="12">
         <Cell ss:MergeAcross="3" ss:StyleID="sBlank"/>
       </Row>
-      <Row ss:Height="26">
+      <Row ss:Height="28">
         <Cell ss:MergeAcross="2" ss:StyleID="sGrandTotal"><Data ss:Type="String">★ [전체 총 합 계]  (총 ${totalUsersCount}명 / ${allRecords.length}건)</Data></Cell>
         <Cell ss:StyleID="sGrandTotalPrice"><Data ss:Type="Number">${grandTotalWon}</Data></Cell>
       </Row>`);
@@ -1624,30 +1642,52 @@
  <Styles>
   <Style ss:ID="Default" ss:Name="Normal">
    <Alignment ss:Vertical="Center"/>
-   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Color="#000000"/>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Color="#1e293b"/>
   </Style>
   <Style ss:ID="sBlank">
    <Alignment ss:Vertical="Center"/>
    <Font ss:FontName="맑은 고딕" ss:Size="10"/>
   </Style>
   <Style ss:ID="sTitle">
-   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
    <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#2b579a"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#0f172a"/>
    </Borders>
-   <Font ss:FontName="맑은 고딕" ss:Size="11" ss:Bold="1" ss:Color="#1a365d"/>
-   <Interior ss:Color="#ebf3fb" ss:Pattern="Solid"/>
+   <Font ss:FontName="맑은 고딕" ss:Size="13" ss:Bold="1" ss:Color="#ffffff"/>
+   <Interior ss:Color="#1e293b" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sSummaryLeft">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="9.5" ss:Bold="1" ss:Color="#475569"/>
+   <Interior ss:Color="#f1f5f9" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sSummaryRight">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Bold="1" ss:Color="#1d4ed8"/>
+   <Interior ss:Color="#eff6ff" ss:Pattern="Solid"/>
   </Style>
   <Style ss:ID="sHeader">
    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
    <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#1f497d"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#1e293b"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#475569"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#475569"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#475569"/>
    </Borders>
    <Font ss:FontName="맑은 고딕" ss:Size="10.5" ss:Bold="1" ss:Color="#ffffff"/>
-   <Interior ss:Color="#2b579a" ss:Pattern="Solid"/>
+   <Interior ss:Color="#334155" ss:Pattern="Solid"/>
   </Style>
   <Style ss:ID="sCenter">
    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
@@ -1655,8 +1695,43 @@
     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
     <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Color="#64748b"/>
+   <Interior ss:Color="#ffffff" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sCenterAlt">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Color="#64748b"/>
+   <Interior ss:Color="#f8fafc" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sTime">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
    </Borders>
    <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Color="#475569"/>
+   <Interior ss:Color="#ffffff" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sTimeAlt">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Color="#475569"/>
+   <Interior ss:Color="#f8fafc" ss:Pattern="Solid"/>
   </Style>
   <Style ss:ID="sNick">
    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
@@ -1664,8 +1739,21 @@
     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
     <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
    </Borders>
    <Font ss:FontName="맑은 고딕" ss:Size="10.5" ss:Bold="1" ss:Color="#0f172a"/>
+   <Interior ss:Color="#ffffff" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sNickAlt">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10.5" ss:Bold="1" ss:Color="#0f172a"/>
+   <Interior ss:Color="#f8fafc" ss:Pattern="Solid"/>
   </Style>
   <Style ss:ID="sPrice">
    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
@@ -1673,38 +1761,54 @@
     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
     <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
    </Borders>
    <Font ss:FontName="맑은 고딕" ss:Size="10.5" ss:Bold="1" ss:Color="#047857"/>
+   <Interior ss:Color="#ffffff" ss:Pattern="Solid"/>
+   <NumberFormat ss:Format="#,##0&quot;원&quot;"/>
+  </Style>
+  <Style ss:ID="sPriceAlt">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10.5" ss:Bold="1" ss:Color="#047857"/>
+   <Interior ss:Color="#f8fafc" ss:Pattern="Solid"/>
    <NumberFormat ss:Format="#,##0&quot;원&quot;"/>
   </Style>
   <Style ss:ID="sSubtotalLabel">
    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
    <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#fbbf24"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#fbbf24"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#fbbf24"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#f59e0b"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#f59e0b"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#f59e0b"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#f59e0b"/>
    </Borders>
-   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Bold="1" ss:Color="#78350f"/>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Bold="1" ss:Color="#92400e"/>
    <Interior ss:Color="#fef3c7" ss:Pattern="Solid"/>
   </Style>
   <Style ss:ID="sSubtotalPrice">
    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
    <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#fbbf24"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#fbbf24"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#fbbf24"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#fbbf24"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#f59e0b"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#f59e0b"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#f59e0b"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#f59e0b"/>
    </Borders>
-   <Font ss:FontName="맑은 고딕" ss:Size="10.5" ss:Bold="1" ss:Color="#b45309"/>
+   <Font ss:FontName="맑은 고딕" ss:Size="11" ss:Bold="1" ss:Color="#b45309"/>
    <Interior ss:Color="#fef3c7" ss:Pattern="Solid"/>
    <NumberFormat ss:Format="#,##0&quot;원&quot;"/>
   </Style>
   <Style ss:ID="sGrandTotal">
    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
    <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Double" ss:Weight="3" ss:Color="#15803d"/>
     <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#15803d"/>
    </Borders>
    <Font ss:FontName="맑은 고딕" ss:Size="11" ss:Bold="1" ss:Color="#14532d"/>
    <Interior ss:Color="#dcfce7" ss:Pattern="Solid"/>
@@ -1712,24 +1816,33 @@
   <Style ss:ID="sGrandTotalPrice">
    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
    <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Double" ss:Weight="3" ss:Color="#15803d"/>
     <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#15803d"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#15803d"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
    </Borders>
-   <Font ss:FontName="맑은 고딕" ss:Size="11" ss:Bold="1" ss:Color="#15803d"/>
+   <Font ss:FontName="맑은 고딕" ss:Size="12" ss:Bold="1" ss:Color="#15803d"/>
    <Interior ss:Color="#bbf7d0" ss:Pattern="Solid"/>
    <NumberFormat ss:Format="#,##0&quot;원&quot;"/>
   </Style>
  </Styles>
  <Worksheet ss:Name="낙찰목록">
-  <Table ss:DefaultRowHeight="18">
-   <Column ss:Width="50"/>
-   <Column ss:Width="80"/>
-   <Column ss:Width="110"/>
-   <Column ss:Width="100"/>
+  <Table ss:DefaultRowHeight="20">
+   <Column ss:Width="55"/>
+   <Column ss:Width="85"/>
+   <Column ss:Width="140"/>
+   <Column ss:Width="125"/>
 ${xmlRows.join('')}
   </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <PageSetup>
+    <Layout x:Orientation="Portrait"/>
+    <PageMargins x:Bottom="0.75" x:Left="0.7" x:Right="0.7" x:Top="0.75"/>
+   </PageSetup>
+   <DisplayGridlines/>
+   <ProtectObjects>False</ProtectObjects>
+   <ProtectScenarios>False</ProtectScenarios>
+  </WorksheetOptions>
  </Worksheet>
 </Workbook>`;
 
