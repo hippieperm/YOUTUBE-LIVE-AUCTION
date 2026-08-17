@@ -1496,10 +1496,10 @@
                 return result;
             }
 
-            // CSV 다운로드
+            // 엑셀 다운로드 (.xls)
             actionRow.appendChild(makeActionBtn(
-                '📥', 'CSV',
-                'rgba(80,160,255,.14)', 'rgba(80,160,255,.35)', '#8db8ee',
+                '📊', '엑셀',
+                'rgba(40,167,69,.15)', 'rgba(40,167,69,.4)', '#75d888',
                 () => {
                     const rawRecords = getTodayBidRecords();
                     if (rawRecords.length === 0) {
@@ -1507,15 +1507,15 @@
                         return;
                     }
                     const allRecords = groupBidRecordsByNickname(rawRecords, currentSort);
-                    const BOM = '\uFEFF';
-                    const csvHeader = '번호,시간,낙찰자,낙찰가,전송문구';
 
-                    // 닉네임별 총합 사전 계산
+                    // 닉네임별 총합 및 전체 총합 계산
+                    let grandSumMan = 0;
                     const nickTotals = {};
                     allRecords.forEach(r => {
                         const nick = (r && r.nickname) ? String(r.nickname).trim() : '';
                         const p = parseFloat(r && r.price);
                         const val = !isNaN(p) ? p : 0;
+                        grandSumMan += val;
                         if (!nickTotals[nick]) {
                             nickTotals[nick] = { total: 0, count: 0 };
                         }
@@ -1523,8 +1523,47 @@
                         nickTotals[nick].count += 1;
                     });
 
+                    const grandTotalWon = Math.round(grandSumMan * 10000);
+                    const totalUsersCount = Object.keys(nickTotals).length;
+                    const todayStr = getTodayString();
+
+                    function escXml(str) {
+                        return String(str || '')
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;');
+                    }
+
+                    // XML Rows 생성
+                    const xmlRows = [];
+
+                    // 1) 상단 방송 요약 타이틀 행
+                    xmlRows.push(`
+      <Row ss:Height="26">
+        <Cell ss:MergeAcross="4" ss:StyleID="sTitle">
+          <Data ss:Type="String">방송일자: ${escXml(todayStr)}   |   총 낙찰: ${allRecords.length}건 (낙찰자: ${totalUsersCount}명)   |   총 매출: ${grandTotalWon.toLocaleString('ko-KR')}원</Data>
+        </Cell>
+      </Row>`);
+
+                    // 빈 줄
+                    xmlRows.push(`
+      <Row ss:Height="14">
+        <Cell ss:MergeAcross="4" ss:StyleID="sBlank"/>
+      </Row>`);
+
+                    // 2) 테이블 헤더 행
+                    xmlRows.push(`
+      <Row ss:Height="22">
+        <Cell ss:StyleID="sHeader"><Data ss:Type="String">번호</Data></Cell>
+        <Cell ss:StyleID="sHeader"><Data ss:Type="String">시간</Data></Cell>
+        <Cell ss:StyleID="sHeader"><Data ss:Type="String">낙찰자</Data></Cell>
+        <Cell ss:StyleID="sHeader"><Data ss:Type="String">낙찰가</Data></Cell>
+        <Cell ss:StyleID="sHeader"><Data ss:Type="String">전송문구 / 비고</Data></Cell>
+      </Row>`);
+
+                    // 3) 데이터 행 + 소계 행 + 닉네임 그룹 구분선
                     let rowIndex = 0;
-                    const rows = [];
                     for (let i = 0; i < allRecords.length; i++) {
                         const r = allRecords[i];
                         rowIndex++;
@@ -1536,46 +1575,204 @@
                         const isLastOfNick = (nextNick !== nick);
                         const nickSumWon = Math.round((nickTotals[nick]?.total || 0) * 10000);
                         const nickCount = nickTotals[nick]?.count || 1;
+                        const priceNum = Math.round((parseFloat(r.price) || 0) * 10000);
 
-                        // 본문 행 추가
-                        rows.push([
-                            rowIndex,
-                            r.videoTime || r.time || '',
-                            `"${String(r.nickname || '').replace(/"/g, '""')}"`,
-                            `"${formatActualPrice(r.price)}"`,
-                            `"${String(r.message || '').replace(/"/g, '""')}"`
-                        ].join(','));
+                        // 본문 데이터 행
+                        xmlRows.push(`
+      <Row ss:Height="20">
+        <Cell ss:StyleID="sCenter"><Data ss:Type="Number">${rowIndex}</Data></Cell>
+        <Cell ss:StyleID="sCenter"><Data ss:Type="String">${escXml(r.videoTime || r.time || '')}</Data></Cell>
+        <Cell ss:StyleID="sNick"><Data ss:Type="String">@${escXml(r.nickname || '')}</Data></Cell>
+        <Cell ss:StyleID="sPrice"><Data ss:Type="Number">${priceNum}</Data></Cell>
+        <Cell ss:StyleID="sMessage"><Data ss:Type="String">${escXml(r.message || '')}</Data></Cell>
+      </Row>`);
 
-                        // 닉네임별 소계 행 (해당 닉네임의 마지막 행 직후에 낙찰가 열 위치에 합산 표기)
+                        // 닉네임별 소계 행
                         if (isLastOfNick) {
-                            const subtotalLabel = `[소계] @${nick || '익명'}`;
-                            const subtotalAmount = `${nickSumWon.toLocaleString('ko-KR')}`;
-                            const subtotalNote = `${nickCount}건 합산`;
-                            rows.push([
-                                '',
-                                '',
-                                `"${subtotalLabel}"`,
-                                `"${subtotalAmount}"`,
-                                `"${subtotalNote}"`
-                            ].join(','));
+                            xmlRows.push(`
+      <Row ss:Height="21">
+        <Cell ss:StyleID="sSubtotalLabel"><Data ss:Type="String"></Data></Cell>
+        <Cell ss:StyleID="sSubtotalLabel"><Data ss:Type="String"></Data></Cell>
+        <Cell ss:StyleID="sSubtotalLabel"><Data ss:Type="String">▶ 소계 (@${escXml(nick || '익명')})</Data></Cell>
+        <Cell ss:StyleID="sSubtotalPrice"><Data ss:Type="Number">${nickSumWon}</Data></Cell>
+        <Cell ss:StyleID="sSubtotalNote"><Data ss:Type="String">소계 (${nickCount}건)</Data></Cell>
+      </Row>`);
 
-                            // 다음 닉네임 그룹이 있으면 엑셀에서 기본 높이로 정상 렌더링되는 완전한 빈 행 추가
+                            // 다음 그룹이 있으면 빈 행
                             if (i < allRecords.length - 1) {
-                                rows.push('" "," "," "," "," "');
+                                xmlRows.push(`
+      <Row ss:Height="14">
+        <Cell ss:MergeAcross="4" ss:StyleID="sBlank"/>
+      </Row>`);
                             }
                         }
                     }
-                    const csv = BOM + csvHeader + '\r\n' + rows.join('\r\n');
-                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+
+                    // 4) 하단 총합계 행
+                    xmlRows.push(`
+      <Row ss:Height="14">
+        <Cell ss:MergeAcross="4" ss:StyleID="sBlank"/>
+      </Row>
+      <Row ss:Height="25">
+        <Cell ss:StyleID="sGrandTotalCenter"><Data ss:Type="String">★</Data></Cell>
+        <Cell ss:StyleID="sGrandTotalCenter"><Data ss:Type="String">전체</Data></Cell>
+        <Cell ss:StyleID="sGrandTotal"><Data ss:Type="String">[총 합 계]</Data></Cell>
+        <Cell ss:StyleID="sGrandTotalPrice"><Data ss:Type="Number">${grandTotalWon}</Data></Cell>
+        <Cell ss:StyleID="sGrandTotal"><Data ss:Type="String">총 ${totalUsersCount}명 / ${allRecords.length}건</Data></Cell>
+      </Row>`);
+
+                    // 엑셀 XML 템플릿 완성
+                    const excelXml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Center"/>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Color="#000000"/>
+  </Style>
+  <Style ss:ID="sBlank">
+   <Alignment ss:Vertical="Center"/>
+   <Font ss:FontName="맑은 고딕" ss:Size="10"/>
+  </Style>
+  <Style ss:ID="sTitle">
+   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#2b579a"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="11" ss:Bold="1" ss:Color="#1a365d"/>
+   <Interior ss:Color="#ebf3fb" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sHeader">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#1f497d"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#d9d9d9"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#d9d9d9"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#d9d9d9"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Bold="1" ss:Color="#ffffff"/>
+   <Interior ss:Color="#2b579a" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sCenter">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Color="#333333"/>
+  </Style>
+  <Style ss:ID="sNick">
+   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Bold="1" ss:Color="#1e293b"/>
+  </Style>
+  <Style ss:ID="sPrice">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Bold="1" ss:Color="#0f766e"/>
+   <NumberFormat ss:Format="#,##0&quot;원&quot;"/>
+  </Style>
+  <Style ss:ID="sMessage">
+   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#e2e8f0"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="9" ss:Color="#64748b"/>
+  </Style>
+  <Style ss:ID="sSubtotalLabel">
+   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Bold="1" ss:Color="#475569"/>
+   <Interior ss:Color="#f1f5f9" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sSubtotalPrice">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="10" ss:Bold="1" ss:Color="#b45309"/>
+   <Interior ss:Color="#fef3c7" ss:Pattern="Solid"/>
+   <NumberFormat ss:Format="#,##0&quot;원&quot;"/>
+  </Style>
+  <Style ss:ID="sSubtotalNote">
+   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#cbd5e1"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="9.5" ss:Color="#64748b"/>
+   <Interior ss:Color="#f1f5f9" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sGrandTotal">
+   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="11" ss:Bold="1" ss:Color="#14532d"/>
+   <Interior ss:Color="#dcfce7" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sGrandTotalCenter">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="11" ss:Bold="1" ss:Color="#14532d"/>
+   <Interior ss:Color="#dcfce7" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="sGrandTotalPrice">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#15803d"/>
+   </Borders>
+   <Font ss:FontName="맑은 고딕" ss:Size="11" ss:Bold="1" ss:Color="#15803d"/>
+   <Interior ss:Color="#bbf7d0" ss:Pattern="Solid"/>
+   <NumberFormat ss:Format="#,##0&quot;원&quot;"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="낙찰목록">
+  <Table ss:DefaultRowHeight="18">
+   <Column ss:Width="45"/>
+   <Column ss:Width="70"/>
+   <Column ss:Width="160"/>
+   <Column ss:Width="105"/>
+   <Column ss:Width="250"/>
+${xmlRows.join('')}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+
+                    const blob = new Blob([excelXml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `유튜브경매_낙찰목록_${getTodayString().replace(/-/g, '')}.csv`;
+                    a.download = `유튜브경매_낙찰목록_${getTodayString().replace(/-/g, '')}.xls`;
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
                     URL.revokeObjectURL(url);
-                    showAuctionToast('📥 CSV 다운로드 완료!', 'success');
+                    showAuctionToast('📊 엑셀(.xls) 다운로드 완료!', 'success');
                 }
             ));
 
