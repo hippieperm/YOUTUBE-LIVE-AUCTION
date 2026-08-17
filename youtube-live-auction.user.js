@@ -2178,7 +2178,7 @@
 
                         outline:none !important;
 
-                        font-size:21px !important;
+                        font-size:24px !important;
 
                         font-weight:800 !important;
                     `
@@ -2238,7 +2238,7 @@
                         color:
                             #ffcc00;
 
-                        font-size:13px;
+                        font-size:14px;
 
                         font-weight:800;
 
@@ -2331,7 +2331,7 @@
                     : (isDelOrClear ? 'rgba(255,255,255,.65)' : '#fff');
 
             let fontSize =
-                isFn ? '12.5px' : (isDelOrClear ? '15px' : '17px');
+                isFn ? '15px' : (isDelOrClear ? '18px' : '21px');
 
             const btn =
                 createElement(
