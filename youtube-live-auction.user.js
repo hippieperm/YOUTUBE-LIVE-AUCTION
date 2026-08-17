@@ -149,6 +149,97 @@
     }
 
 
+    /** 초 단위 영상 시간을 MM:SS 또는 HH:MM:SS 문자열로 변환 */
+    function formatVideoTime(sec) {
+        if (isNaN(sec) || sec === null || sec === undefined || sec < 0) return '';
+        const totalSec = Math.floor(sec);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        if (h > 0) {
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+
+    /** 현재 YouTube 영상 재생 시간 (영상시간) 추출 */
+    function getCurrentVideoTime() {
+        try {
+            // 1) movie_player 플레이어 API 탐색
+            const getPlayer = (w) => {
+                try {
+                    return w.document.getElementById('movie_player');
+                } catch (e) {
+                    return null;
+                }
+            };
+            const player = getPlayer(window) ||
+                (window.top && window.top !== window && getPlayer(window.top)) ||
+                (window.parent && window.parent !== window && getPlayer(window.parent)) ||
+                (window.opener && getPlayer(window.opener));
+            if (player && typeof player.getCurrentTime === 'function') {
+                const ct = player.getCurrentTime();
+                if (typeof ct === 'number' && !isNaN(ct) && ct >= 0) {
+                    return formatVideoTime(ct);
+                }
+            }
+
+            // 2) video 태그 currentTime 탐색
+            const getVideo = (w) => {
+                try {
+                    return w.document.querySelector('video.html5-main-video, video');
+                } catch (e) {
+                    return null;
+                }
+            };
+            const video = getVideo(window) ||
+                (window.top && window.top !== window && getVideo(window.top)) ||
+                (window.parent && window.parent !== window && getVideo(window.parent)) ||
+                (window.opener && getVideo(window.opener));
+            if (video && typeof video.currentTime === 'number' && !isNaN(video.currentTime) && video.currentTime >= 0) {
+                return formatVideoTime(video.currentTime);
+            }
+
+            // 3) .ytp-time-current UI 텍스트 탐색
+            const getTimeEl = (w) => {
+                try {
+                    return w.document.querySelector('.ytp-time-current');
+                } catch (e) {
+                    return null;
+                }
+            };
+            const timeEl = getTimeEl(window) ||
+                (window.top && window.top !== window && getTimeEl(window.top)) ||
+                (window.parent && window.parent !== window && getTimeEl(window.parent)) ||
+                (window.opener && getTimeEl(window.opener));
+            if (timeEl && timeEl.textContent && timeEl.textContent.trim()) {
+                const txt = timeEl.textContent.trim();
+                if (/^\d+:\d+(:\d+)?$/.test(txt)) {
+                    return txt;
+                }
+            }
+        } catch (e) {}
+
+        // Fallback: 현재 실제 시간
+        const now = new Date();
+        return String(now.getHours()).padStart(2, '0') + ':' +
+               String(now.getMinutes()).padStart(2, '0') + ':' +
+               String(now.getSeconds()).padStart(2, '0');
+    }
+
+
+    /** 만원 단위 또는 숫자 문자열을 실제 금액 포맷(예: 1,000,000)으로 변환 */
+    function formatActualPrice(price) {
+        if (price === undefined || price === null || price === '') return '';
+        const p = parseFloat(price);
+        if (isNaN(p)) return String(price);
+        // 만원 단위 -> 원 단위 환산 (100 -> 1,000,000 / 15 -> 150,000 / 1.5 -> 15,000)
+        const won = Math.round(p * 10000);
+        return won.toLocaleString('ko-KR');
+    }
+
+
     /**
      * 낙찰 1건 기록 추가
      * @param {string} nickname - 낙찰자 닉네임
@@ -161,15 +252,18 @@
         const records = loadBidRecords();
 
         const now = new Date();
-        const timeStr =
+        const realTimeStr =
             String(now.getHours()).padStart(2, '0') + ':' +
             String(now.getMinutes()).padStart(2, '0') + ':' +
             String(now.getSeconds()).padStart(2, '0');
+        const videoTimeStr = getCurrentVideoTime();
 
         records.push({
             id:          Date.now(),
             date:        getTodayString(),
-            time:        timeStr,
+            time:        videoTimeStr || realTimeStr,
+            videoTime:   videoTimeStr || realTimeStr,
+            realTime:    realTimeStr,
             videoId:     getCurrentVideoId(),
             nickname:    nickname,
             price:       price,
@@ -180,7 +274,7 @@
         saveBidRecords(records);
         updateBidBadge();
 
-        console.log(PREFIX, '낙찰 기록 저장:', nickname, price + '만');
+        console.log(PREFIX, '낙찰 기록 저장:', nickname, price + '만 (영상시간: ' + (videoTimeStr || realTimeStr) + ')');
     }
 
 
@@ -1367,14 +1461,13 @@
                     }
                     const allRecords = sortBidRecords(rawRecords, currentSort);
                     const BOM = '\uFEFF';
-                    const csvHeader = '번호,시간,낙찰자,낙찰가(만원),원문채팅,전송문구';
+                    const csvHeader = '번호,시간,낙찰자,낙찰가,전송문구';
                     const rows = allRecords.map((r, i) =>
                         [
                             i + 1,
-                            r.time || '',
+                            r.videoTime || r.time || '',
                             `"${String(r.nickname || '').replace(/"/g, '""')}"`,
-                            r.price || '',
-                            `"${String(r.originalChat || '').replace(/"/g, '""')}"`,
+                            `"${formatActualPrice(r.price)}"`,
                             `"${String(r.message || '').replace(/"/g, '""')}"`
                         ].join(',')
                     );
@@ -1408,16 +1501,19 @@
                         const p = parseFloat(r && r.price);
                         if (!isNaN(p)) sum += p;
                     });
-                    const sumStr = Number.isInteger(sum) ? String(sum) : sum.toFixed(1).replace(/\.0$/, '');
+                    const totalWon = Math.round(sum * 10000);
+                    const sumStr = totalWon.toLocaleString('ko-KR') + '원';
 
                     const lines = allRecords.map((r, i) => {
                         const datePrefix = (r.date && r.date !== getTodayString()) ? `${r.date} ` : '';
-                        return `${i + 1}. ${datePrefix}${r.time || ''} | @${r.nickname || ''} | ${r.price || ''}만원`;
+                        const timeVal = r.videoTime || r.time || '';
+                        const priceVal = formatActualPrice(r.price);
+                        return `${i + 1}. ${datePrefix}${timeVal} | @${r.nickname || ''} | ${priceVal ? priceVal + '원' : ''}`;
                     });
                     const text =
                         `[낙찰 내역]\n` +
                         lines.join('\n') +
-                        `\n\n총 ${allRecords.length}건 / ${sumStr}만원`;
+                        `\n\n총 ${allRecords.length}건 / ${sumStr}`;
 
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(text).then(() => {
