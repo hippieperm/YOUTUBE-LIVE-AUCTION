@@ -834,18 +834,41 @@
     // =========================================================
 
     let _bidListKeydownHandler = null;
+    let _lastOpenBidListModalTime = 0;
+
+    function getTargetDocs() {
+        const docs = [document];
+        const input = findChatInput();
+        if (input && input.ownerDocument && !docs.includes(input.ownerDocument)) {
+            docs.push(input.ownerDocument);
+        }
+        try {
+            if (window.top && window.top.document && !docs.includes(window.top.document)) {
+                docs.push(window.top.document);
+            }
+        } catch (e) {}
+        try {
+            if (window.parent && window.parent.document && !docs.includes(window.parent.document)) {
+                docs.push(window.parent.document);
+            }
+        } catch (e) {}
+        return docs;
+    }
 
     function removeBidListUI() {
+        const docs = getTargetDocs();
 
         if (_bidListKeydownHandler) {
+            docs.forEach(doc => {
+                try {
+                    const win = doc.defaultView || window;
+                    win.removeEventListener('keydown', _bidListKeydownHandler, true);
+                } catch (e) {}
+            });
             window.removeEventListener('keydown', _bidListKeydownHandler, true);
             _bidListKeydownHandler = null;
         }
 
-        const input = findChatInput();
-        const targetDoc = input ? (input.ownerDocument || document) : document;
-
-        const docs = [document, targetDoc];
         docs.forEach(doc => {
             try {
                 if (!doc) return;
@@ -863,6 +886,12 @@
     // =========================================================
 
     function openBidListModal() {
+
+        const nowTime = Date.now();
+        if (nowTime - _lastOpenBidListModalTime < 250) {
+            return;
+        }
+        _lastOpenBidListModalTime = nowTime;
 
         console.log(PREFIX, '📋 낙찰 내역 모달 열기 실행!');
 
@@ -1110,16 +1139,50 @@
                 return btn;
             }
 
-            // CSV 다운로드
+            // 정렬 상태 관리
+            const SORT_STORAGE_KEY = '__auction_bid_sort';
+            let currentSort = 'newest';
+            try {
+                currentSort = localStorage.getItem(SORT_STORAGE_KEY) || 'newest';
+            } catch (e) {}
+
+            function sortBidRecords(list, sortType) {
+                const arr = [...list];
+                switch (sortType) {
+                    case 'newest': // 최신순 (최근 등록 순)
+                        return arr.sort((a, b) => (b.id || 0) - (a.id || 0));
+                    case 'oldest': // 오래된 순 (최초 등록 순)
+                        return arr.sort((a, b) => (a.id || 0) - (b.id || 0));
+                    case 'price_desc': // 가격 높은 순
+                        return arr.sort((a, b) => {
+                            const pa = parseFloat(a.price) || 0;
+                            const pb = parseFloat(b.price) || 0;
+                            if (pb !== pa) return pb - pa;
+                            return (b.id || 0) - (a.id || 0);
+                        });
+                    case 'price_asc': // 가격 낮은 순
+                        return arr.sort((a, b) => {
+                            const pa = parseFloat(a.price) || 0;
+                            const pb = parseFloat(b.price) || 0;
+                            if (pa !== pb) return pa - pb;
+                            return (b.id || 0) - (a.id || 0);
+                        });
+                    default:
+                        return arr.sort((a, b) => (b.id || 0) - (a.id || 0));
+                }
+            }
+
+            // CSV 다운로드 (현재 정렬 순서 반영)
             actionRow.appendChild(makeActionBtn(
                 '📥', 'CSV',
                 'rgba(80,160,255,.14)', 'rgba(80,160,255,.35)', '#8db8ee',
                 () => {
-                    const allRecords = getTodayBidRecords();
-                    if (allRecords.length === 0) {
+                    const rawRecords = getTodayBidRecords();
+                    if (rawRecords.length === 0) {
                         showAuctionToast('저장할 낙찰 내역이 없습니다.', 'auction');
                         return;
                     }
+                    const allRecords = sortBidRecords(rawRecords, currentSort);
                     const BOM = '\uFEFF';
                     const csvHeader = '번호,시간,낙찰자,낙찰가(만원),원문채팅,전송문구';
                     const rows = allRecords.map((r, i) =>
@@ -1146,16 +1209,17 @@
                 }
             ));
 
-            // 클립보드 복사
+            // 클립보드 복사 (현재 정렬 순서 반영)
             actionRow.appendChild(makeActionBtn(
                 '📋', '복사',
                 'rgba(150,110,230,.14)', 'rgba(150,110,230,.35)', '#c4a5f8',
                 () => {
-                    const allRecords = getTodayBidRecords();
-                    if (allRecords.length === 0) {
+                    const rawRecords = getTodayBidRecords();
+                    if (rawRecords.length === 0) {
                         showAuctionToast('복사할 내역이 없습니다.', 'auction');
                         return;
                     }
+                    const allRecords = sortBidRecords(rawRecords, currentSort);
                     const lines = allRecords.map((r, i) =>
                         `${i + 1}. ${r.time || ''} | @${r.nickname || ''} | ${r.price || ''}만원`
                     );
@@ -1217,10 +1281,146 @@
                     saveBidRecords(filtered);
                     updateBidBadge();
 
-                    // 통계 재갱신
-                    statsCard.querySelector('div:nth-child(1) div:nth-child(2)').textContent = '0건';
-                    statsCard.querySelector('div:nth-child(2) div:nth-child(2)').textContent = '0만';
-                    listWrap.innerHTML = '';
+                    updateStats();
+                    renderBidList();
+
+                    showAuctionToast('🗑️ 낙찰 내역이 삭제되었습니다.', 'separator');
+                }
+            ));
+
+            modal.appendChild(actionRow);
+
+
+            // -- 정렬 탭 바 --
+
+            const sortTabBar = createElement(
+                'div',
+                {
+                    style: `
+                        display:grid !important;
+                        grid-template-columns:repeat(4, 1fr) !important;
+                        gap:3px !important;
+                        background:rgba(255,255,255,.04) !important;
+                        padding:3px !important;
+                        border-radius:9px !important;
+                        border:1px solid rgba(255,255,255,.07) !important;
+                    `
+                }
+            );
+
+            const SORT_TABS = [
+                { id: 'newest',     label: '최신순' },
+                { id: 'oldest',     label: '오래된순' },
+                { id: 'price_desc', label: '높은가격' },
+                { id: 'price_asc',  label: '낮은가격' }
+            ];
+
+            const sortButtons = {};
+
+            SORT_TABS.forEach(tab => {
+                const btn = createElement(
+                    'button',
+                    {
+                        type: 'button',
+                        text: tab.label,
+                        style: `
+                            height:25px !important;
+                            padding:0 !important;
+                            border:0 !important;
+                            border-radius:6px !important;
+                            font-size:10.5px !important;
+                            font-weight:700 !important;
+                            cursor:pointer !important;
+                            transition:all .15s !important;
+                            background:transparent !important;
+                            color:rgba(255,255,255,.5) !important;
+                        `
+                    }
+                );
+
+                btn.addEventListener('click', () => {
+                    if (currentSort === tab.id) return;
+                    currentSort = tab.id;
+                    try {
+                        localStorage.setItem(SORT_STORAGE_KEY, currentSort);
+                    } catch (e) {}
+                    updateSortTabUI();
+                    renderBidList();
+                });
+
+                sortButtons[tab.id] = btn;
+                sortTabBar.appendChild(btn);
+            });
+
+            function updateSortTabUI() {
+                SORT_TABS.forEach(tab => {
+                    const btn = sortButtons[tab.id];
+                    if (!btn) return;
+                    if (tab.id === currentSort) {
+                        btn.style.background = 'rgba(255,204,0,.18)';
+                        btn.style.color = '#ffcc00';
+                        btn.style.fontWeight = '800';
+                        btn.style.boxShadow = '0 1px 4px rgba(0,0,0,.3)';
+                    } else {
+                        btn.style.background = 'transparent';
+                        btn.style.color = 'rgba(255,255,255,.5)';
+                        btn.style.fontWeight = '700';
+                        btn.style.boxShadow = 'none';
+                    }
+                });
+            }
+
+            updateSortTabUI();
+            modal.appendChild(sortTabBar);
+
+
+            // -- 낙찰 목록 컨테이너 --
+
+            const listWrap = createElement(
+                'div',
+                {
+                    style: `
+                        flex:1 !important;
+                        overflow-y:auto !important;
+                        max-height:235px !important;
+                        display:flex !important;
+                        flex-direction:column !important;
+                        gap:5px !important;
+                        padding-right:2px !important;
+                    `
+                }
+            );
+
+            function updateStats() {
+                const curRecords = getTodayBidRecords();
+                let sum = 0;
+                curRecords.forEach(r => {
+                    const p = parseFloat(r && r.price);
+                    if (!isNaN(p)) sum += p;
+                });
+                const sumStr =
+                    Number.isInteger(sum)
+                        ? String(sum)
+                        : sum.toFixed(1).replace(/\.0$/, '');
+
+                const countEl = statsCard.querySelector('div:nth-child(1) div:nth-child(2)');
+                const priceEl = statsCard.querySelector('div:nth-child(2) div:nth-child(2)');
+                if (countEl) countEl.textContent = `${curRecords.length}건`;
+                if (priceEl) priceEl.textContent = `${sumStr}만`;
+            }
+
+            function renderBidList() {
+                if (typeof listWrap.replaceChildren === 'function') {
+                    listWrap.replaceChildren();
+                } else {
+                    while (listWrap.firstChild) {
+                        listWrap.removeChild(listWrap.firstChild);
+                    }
+                }
+                const rawList = getTodayBidRecords();
+                const sortedList = sortBidRecords(rawList, currentSort);
+
+                if (sortedList.length === 0) {
                     const empty = createElement(
                         'div',
                         {
@@ -1234,47 +1434,10 @@
                     );
                     empty.textContent = '오늘 낙찰 내역이 없습니다.';
                     listWrap.appendChild(empty);
-
-                    showAuctionToast('🗑️ 낙찰 내역이 삭제되었습니다.', 'separator');
+                    return;
                 }
-            ));
 
-            modal.appendChild(actionRow);
-
-
-            // -- 낙찰 목록 --
-
-            const listWrap = createElement(
-                'div',
-                {
-                    style: `
-                        flex:1 !important;
-                        overflow-y:auto !important;
-                        max-height:240px !important;
-                        display:flex !important;
-                        flex-direction:column !important;
-                        gap:5px !important;
-                        padding-right:2px !important;
-                    `
-                }
-            );
-
-            if (records.length === 0) {
-                const empty = createElement(
-                    'div',
-                    {
-                        style: `
-                            text-align:center !important;
-                            padding:28px 0 !important;
-                            color:rgba(255,255,255,.35) !important;
-                            font-size:12px !important;
-                        `
-                    }
-                );
-                empty.textContent = '오늘 낙찰 내역이 없습니다.';
-                listWrap.appendChild(empty);
-            } else {
-                records.forEach((record, idx) => {
+                sortedList.forEach((record, idx) => {
                     if (!record) return;
                     const item = createElement(
                         'div',
@@ -1385,40 +1548,9 @@
                         const all = loadBidRecords();
                         const updated = all.filter(r => r && r.id !== record.id);
                         saveBidRecords(updated);
-                        item.remove();
                         updateBidBadge();
-
-                        // 통계 재갱신
-                        const remaining = getTodayBidRecords();
-                        let newTotal = 0;
-                        remaining.forEach(r => {
-                            const p = parseFloat(r && r.price);
-                            if (!isNaN(p)) newTotal += p;
-                        });
-                        const newTotalStr =
-                            Number.isInteger(newTotal)
-                                ? String(newTotal)
-                                : newTotal.toFixed(1).replace(/\.0$/, '');
-                        statsCard.querySelector('div:nth-child(1) div:nth-child(2)').textContent =
-                            `${remaining.length}건`;
-                        statsCard.querySelector('div:nth-child(2) div:nth-child(2)').textContent =
-                            `${newTotalStr}만`;
-
-                        if (remaining.length === 0) {
-                            const empty = createElement(
-                                'div',
-                                {
-                                    style: `
-                                        text-align:center !important;
-                                        padding:28px 0 !important;
-                                        color:rgba(255,255,255,.35) !important;
-                                        font-size:12px !important;
-                                    `
-                                }
-                            );
-                            empty.textContent = '오늘 낙찰 내역이 없습니다.';
-                            listWrap.appendChild(empty);
-                        }
+                        updateStats();
+                        renderBidList();
                     });
 
                     item.appendChild(delBtn);
@@ -1426,28 +1558,49 @@
                 });
             }
 
+            renderBidList();
             modal.appendChild(listWrap);
 
 
-            // -- DOM 삽입 --
+            // -- DOM 삽입 (최상위 창 우선 지원) --
 
-            const mountTarget = document.body || document.documentElement;
+            let targetDoc = document;
+            try {
+                if (window.top && window.top.document && window.top.document.body) {
+                    targetDoc = window.top.document;
+                }
+            } catch (e) {
+                targetDoc = document;
+            }
+
+            const mountTarget = targetDoc.body || targetDoc.documentElement || document.body;
             mountTarget.appendChild(backdrop);
             mountTarget.appendChild(modal);
 
+            const openedAt = Date.now();
             backdrop.addEventListener('click', (e) => {
+                // 모달 생성 직후 버블링으로 인한 즉시 닫힘 방지 (200ms 가드)
+                if (Date.now() - openedAt < 200) return;
                 if (e.target === backdrop) {
                     removeBidListUI();
                 }
             });
 
-            // ESC 키로 닫기
+            // ESC 키로 닫기 (모든 관련 window에 등록)
             _bidListKeydownHandler = function (event) {
                 if (event.key === 'Escape') {
                     event.preventDefault();
                     removeBidListUI();
                 }
             };
+
+            const allDocs = getTargetDocs();
+            allDocs.forEach(doc => {
+                try {
+                    const win = doc.defaultView || window;
+                    win.addEventListener('keydown', _bidListKeydownHandler, true);
+                } catch (e) {}
+            });
             window.addEventListener('keydown', _bidListKeydownHandler, true);
 
             console.log(PREFIX, '📋 낙찰 내역 모달 열기 완료!');
@@ -1459,6 +1612,11 @@
 
     // 외부 디버깅용 전역 바인딩
     window.__openAuctionBidListModal = openBidListModal;
+    try {
+        if (window.top && window.top !== window) {
+            window.top.__openAuctionBidListModal = openBidListModal;
+        }
+    } catch (e) {}
 
 
     // =========================================================
@@ -3868,8 +4026,7 @@
             openBidListModal();
         };
 
-        bidListBtn.onclick = handleBidListBtnClick;
-        bidListBtn.addEventListener('click', handleBidListBtnClick, true);
+        bidListBtn.addEventListener('click', handleBidListBtnClick);
 
         panel.appendChild(bidListBtn);
 
