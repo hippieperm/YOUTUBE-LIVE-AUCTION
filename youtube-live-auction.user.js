@@ -30,17 +30,37 @@
     function getCurrentVideoId() {
 
         try {
-            // 1) 현재 window URL 파라미터 확인
+            // 1) ytcfg 글로벌 객체 확인 (YouTube 페이지 내부 환경)
+            try {
+                if (typeof window.ytcfg !== 'undefined' && typeof window.ytcfg.get === 'function') {
+                    const v = window.ytcfg.get('VIDEO_ID');
+                    if (v && v !== 'live_chat' && v !== 'live_chat_replay' && v !== 'unknown') return v;
+                }
+            } catch (e) {}
+
+            // 2) 현재 window URL 파라미터 확인
             const url = new URL(window.location.href);
             const v = url.searchParams.get('v');
-            if (v) return v;
+            if (v && v !== 'live_chat' && v !== 'live_chat_replay') return v;
 
             if (url.pathname.startsWith('/live/')) {
                 const parts = url.pathname.split('/').filter(Boolean);
-                if (parts[1]) return parts[1];
+                if (parts[1] && parts[1] !== 'live_chat') return parts[1];
             }
 
-            // 2) 부모 창(parent/top) URL 확인 (iframe 내부 환경 대응)
+            // 3) 부모 창(parent/top) URL 확인 (iframe 내부 환경 대응)
+            try {
+                if (window.top && window.top !== window && window.top.location.href) {
+                    const topUrl = new URL(window.top.location.href);
+                    const tv = topUrl.searchParams.get('v');
+                    if (tv) return tv;
+                    if (topUrl.pathname.startsWith('/live/')) {
+                        const tparts = topUrl.pathname.split('/').filter(Boolean);
+                        if (tparts[1] && tparts[1] !== 'live_chat') return tparts[1];
+                    }
+                }
+            } catch (e) {}
+
             try {
                 if (window.parent && window.parent !== window && window.parent.location.href) {
                     const parentUrl = new URL(window.parent.location.href);
@@ -48,25 +68,25 @@
                     if (pv) return pv;
                     if (parentUrl.pathname.startsWith('/live/')) {
                         const pparts = parentUrl.pathname.split('/').filter(Boolean);
-                        if (pparts[1]) return pparts[1];
+                        if (pparts[1] && pparts[1] !== 'live_chat') return pparts[1];
                     }
                 }
             } catch (e) {}
 
-            // 3) document.referrer 확인
+            // 4) document.referrer 확인
             if (document.referrer) {
                 try {
                     const refUrl = new URL(document.referrer);
                     const rv = refUrl.searchParams.get('v');
-                    if (rv) return rv;
+                    if (rv && rv !== 'live_chat') return rv;
                     if (refUrl.pathname.startsWith('/live/')) {
                         const rparts = refUrl.pathname.split('/').filter(Boolean);
-                        if (rparts[1]) return rparts[1];
+                        if (rparts[1] && rparts[1] !== 'live_chat') return rparts[1];
                     }
                 } catch (e) {}
             }
 
-            // 4) canonical link 태그 확인
+            // 5) DOM의 canonical link 또는 video-id 속성 확인
             const canonical = document.querySelector('link[rel="canonical"]');
             if (canonical && canonical.href) {
                 try {
@@ -76,7 +96,13 @@
                 } catch (e) {}
             }
 
-            // 5) watch 또는 live URL의 pathname 마지막 부분
+            const flexy = document.querySelector('ytd-watch-flexy[video-id]');
+            if (flexy) {
+                const fv = flexy.getAttribute('video-id');
+                if (fv) return fv;
+            }
+
+            // 6) watch 또는 live URL의 pathname 마지막 부분
             const pop = url.pathname.split('/').filter(Boolean).pop();
             if (pop && pop !== 'live_chat' && pop !== 'live_chat_replay' && pop !== 'watch') {
                 return pop;
@@ -158,22 +184,27 @@
     }
 
 
-    /** 현재 방송 기록 필터링 (날짜 무관, 현재 방송 기준 유지) */
+    /** 현재 방송 기록 필터링 (현재 방송 videoId 또는 당일 기준 필터링) */
     function getTodayBidRecords() {
 
         const videoId = getCurrentVideoId();
         const records = loadBidRecords();
+        const today = getTodayString();
 
         return records.filter(r => {
-            // videoId가 둘 다 명확하고 유효한 경우 매칭 확인
+            if (!r) return false;
+            // 1) 현재 방송의 videoId가 명확히 확인된 경우
             if (
-                videoId && videoId !== 'unknown' && videoId !== 'live_chat' &&
-                r.videoId && r.videoId !== 'unknown' && r.videoId !== 'live_chat'
+                videoId && videoId !== 'unknown' && videoId !== 'live_chat' && videoId !== 'live_chat_replay'
             ) {
                 return r.videoId === videoId;
             }
-            // videoId를 특정하기 어려운 환경(iframe 등)에서는 전체 기록 포함
-            return true;
+            // 2) videoId를 특정하기 어려운 환경(일부 iframe 환경 등)인 경우:
+            // 당일(오늘) 날짜의 기록 중 unknown/live_chat 이거나 videoId가 없는 기록만 반환 (과거 다른 날짜 누적 방지)
+            if (r.date === today) {
+                return !r.videoId || r.videoId === 'unknown' || r.videoId === 'live_chat' || r.videoId === 'live_chat_replay';
+            }
+            return false;
         });
     }
 
@@ -1196,7 +1227,10 @@
                 }
             );
 
-            function makeStatBox(label, value, color) {
+            let statCountValEl = null;
+            let statPriceValEl = null;
+
+            function makeStatBox(label, value, color, role) {
                 const box = createElement(
                     'div',
                     {
@@ -1217,13 +1251,15 @@
                     text: value,
                     style: `font-size:16px !important; font-weight:800 !important; color:${color} !important;`
                 });
+                if (role === 'count') statCountValEl = val;
+                if (role === 'price') statPriceValEl = val;
                 box.appendChild(lbl);
                 box.appendChild(val);
                 return box;
             }
 
-            statsCard.appendChild(makeStatBox('총 낙찰', `${totalCount}건`, '#ffcc00'));
-            statsCard.appendChild(makeStatBox('합계 금액', `${totalPriceStr}만`, '#6ee0a0'));
+            statsCard.appendChild(makeStatBox('총 낙찰', `${totalCount}건`, '#ffcc00', 'count'));
+            statsCard.appendChild(makeStatBox('합계 금액', `${totalPriceStr}만`, '#6ee0a0', 'price'));
             modal.appendChild(statsCard);
 
 
@@ -1403,15 +1439,9 @@
                     }
                     if (!confirm(`현재 방송의 낙찰 내역 ${cur.length}건을 모두 삭제할까요?`)) return;
 
+                    const curIds = new Set(cur.map(r => r && r.id));
                     const allRecords = loadBidRecords();
-                    const videoId = getCurrentVideoId();
-                    const filtered = allRecords.filter(r => {
-                        if (videoId && videoId !== 'unknown' && videoId !== 'live_chat' &&
-                            r.videoId && r.videoId !== 'unknown' && r.videoId !== 'live_chat') {
-                            return r.videoId !== videoId;
-                        }
-                        return false;
-                    });
+                    const filtered = allRecords.filter(r => r && !curIds.has(r.id));
                     saveBidRecords(filtered);
                     updateBidBadge();
                     updateStats();
@@ -1535,10 +1565,19 @@
                         ? String(sum)
                         : sum.toFixed(1).replace(/\.0$/, '');
 
-                const countEl = statsCard.querySelector('div:nth-child(1) div:nth-child(2)');
-                const priceEl = statsCard.querySelector('div:nth-child(2) div:nth-child(2)');
-                if (countEl) countEl.textContent = `${curRecords.length}건`;
-                if (priceEl) priceEl.textContent = `${sumStr}만`;
+                if (statCountValEl) {
+                    statCountValEl.textContent = `${curRecords.length}건`;
+                } else {
+                    const countEl = statsCard.querySelector('div:nth-child(1) div:nth-child(2)');
+                    if (countEl) countEl.textContent = `${curRecords.length}건`;
+                }
+
+                if (statPriceValEl) {
+                    statPriceValEl.textContent = `${sumStr}만`;
+                } else {
+                    const priceEl = statsCard.querySelector('div:nth-child(2) div:nth-child(2)');
+                    if (priceEl) priceEl.textContent = `${sumStr}만`;
+                }
             }
 
             function renderBidList() {
