@@ -1475,6 +1475,27 @@
                 }
             }
 
+            function groupBidRecordsByNickname(list, sortType) {
+                // 1) 기준 정렬 적용
+                const sorted = sortBidRecords(list, sortType);
+                // 2) 닉네임 그룹화 (첫 등장 순서 보장: Map)
+                const groupMap = new Map();
+                sorted.forEach(r => {
+                    const nick = (r && r.nickname) ? String(r.nickname).trim() : '';
+                    if (!groupMap.has(nick)) {
+                        groupMap.set(nick, []);
+                    }
+                    groupMap.get(nick).push(r);
+                });
+                // 3) 각 그룹 내에서도 동일 정렬 기준 유지 및 평탄화
+                const result = [];
+                groupMap.forEach(groupItems => {
+                    const sortedGroup = sortBidRecords(groupItems, sortType);
+                    result.push(...sortedGroup);
+                });
+                return result;
+            }
+
             // CSV 다운로드
             actionRow.appendChild(makeActionBtn(
                 '📥', 'CSV',
@@ -1485,7 +1506,7 @@
                         showAuctionToast('저장할 낙찰 내역이 없습니다.', 'auction');
                         return;
                     }
-                    const allRecords = sortBidRecords(rawRecords, currentSort);
+                    const allRecords = groupBidRecordsByNickname(rawRecords, currentSort);
                     const BOM = '\uFEFF';
                     const csvHeader = '번호,시간,낙찰자,낙찰가,전송문구';
                     const rows = allRecords.map((r, i) =>
@@ -1521,7 +1542,7 @@
                         showAuctionToast('복사할 내역이 없습니다.', 'auction');
                         return;
                     }
-                    const allRecords = sortBidRecords(rawRecords, currentSort);
+                    const allRecords = groupBidRecordsByNickname(rawRecords, currentSort);
                     let sum = 0;
                     allRecords.forEach(r => {
                         const p = parseFloat(r && r.price);
