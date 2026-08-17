@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Live 낙찰 자동화
 // @namespace    https://youtube.com/
-// @version      1.1
+// @version      1.2
 // @description  YouTube Live 낙찰 자동화 + 스마트 입찰 금액 추출 + 안내 버튼 + 밑줄 버튼
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
@@ -2845,6 +2845,26 @@
 
     function createAllUI() {
 
+        const guidePanel =
+            document.getElementById(
+                '__auction_guide_panel'
+            );
+
+        const separatorButton =
+            document.getElementById(
+                '__auction_separator_button'
+            );
+
+
+        // 안내 패널과 밑줄 버튼이 이미 모두 부착되어 있으면 불필요한 DOM 탐색 및 강제 리플로우 방지
+        if (
+            guidePanel &&
+            separatorButton
+        ) {
+            return;
+        }
+
+
         const input =
             findChatInput();
 
@@ -2861,20 +2881,46 @@
 
 
     // =========================================================
-    // UI 감시
+    // UI 감시 (쓰로틀링/디바운스 적용)
     // =========================================================
 
     function startUIObserver() {
 
         createAllUI();
 
+        let debounceTimer = null;
 
         const observer =
             new MutationObserver(
                 function () {
 
-                    createAllUI();
+                    // 이미 UI가 정상 부착된 경우 조기 반환 (불필요한 타이머 스케줄링 방지)
+                    if (
+                        document.getElementById(
+                            '__auction_guide_panel'
+                        ) &&
+                        document.getElementById(
+                            '__auction_separator_button'
+                        )
+                    ) {
+                        return;
+                    }
 
+                    if (debounceTimer) {
+                        clearTimeout(debounceTimer);
+                    }
+
+                    debounceTimer =
+                        setTimeout(
+                            function () {
+
+                                createAllUI();
+
+                                debounceTimer = null;
+
+                            },
+                            250
+                        );
                 }
             );
 
