@@ -1096,6 +1096,7 @@
                         pointer-events:auto !important;
                         opacity:1 !important;
                         visibility:visible !important;
+                        overscroll-behavior:contain !important;
                     `
                 }
             );
@@ -1113,8 +1114,8 @@
                         top:50% !important;
                         transform:translate(-50%,-50%) !important;
                         width:330px !important;
-                        max-width:calc(100vw - 20px) !important;
-                        max-height:calc(100vh - 30px) !important;
+                        max-width:calc(100vw - 24px) !important;
+                        max-height:calc(100vh - 32px) !important;
                         box-sizing:border-box !important;
                         padding:16px 16px 18px !important;
                         background:linear-gradient(145deg, rgba(32,32,38,.99), rgba(18,18,22,.99)) !important;
@@ -1131,6 +1132,7 @@
                         opacity:1 !important;
                         visibility:visible !important;
                         pointer-events:auto !important;
+                        overscroll-behavior:contain !important;
                     `
                 }
             );
@@ -1655,6 +1657,8 @@
                     style: `
                         flex:1 !important;
                         overflow-y:auto !important;
+                        overscroll-behavior:contain !important;
+                        -webkit-overflow-scrolling:touch !important;
                         max-height:210px !important;
                         display:flex !important;
                         flex-direction:column !important;
@@ -1897,6 +1901,28 @@
                     removeBidListUI();
                 }
             });
+
+            // 스크롤 체이닝 방지 (전체 창 / 부모 채팅창 스크롤 전파 차단)
+            listWrap.addEventListener('wheel', (e) => {
+                const atTop = listWrap.scrollTop <= 0 && e.deltaY < 0;
+                const atBottom = listWrap.scrollTop + listWrap.clientHeight >= listWrap.scrollHeight - 1 && e.deltaY > 0;
+                if (atTop || atBottom) {
+                    e.preventDefault();
+                }
+                e.stopPropagation();
+            }, { passive: false });
+
+            modal.addEventListener('wheel', (e) => {
+                if (!listWrap.contains(e.target) || listWrap.scrollHeight <= listWrap.clientHeight) {
+                    e.preventDefault();
+                }
+                e.stopPropagation();
+            }, { passive: false });
+
+            backdrop.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, { passive: false });
 
             // ESC 키로 닫기 (모든 관련 window에 등록)
             _bidListKeydownHandler = function (event) {
