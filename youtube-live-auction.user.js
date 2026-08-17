@@ -30,8 +30,59 @@
     function getCurrentVideoId() {
 
         try {
+            // 1) 현재 window URL 파라미터 확인
             const url = new URL(window.location.href);
-            return url.searchParams.get('v') || url.pathname.split('/').pop() || 'unknown';
+            const v = url.searchParams.get('v');
+            if (v) return v;
+
+            if (url.pathname.startsWith('/live/')) {
+                const parts = url.pathname.split('/').filter(Boolean);
+                if (parts[1]) return parts[1];
+            }
+
+            // 2) 부모 창(parent/top) URL 확인 (iframe 내부 환경 대응)
+            try {
+                if (window.parent && window.parent !== window && window.parent.location.href) {
+                    const parentUrl = new URL(window.parent.location.href);
+                    const pv = parentUrl.searchParams.get('v');
+                    if (pv) return pv;
+                    if (parentUrl.pathname.startsWith('/live/')) {
+                        const pparts = parentUrl.pathname.split('/').filter(Boolean);
+                        if (pparts[1]) return pparts[1];
+                    }
+                }
+            } catch (e) {}
+
+            // 3) document.referrer 확인
+            if (document.referrer) {
+                try {
+                    const refUrl = new URL(document.referrer);
+                    const rv = refUrl.searchParams.get('v');
+                    if (rv) return rv;
+                    if (refUrl.pathname.startsWith('/live/')) {
+                        const rparts = refUrl.pathname.split('/').filter(Boolean);
+                        if (rparts[1]) return rparts[1];
+                    }
+                } catch (e) {}
+            }
+
+            // 4) canonical link 태그 확인
+            const canonical = document.querySelector('link[rel="canonical"]');
+            if (canonical && canonical.href) {
+                try {
+                    const cUrl = new URL(canonical.href);
+                    const cv = cUrl.searchParams.get('v');
+                    if (cv) return cv;
+                } catch (e) {}
+            }
+
+            // 5) watch 또는 live URL의 pathname 마지막 부분
+            const pop = url.pathname.split('/').filter(Boolean).pop();
+            if (pop && pop !== 'live_chat' && pop !== 'live_chat_replay' && pop !== 'watch') {
+                return pop;
+            }
+
+            return 'unknown';
         } catch (e) {
             return 'unknown';
         }
@@ -114,36 +165,43 @@
         const videoId = getCurrentVideoId();
         const records = loadBidRecords();
 
-        return records.filter(
-            r => r.date === today && r.videoId === videoId
-        );
+        return records.filter(r => {
+            if (r.date !== today) return false;
+            // videoId가 둘 다 명확하고 유효한 경우 매칭 확인
+            if (
+                videoId && videoId !== 'unknown' && videoId !== 'live_chat' &&
+                r.videoId && r.videoId !== 'unknown' && r.videoId !== 'live_chat'
+            ) {
+                return r.videoId === videoId;
+            }
+            // videoId를 특정하기 어려운 환경(iframe 등)에서는 오늘 날짜 기록 포함
+            return true;
+        });
     }
 
 
     /** 낙찰 배지 업데이트 */
     function updateBidBadge() {
 
-        // 메인 document와 iframe 양쪽 모두에서 버튼을 탐색
-        let btn = document.getElementById('__auction_bid_list_btn');
+        const count = getTodayBidRecords().length;
+        const text = `📋 낙찰 내역 (${count}건)`;
 
-        if (!btn) {
-            try {
-                const iframe =
-                    document.querySelector('iframe#chatframe');
-
-                if (iframe && iframe.contentDocument) {
-                    btn =
-                        iframe.contentDocument.getElementById(
-                            '__auction_bid_list_btn'
-                        );
-                }
-            } catch (e) {}
+        // 메인 document에서 탐색
+        const btn = document.getElementById('__auction_bid_list_btn');
+        if (btn) {
+            btn.textContent = text;
         }
 
-        if (!btn) return;
-
-        const count = getTodayBidRecords().length;
-        btn.textContent = `📋 낙찰 내역 (${count}건)`;
+        // iframe 내부에서도 탐색
+        try {
+            const iframe = document.querySelector('iframe#chatframe');
+            if (iframe && iframe.contentDocument) {
+                const iframeBtn = iframe.contentDocument.getElementById('__auction_bid_list_btn');
+                if (iframeBtn) {
+                    iframeBtn.textContent = text;
+                }
+            }
+        } catch (e) {}
     }
 
 
@@ -775,22 +833,28 @@
     // 낙찰 내역 UI 제거
     // =========================================================
 
+    let _bidListKeydownHandler = null;
+
     function removeBidListUI() {
+
+        if (_bidListKeydownHandler) {
+            window.removeEventListener('keydown', _bidListKeydownHandler, true);
+            _bidListKeydownHandler = null;
+        }
 
         const input = findChatInput();
         const targetDoc = input ? (input.ownerDocument || document) : document;
 
-        const modal = targetDoc.getElementById('__auction_bid_list_modal');
-        const backdrop = targetDoc.getElementById('__auction_bid_list_backdrop');
-
-        if (modal) modal.remove();
-        if (backdrop) backdrop.remove();
-
-        // 혹시 document에도 남아있는 경우 정리
-        const rootModal = document.getElementById('__auction_bid_list_modal');
-        const rootBackdrop = document.getElementById('__auction_bid_list_backdrop');
-        if (rootModal) rootModal.remove();
-        if (rootBackdrop) rootBackdrop.remove();
+        const docs = [document, targetDoc];
+        docs.forEach(doc => {
+            try {
+                if (!doc) return;
+                const modal = doc.getElementById('__auction_bid_list_modal');
+                const backdrop = doc.getElementById('__auction_bid_list_backdrop');
+                if (modal) modal.remove();
+                if (backdrop) backdrop.remove();
+            } catch (e) {}
+        });
     }
 
 
@@ -800,393 +864,602 @@
 
     function openBidListModal() {
 
-        removeBidListUI();
+        console.log(PREFIX, '📋 낙찰 내역 모달 열기 실행!');
 
-        const input = findChatInput();
-        const targetDoc = input ? (input.ownerDocument || document) : document;
-        const mountTarget = targetDoc.body || targetDoc.documentElement;
+        try {
+            removeBidListUI();
 
-        if (!mountTarget) {
-            console.error(PREFIX, '낙찰 내역 모달 마운트 대상을 찾지 못했습니다.');
-            return;
-        }
-
-        const records = getTodayBidRecords();
-        const totalCount = records.length;
-        const totalPrice = records.reduce(
-            (sum, r) => sum + (parseFloat(r.price) || 0), 0
-        );
-        const totalPriceStr =
-            Number.isInteger(totalPrice)
-                ? String(totalPrice)
-                : totalPrice.toFixed(1).replace(/\.0$/, '');
-
-
-        // -- Backdrop --
-
-        const backdrop = targetDoc.createElement('div');
-        backdrop.id = '__auction_bid_list_backdrop';
-        backdrop.setAttribute('style', `
-            position:fixed !important;
-            inset:0 !important;
-            width:100vw !important;
-            height:100vh !important;
-            background:rgba(0,0,0,.65) !important;
-            backdrop-filter:blur(5px) !important;
-            -webkit-backdrop-filter:blur(5px) !important;
-            z-index:2147483646 !important;
-            pointer-events:auto !important;
-            opacity:1 !important;
-            visibility:visible !important;
-        `);
-
-
-        // -- Modal (Compact Layout - 낙찰 모달과 동일한 330px) --
-
-        const modal = targetDoc.createElement('div');
-        modal.id = '__auction_bid_list_modal';
-        modal.setAttribute('style', `
-            position:fixed !important;
-            left:50% !important;
-            top:50% !important;
-            transform:translate(-50%,-50%) !important;
-            width:330px !important;
-            max-width:calc(100vw - 20px) !important;
-            max-height:calc(100vh - 30px) !important;
-            box-sizing:border-box !important;
-            padding:16px 16px 18px !important;
-            background:linear-gradient(145deg, rgba(32,32,38,.99), rgba(18,18,22,.99)) !important;
-            color:#fff !important;
-            border:1px solid rgba(255,255,255,.12) !important;
-            border-radius:18px !important;
-            box-shadow:0 25px 80px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.05) !important;
-            z-index:2147483647 !important;
-            display:flex !important;
-            flex-direction:column !important;
-            gap:10px !important;
-            font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
-            overflow:hidden !important;
-            opacity:1 !important;
-            visibility:visible !important;
-            pointer-events:auto !important;
-        `);
-
-
-        // -- Header --
-
-        const header = targetDoc.createElement('div');
-        header.setAttribute('style', `
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-        `);
-
-        const title = targetDoc.createElement('div');
-        title.setAttribute('style', `
-            display:flex; align-items:center; gap:8px;
-            font-size:15px; font-weight:800; color:#fff;
-        `);
-        title.innerHTML = `
-            <div style="
-                width:26px; height:26px;
-                display:flex; align-items:center; justify-content:center;
-                border-radius:8px; background:rgba(255,204,0,.14);
-                color:#ffcc00; font-size:14px; font-weight:800;
-            ">📋</div>
-            <span>오늘 낙찰 내역</span>
-        `;
-
-        const closeBtn = targetDoc.createElement('button');
-        closeBtn.type = 'button';
-        closeBtn.textContent = '×';
-        closeBtn.setAttribute('style', `
-            width:26px; height:26px; padding:0; border:0; border-radius:8px;
-            background:rgba(255,255,255,.06); color:rgba(255,255,255,.65);
-            font-size:19px; line-height:24px; cursor:pointer;
-        `);
-        closeBtn.addEventListener('mouseenter', () => {
-            closeBtn.style.background = 'rgba(255,255,255,.14)';
-            closeBtn.style.color = '#fff';
-        });
-        closeBtn.addEventListener('mouseleave', () => {
-            closeBtn.style.background = 'rgba(255,255,255,.06)';
-            closeBtn.style.color = 'rgba(255,255,255,.65)';
-        });
-        closeBtn.addEventListener('click', removeBidListUI);
-
-        header.appendChild(title);
-        header.appendChild(closeBtn);
-        modal.appendChild(header);
-
-
-        // -- 통계 카드 --
-
-        const statsCard = targetDoc.createElement('div');
-        statsCard.setAttribute('style', `
-            display:flex; gap:6px;
-        `);
-
-        function makeStatBox(label, value, color) {
-            const box = targetDoc.createElement('div');
-            box.setAttribute('style', `
-                flex:1; padding:8px 10px; border-radius:10px;
-                background:rgba(255,255,255,.04);
-                border:1px solid rgba(255,255,255,.08);
-            `);
-            box.innerHTML = `
-                <div style="font-size:10px; color:rgba(255,255,255,.40); font-weight:600; margin-bottom:2px;">${label}</div>
-                <div style="font-size:16px; font-weight:800; color:${color};">${value}</div>
-            `;
-            return box;
-        }
-
-        statsCard.appendChild(makeStatBox('총 낙찰', `${totalCount}건`, '#ffcc00'));
-        statsCard.appendChild(makeStatBox('합계 금액', `${totalPriceStr}만`, '#6ee0a0'));
-        modal.appendChild(statsCard);
-
-
-        // -- 액션 버튼 행 --
-
-        const actionRow = targetDoc.createElement('div');
-        actionRow.setAttribute('style', `display:flex; gap:5px;`);
-
-        function makeActionBtn(emoji, label, bg, borderC, textC, onClick) {
-            const btn = targetDoc.createElement('button');
-            btn.type = 'button';
-            btn.innerHTML = `${emoji} ${label}`;
-            btn.setAttribute('style', `
-                flex:1; height:30px; padding:0 4px;
-                border:1px solid ${borderC}; border-radius:8px;
-                background:${bg}; color:${textC};
-                font-size:11px; font-weight:700; cursor:pointer;
-                white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-                transition:opacity .15s;
-            `);
-            btn.addEventListener('mouseenter', () => { btn.style.opacity = '.8'; });
-            btn.addEventListener('mouseleave', () => { btn.style.opacity = '1'; });
-            btn.addEventListener('click', onClick);
-            return btn;
-        }
-
-        // CSV 다운로드
-        actionRow.appendChild(makeActionBtn(
-            '📥', 'CSV',
-            'rgba(80,160,255,.12)', 'rgba(80,160,255,.30)', '#8db8ee',
-            () => {
-                const allRecords = getTodayBidRecords();
-                if (allRecords.length === 0) {
-                    showAuctionToast('저장할 낙찰 내역이 없습니다.', 'auction');
-                    return;
-                }
-                const BOM = '\uFEFF';
-                const csvHeader = '번호,시간,낙찰자,낙찰가(만원),원문채팅,전송문구';
-                const rows = allRecords.map((r, i) =>
-                    [
-                        i + 1,
-                        r.time,
-                        `"${r.nickname}"`,
-                        r.price,
-                        `"${(r.originalChat || '').replace(/"/g, '""')}"`,
-                        `"${(r.message || '').replace(/"/g, '""')}"`
-                    ].join(',')
-                );
-                const csv = BOM + csvHeader + '\n' + rows.join('\n');
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = targetDoc.createElement('a');
-                a.href = url;
-                a.download = `유튜브경매_낙찰목록_${getTodayString().replace(/-/g, '')}.csv`;
-                targetDoc.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
-                showAuctionToast('📥 CSV 다운로드 완료!', 'success');
+            let records = [];
+            try {
+                records = getTodayBidRecords() || [];
+            } catch (e) {
+                console.error(PREFIX, '기록 불러오기 오류:', e);
+                records = [];
             }
-        ));
 
-        // 클립보드 복사
-        actionRow.appendChild(makeActionBtn(
-            '📋', '복사',
-            'rgba(150,110,230,.12)', 'rgba(150,110,230,.30)', '#c4a5f8',
-            () => {
-                const allRecords = getTodayBidRecords();
-                if (allRecords.length === 0) {
-                    showAuctionToast('복사할 내역이 없습니다.', 'auction');
-                    return;
+            const totalCount = records.length;
+            let totalPrice = 0;
+            records.forEach(r => {
+                const p = parseFloat(r && r.price);
+                if (!isNaN(p)) {
+                    totalPrice += p;
                 }
-                const lines = allRecords.map((r, i) =>
-                    `${i + 1}. ${r.time} | @${r.nickname} | ${r.price}만원`
-                );
-                const text =
-                    `[낙찰 내역 ${getTodayString()}]\n` +
-                    lines.join('\n') +
-                    `\n\n총 ${allRecords.length}건 / ${totalPriceStr}만원`;
-                navigator.clipboard.writeText(text).then(() => {
-                    showAuctionToast('📋 클립보드 복사 완료!', 'success');
-                }).catch(() => {
-                    showAuctionToast('❌ 복사 실패', 'auction');
-                });
-            }
-        ));
-
-        // 전체 삭제
-        actionRow.appendChild(makeActionBtn(
-            '🗑️', '삭제',
-            'rgba(220,70,70,.10)', 'rgba(220,70,70,.28)', '#ee9292',
-            () => {
-                const cur = getTodayBidRecords();
-                if (cur.length === 0) {
-                    showAuctionToast('삭제할 내역이 없습니다.', 'auction');
-                    return;
-                }
-                if (!confirm(`오늘 낙찰 내역 ${cur.length}건을 모두 삭제할까요?`)) return;
-                const allRecords = loadBidRecords();
-                const today = getTodayString();
-                const videoId = getCurrentVideoId();
-                const filtered = allRecords.filter(
-                    r => !(r.date === today && r.videoId === videoId)
-                );
-                saveBidRecords(filtered);
-                updateBidBadge();
-                removeBidListUI();
-                showAuctionToast('🗑️ 낙찰 내역이 삭제되었습니다.', 'separator');
-            }
-        ));
-
-        modal.appendChild(actionRow);
-
-
-        // -- 낙찰 목록 --
-
-        const listWrap = targetDoc.createElement('div');
-        listWrap.setAttribute('style', `
-            flex:1;
-            overflow-y:auto;
-            max-height:240px;
-            display:flex;
-            flex-direction:column;
-            gap:5px;
-            padding-right:2px;
-        `);
-
-        if (records.length === 0) {
-            const empty = targetDoc.createElement('div');
-            empty.setAttribute('style', `
-                text-align:center;
-                padding:28px 0;
-                color:rgba(255,255,255,.30);
-                font-size:12px;
-            `);
-            empty.textContent = '오늘 낙찰 내역이 없습니다.';
-            listWrap.appendChild(empty);
-        } else {
-            records.forEach((record, idx) => {
-                const item = targetDoc.createElement('div');
-                item.setAttribute('style', `
-                    display:flex;
-                    align-items:center;
-                    gap:6px;
-                    padding:7px 9px;
-                    border-radius:8px;
-                    background:rgba(255,255,255,.04);
-                    border:1px solid rgba(255,255,255,.07);
-                `);
-
-                item.innerHTML = `
-                    <div style="
-                        flex-shrink:0; width:18px; height:18px;
-                        border-radius:5px; background:rgba(255,204,0,.12);
-                        color:#ffcc00; font-size:10px; font-weight:800;
-                        display:flex; align-items:center; justify-content:center;
-                    ">${idx + 1}</div>
-                    <div style="flex:1; min-width:0; overflow:hidden;">
-                        <div style="
-                            font-size:12.5px; font-weight:800; color:#fff;
-                            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-                        ">@${record.nickname}</div>
-                        <div style="font-size:10px; color:rgba(255,255,255,.40); margin-top:1px;">
-                            ${record.time}
-                            ${record.originalChat ? ` · "${record.originalChat.slice(0, 15)}${record.originalChat.length > 15 ? '…' : ''}"` : ''}
-                        </div>
-                    </div>
-                    <div style="
-                        flex-shrink:0;
-                        font-size:14px; font-weight:800; color:#6ee0a0;
-                        white-space:nowrap;
-                    ">${record.price}만</div>
-                `;
-
-                // 개별 삭제 버튼
-                const delBtn = targetDoc.createElement('button');
-                delBtn.type = 'button';
-                delBtn.textContent = '×';
-                delBtn.setAttribute('style', `
-                    flex-shrink:0; width:18px; height:18px; padding:0; border:0;
-                    border-radius:5px; background:rgba(255,255,255,.06);
-                    color:rgba(255,255,255,.40); font-size:13px; line-height:16px;
-                    cursor:pointer;
-                `);
-                delBtn.addEventListener('mouseenter', () => {
-                    delBtn.style.background = 'rgba(220,70,70,.20)';
-                    delBtn.style.color = '#ee9292';
-                });
-                delBtn.addEventListener('mouseleave', () => {
-                    delBtn.style.background = 'rgba(255,255,255,.06)';
-                    delBtn.style.color = 'rgba(255,255,255,.40)';
-                });
-                delBtn.addEventListener('click', () => {
-                    const all = loadBidRecords();
-                    const updated = all.filter(r => r.id !== record.id);
-                    saveBidRecords(updated);
-                    item.remove();
-                    updateBidBadge();
-
-                    // 통계 재갱신
-                    const remaining = getTodayBidRecords();
-                    const newTotal = remaining.reduce(
-                        (s, r) => s + (parseFloat(r.price) || 0), 0
-                    );
-                    const newTotalStr =
-                        Number.isInteger(newTotal)
-                            ? String(newTotal)
-                            : newTotal.toFixed(1).replace(/\.0$/, '');
-                    statsCard.querySelector('div:nth-child(1) div:nth-child(2)').textContent =
-                        `${remaining.length}건`;
-                    statsCard.querySelector('div:nth-child(2) div:nth-child(2)').textContent =
-                        `${newTotalStr}만`;
-
-                    if (remaining.length === 0) {
-                        const empty = targetDoc.createElement('div');
-                        empty.setAttribute('style', `
-                            text-align:center;
-                            padding:28px 0;
-                            color:rgba(255,255,255,.30);
-                            font-size:12px;
-                        `);
-                        empty.textContent = '오늘 낙찰 내역이 없습니다.';
-                        listWrap.appendChild(empty);
-                    }
-                });
-
-                item.appendChild(delBtn);
-                listWrap.appendChild(item);
             });
-        }
+            const totalPriceStr =
+                Number.isInteger(totalPrice)
+                    ? String(totalPrice)
+                    : totalPrice.toFixed(1).replace(/\.0$/, '');
 
-        modal.appendChild(listWrap);
+
+            // -- Backdrop --
+
+            const backdrop = createElement(
+                'div',
+                {
+                    id: '__auction_bid_list_backdrop',
+                    style: `
+                        position:fixed !important;
+                        inset:0 !important;
+                        width:100vw !important;
+                        height:100vh !important;
+                        background:rgba(0,0,0,.75) !important;
+                        backdrop-filter:blur(6px) !important;
+                        -webkit-backdrop-filter:blur(6px) !important;
+                        z-index:2147483646 !important;
+                        pointer-events:auto !important;
+                        opacity:1 !important;
+                        visibility:visible !important;
+                    `
+                }
+            );
 
 
-        // -- 마운트 --
+            // -- Modal (Compact Layout - 330px 너비) --
 
-        mountTarget.appendChild(backdrop);
-        mountTarget.appendChild(modal);
+            const modal = createElement(
+                'div',
+                {
+                    id: '__auction_bid_list_modal',
+                    style: `
+                        position:fixed !important;
+                        left:50% !important;
+                        top:50% !important;
+                        transform:translate(-50%,-50%) !important;
+                        width:330px !important;
+                        max-width:calc(100vw - 20px) !important;
+                        max-height:calc(100vh - 30px) !important;
+                        box-sizing:border-box !important;
+                        padding:16px 16px 18px !important;
+                        background:linear-gradient(145deg, rgba(32,32,38,.99), rgba(18,18,22,.99)) !important;
+                        color:#fff !important;
+                        border:1px solid rgba(255,255,255,.16) !important;
+                        border-radius:18px !important;
+                        box-shadow:0 25px 80px rgba(0,0,0,.90), 0 0 0 1px rgba(255,255,255,.05) !important;
+                        z-index:2147483647 !important;
+                        display:flex !important;
+                        flex-direction:column !important;
+                        gap:10px !important;
+                        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+                        overflow:hidden !important;
+                        opacity:1 !important;
+                        visibility:visible !important;
+                        pointer-events:auto !important;
+                    `
+                }
+            );
 
-        backdrop.addEventListener('click', (e) => {
-            if (e.target === backdrop) {
-                removeBidListUI();
+
+            // -- Header --
+
+            const header = createElement(
+                'div',
+                {
+                    style: `
+                        display:flex !important;
+                        align-items:center !important;
+                        justify-content:space-between !important;
+                    `
+                }
+            );
+
+            const title = createElement(
+                'div',
+                {
+                    style: `
+                        display:flex !important;
+                        align-items:center !important;
+                        gap:8px !important;
+                        font-size:15px !important;
+                        font-weight:800 !important;
+                        color:#fff !important;
+                    `
+                }
+            );
+            const titleIcon = createElement('div', {
+                text: '📋',
+                style: `
+                    width:26px !important;
+                    height:26px !important;
+                    display:flex !important;
+                    align-items:center !important;
+                    justify-content:center !important;
+                    border-radius:8px !important;
+                    background:rgba(255,204,0,.14) !important;
+                    color:#ffcc00 !important;
+                    font-size:14px !important;
+                    font-weight:800 !important;
+                `
+            });
+            const titleText = createElement('span', { text: '오늘 낙찰 내역' });
+            title.appendChild(titleIcon);
+            title.appendChild(titleText);
+
+            const closeBtn = createElement(
+                'button',
+                {
+                    type: 'button',
+                    text: '×',
+                    style: `
+                        width:26px !important;
+                        height:26px !important;
+                        padding:0 !important;
+                        border:0 !important;
+                        border-radius:8px !important;
+                        background:rgba(255,255,255,.08) !important;
+                        color:rgba(255,255,255,.75) !important;
+                        font-size:19px !important;
+                        line-height:24px !important;
+                        cursor:pointer !important;
+                    `
+                }
+            );
+            closeBtn.addEventListener('mouseenter', () => {
+                closeBtn.style.background = 'rgba(255,255,255,.18)';
+                closeBtn.style.color = '#fff';
+            });
+            closeBtn.addEventListener('mouseleave', () => {
+                closeBtn.style.background = 'rgba(255,255,255,.08)';
+                closeBtn.style.color = 'rgba(255,255,255,.75)';
+            });
+            closeBtn.addEventListener('click', removeBidListUI);
+
+            header.appendChild(title);
+            header.appendChild(closeBtn);
+            modal.appendChild(header);
+
+
+            // -- 통계 카드 --
+
+            const statsCard = createElement(
+                'div',
+                {
+                    style: `
+                        display:flex !important;
+                        gap:6px !important;
+                    `
+                }
+            );
+
+            function makeStatBox(label, value, color) {
+                const box = createElement(
+                    'div',
+                    {
+                        style: `
+                            flex:1 !important;
+                            padding:8px 10px !important;
+                            border-radius:10px !important;
+                            background:rgba(255,255,255,.04) !important;
+                            border:1px solid rgba(255,255,255,.08) !important;
+                        `
+                    }
+                );
+                const lbl = createElement('div', {
+                    text: label,
+                    style: 'font-size:10px !important; color:rgba(255,255,255,.45) !important; font-weight:600 !important; margin-bottom:2px !important;'
+                });
+                const val = createElement('div', {
+                    text: value,
+                    style: `font-size:16px !important; font-weight:800 !important; color:${color} !important;`
+                });
+                box.appendChild(lbl);
+                box.appendChild(val);
+                return box;
             }
-        });
+
+            statsCard.appendChild(makeStatBox('총 낙찰', `${totalCount}건`, '#ffcc00'));
+            statsCard.appendChild(makeStatBox('합계 금액', `${totalPriceStr}만`, '#6ee0a0'));
+            modal.appendChild(statsCard);
+
+
+            // -- 액션 버튼 행 --
+
+            const actionRow = createElement(
+                'div',
+                {
+                    style: `display:flex !important; gap:5px !important;`
+                }
+            );
+
+            function makeActionBtn(emoji, label, bg, borderC, textC, onClick) {
+                const btn = createElement(
+                    'button',
+                    {
+                        type: 'button',
+                        text: `${emoji} ${label}`,
+                        style: `
+                            flex:1 !important;
+                            height:30px !important;
+                            padding:0 4px !important;
+                            border:1px solid ${borderC} !important;
+                            border-radius:8px !important;
+                            background:${bg} !important;
+                            color:${textC} !important;
+                            font-size:11px !important;
+                            font-weight:700 !important;
+                            cursor:pointer !important;
+                            white-space:nowrap !important;
+                            overflow:hidden !important;
+                            text-overflow:ellipsis !important;
+                            transition:opacity .15s !important;
+                        `
+                    }
+                );
+                btn.addEventListener('mouseenter', () => { btn.style.opacity = '.8'; });
+                btn.addEventListener('mouseleave', () => { btn.style.opacity = '1'; });
+                btn.addEventListener('click', onClick);
+                return btn;
+            }
+
+            // CSV 다운로드
+            actionRow.appendChild(makeActionBtn(
+                '📥', 'CSV',
+                'rgba(80,160,255,.14)', 'rgba(80,160,255,.35)', '#8db8ee',
+                () => {
+                    const allRecords = getTodayBidRecords();
+                    if (allRecords.length === 0) {
+                        showAuctionToast('저장할 낙찰 내역이 없습니다.', 'auction');
+                        return;
+                    }
+                    const BOM = '\uFEFF';
+                    const csvHeader = '번호,시간,낙찰자,낙찰가(만원),원문채팅,전송문구';
+                    const rows = allRecords.map((r, i) =>
+                        [
+                            i + 1,
+                            r.time || '',
+                            `"${String(r.nickname || '').replace(/"/g, '""')}"`,
+                            r.price || '',
+                            `"${String(r.originalChat || '').replace(/"/g, '""')}"`,
+                            `"${String(r.message || '').replace(/"/g, '""')}"`
+                        ].join(',')
+                    );
+                    const csv = BOM + csvHeader + '\n' + rows.join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `유튜브경매_낙찰목록_${getTodayString().replace(/-/g, '')}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                    showAuctionToast('📥 CSV 다운로드 완료!', 'success');
+                }
+            ));
+
+            // 클립보드 복사
+            actionRow.appendChild(makeActionBtn(
+                '📋', '복사',
+                'rgba(150,110,230,.14)', 'rgba(150,110,230,.35)', '#c4a5f8',
+                () => {
+                    const allRecords = getTodayBidRecords();
+                    if (allRecords.length === 0) {
+                        showAuctionToast('복사할 내역이 없습니다.', 'auction');
+                        return;
+                    }
+                    const lines = allRecords.map((r, i) =>
+                        `${i + 1}. ${r.time || ''} | @${r.nickname || ''} | ${r.price || ''}만원`
+                    );
+                    const text =
+                        `[낙찰 내역 ${getTodayString()}]\n` +
+                        lines.join('\n') +
+                        `\n\n총 ${allRecords.length}건 / ${totalPriceStr}만원`;
+
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(() => {
+                            showAuctionToast('📋 클립보드 복사 완료!', 'success');
+                        }).catch(() => {
+                            fallbackCopy(text);
+                        });
+                    } else {
+                        fallbackCopy(text);
+                    }
+
+                    function fallbackCopy(str) {
+                        try {
+                            const ta = document.createElement('textarea');
+                            ta.value = str;
+                            ta.style.position = 'fixed';
+                            ta.style.opacity = '0';
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand('copy');
+                            ta.remove();
+                            showAuctionToast('📋 클립보드 복사 완료!', 'success');
+                        } catch (e) {
+                            showAuctionToast('❌ 복사 실패', 'auction');
+                        }
+                    }
+                }
+            ));
+
+            // 전체 삭제
+            actionRow.appendChild(makeActionBtn(
+                '🗑️', '삭제',
+                'rgba(220,70,70,.12)', 'rgba(220,70,70,.32)', '#ee9292',
+                () => {
+                    const cur = getTodayBidRecords();
+                    if (cur.length === 0) {
+                        showAuctionToast('삭제할 내역이 없습니다.', 'auction');
+                        return;
+                    }
+                    if (!confirm(`오늘 낙찰 내역 ${cur.length}건을 모두 삭제할까요?`)) return;
+                    const allRecords = loadBidRecords();
+                    const today = getTodayString();
+                    const videoId = getCurrentVideoId();
+                    const filtered = allRecords.filter(r => {
+                        if (r.date !== today) return true;
+                        if (videoId && videoId !== 'unknown' && videoId !== 'live_chat' &&
+                            r.videoId && r.videoId !== 'unknown' && r.videoId !== 'live_chat') {
+                            return r.videoId !== videoId;
+                        }
+                        return false;
+                    });
+                    saveBidRecords(filtered);
+                    updateBidBadge();
+                    removeBidListUI();
+                    showAuctionToast('🗑️ 낙찰 내역이 삭제되었습니다.', 'separator');
+                }
+            ));
+
+            modal.appendChild(actionRow);
+
+
+            // -- 낙찰 목록 --
+
+            const listWrap = createElement(
+                'div',
+                {
+                    style: `
+                        flex:1 !important;
+                        overflow-y:auto !important;
+                        max-height:240px !important;
+                        display:flex !important;
+                        flex-direction:column !important;
+                        gap:5px !important;
+                        padding-right:2px !important;
+                    `
+                }
+            );
+
+            if (records.length === 0) {
+                const empty = createElement(
+                    'div',
+                    {
+                        style: `
+                            text-align:center !important;
+                            padding:28px 0 !important;
+                            color:rgba(255,255,255,.35) !important;
+                            font-size:12px !important;
+                        `
+                    }
+                );
+                empty.textContent = '오늘 낙찰 내역이 없습니다.';
+                listWrap.appendChild(empty);
+            } else {
+                records.forEach((record, idx) => {
+                    if (!record) return;
+                    const item = createElement(
+                        'div',
+                        {
+                            style: `
+                                display:flex !important;
+                                align-items:center !important;
+                                gap:6px !important;
+                                padding:7px 9px !important;
+                                border-radius:8px !important;
+                                background:rgba(255,255,255,.04) !important;
+                                border:1px solid rgba(255,255,255,.07) !important;
+                            `
+                        }
+                    );
+
+                    const origChat = String(record.originalChat || '');
+                    const chatPreview = origChat
+                        ? ` · "${origChat.slice(0, 15)}${origChat.length > 15 ? '…' : ''}"`
+                        : '';
+
+                    const numBadge = createElement('div', {
+                        text: String(idx + 1),
+                        style: `
+                            flex-shrink:0 !important;
+                            width:18px !important;
+                            height:18px !important;
+                            border-radius:5px !important;
+                            background:rgba(255,204,0,.12) !important;
+                            color:#ffcc00 !important;
+                            font-size:10px !important;
+                            font-weight:800 !important;
+                            display:flex !important;
+                            align-items:center !important;
+                            justify-content:center !important;
+                        `
+                    });
+
+                    const infoWrap = createElement('div', {
+                        style: 'flex:1 !important; min-width:0 !important; overflow:hidden !important;'
+                    });
+
+                    const nickDiv = createElement('div', {
+                        text: `@${record.nickname || '익명'}`,
+                        style: `
+                            font-size:12.5px !important;
+                            font-weight:800 !important;
+                            color:#fff !important;
+                            overflow:hidden !important;
+                            text-overflow:ellipsis !important;
+                            white-space:nowrap !important;
+                        `
+                    });
+
+                    const timeDiv = createElement('div', {
+                        text: `${record.time || ''}${chatPreview}`,
+                        style: 'font-size:10px !important; color:rgba(255,255,255,.45) !important; margin-top:1px !important;'
+                    });
+
+                    infoWrap.appendChild(nickDiv);
+                    infoWrap.appendChild(timeDiv);
+
+                    const priceDiv = createElement('div', {
+                        text: `${record.price || '0'}만`,
+                        style: `
+                            flex-shrink:0 !important;
+                            font-size:14px !important;
+                            font-weight:800 !important;
+                            color:#6ee0a0 !important;
+                            white-space:nowrap !important;
+                        `
+                    });
+
+                    item.appendChild(numBadge);
+                    item.appendChild(infoWrap);
+                    item.appendChild(priceDiv);
+
+                    // 개별 삭제 버튼
+                    const delBtn = createElement(
+                        'button',
+                        {
+                            type: 'button',
+                            text: '×',
+                            style: `
+                                flex-shrink:0 !important;
+                                width:18px !important;
+                                height:18px !important;
+                                padding:0 !important;
+                                border:0 !important;
+                                border-radius:5px !important;
+                                background:rgba(255,255,255,.06) !important;
+                                color:rgba(255,255,255,.45) !important;
+                                font-size:13px !important;
+                                line-height:16px !important;
+                                cursor:pointer !important;
+                            `
+                        }
+                    );
+                    delBtn.addEventListener('mouseenter', () => {
+                        delBtn.style.background = 'rgba(220,70,70,.20)';
+                        delBtn.style.color = '#ee9292';
+                    });
+                    delBtn.addEventListener('mouseleave', () => {
+                        delBtn.style.background = 'rgba(255,255,255,.06)';
+                        delBtn.style.color = 'rgba(255,255,255,.45)';
+                    });
+                    delBtn.addEventListener('click', () => {
+                        const all = loadBidRecords();
+                        const updated = all.filter(r => r && r.id !== record.id);
+                        saveBidRecords(updated);
+                        item.remove();
+                        updateBidBadge();
+
+                        // 통계 재갱신
+                        const remaining = getTodayBidRecords();
+                        let newTotal = 0;
+                        remaining.forEach(r => {
+                            const p = parseFloat(r && r.price);
+                            if (!isNaN(p)) newTotal += p;
+                        });
+                        const newTotalStr =
+                            Number.isInteger(newTotal)
+                                ? String(newTotal)
+                                : newTotal.toFixed(1).replace(/\.0$/, '');
+                        statsCard.querySelector('div:nth-child(1) div:nth-child(2)').textContent =
+                            `${remaining.length}건`;
+                        statsCard.querySelector('div:nth-child(2) div:nth-child(2)').textContent =
+                            `${newTotalStr}만`;
+
+                        if (remaining.length === 0) {
+                            const empty = createElement(
+                                'div',
+                                {
+                                    style: `
+                                        text-align:center !important;
+                                        padding:28px 0 !important;
+                                        color:rgba(255,255,255,.35) !important;
+                                        font-size:12px !important;
+                                    `
+                                }
+                            );
+                            empty.textContent = '오늘 낙찰 내역이 없습니다.';
+                            listWrap.appendChild(empty);
+                        }
+                    });
+
+                    item.appendChild(delBtn);
+                    listWrap.appendChild(item);
+                });
+            }
+
+            modal.appendChild(listWrap);
+
+
+            // -- DOM 삽입 (메인 body 및 채팅 문서 body 모두 안전하게 지원) --
+
+            const mountTargets = [];
+            if (document.body) mountTargets.push(document.body);
+            const input = findChatInput();
+            if (input && input.ownerDocument && input.ownerDocument.body && input.ownerDocument.body !== document.body) {
+                mountTargets.push(input.ownerDocument.body);
+            }
+
+            mountTargets.forEach(target => {
+                try {
+                    target.appendChild(backdrop.cloneNode(true));
+                    target.appendChild(modal.cloneNode(true));
+                } catch (e) {}
+            });
+
+            // 원본 요소가 마운트 안 된 경우 폴백 마운트
+            if (!document.getElementById('__auction_bid_list_modal')) {
+                const fbTarget = document.body || document.documentElement;
+                fbTarget.appendChild(backdrop);
+                fbTarget.appendChild(modal);
+            }
+
+            // 백드롭 클릭 시 닫기
+            document.addEventListener('click', function _onBackdropClick(e) {
+                if (e.target && e.target.id === '__auction_bid_list_backdrop') {
+                    removeBidListUI();
+                    document.removeEventListener('click', _onBackdropClick, true);
+                }
+            }, true);
+
+            // ESC 키로 닫기
+            _bidListKeydownHandler = function (event) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    removeBidListUI();
+                }
+            };
+            window.addEventListener('keydown', _bidListKeydownHandler, true);
+
+            console.log(PREFIX, '📋 낙찰 내역 모달 열기 완료!');
+
+        } catch (error) {
+            console.error(PREFIX, 'openBidListModal 치명적 오류:', error);
+        }
     }
+
+    // 외부 디버깅용 전역 바인딩
+    window.__openAuctionBidListModal = openBidListModal;
 
 
     // =========================================================
@@ -1310,28 +1583,36 @@
             `
         );
 
-        toast.innerHTML = `
-            <div style="
-                width:26px;
-                height:26px;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                border-radius:8px;
-                background:${iconBg};
-                color:${iconColor};
-                font-size:13.5px;
-                font-weight:800;
-                flex-shrink:0;
-            ">${iconText}</div>
-            <div style="
-                color:#fff;
-                line-height:1.3;
-                overflow:hidden;
-                text-overflow:ellipsis;
-                letter-spacing:-.2px;
-            ">${text}</div>
-        `;
+        const iconDiv = createElement('div', {
+            text: iconText,
+            style: `
+                width:26px !important;
+                height:26px !important;
+                display:flex !important;
+                align-items:center !important;
+                justify-content:center !important;
+                border-radius:8px !important;
+                background:${iconBg} !important;
+                color:${iconColor} !important;
+                font-size:13.5px !important;
+                font-weight:800 !important;
+                flex-shrink:0 !important;
+            `
+        });
+
+        const textDiv = createElement('div', {
+            text: text,
+            style: `
+                color:#fff !important;
+                line-height:1.3 !important;
+                overflow:hidden !important;
+                text-overflow:ellipsis !important;
+                letter-spacing:-.2px !important;
+            `
+        });
+
+        toast.appendChild(iconDiv);
+        toast.appendChild(textDiv);
 
         mountTarget.appendChild(toast);
 
@@ -3561,11 +3842,17 @@
         bidListBtn.addEventListener('mouseup', () => {
             bidListBtn.style.transform = 'scale(1)';
         });
-        bidListBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+
+        const handleBidListBtnClick = (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
             openBidListModal();
-        });
+        };
+
+        bidListBtn.onclick = handleBidListBtnClick;
+        bidListBtn.addEventListener('click', handleBidListBtnClick, true);
 
         panel.appendChild(bidListBtn);
 
@@ -4102,6 +4389,26 @@
     // iframe#chatframe 내부 리스너 부착
     // =========================================================
 
+    function handleGlobalClick(event) {
+
+        // 1) 낙찰 내역 버튼 클릭 위임 (수식키 무관)
+        try {
+            if (event.target && typeof event.target.closest === 'function') {
+                const btn = event.target.closest('#__auction_bid_list_btn');
+                if (btn) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openBidListModal();
+                    return;
+                }
+            }
+        } catch (e) {}
+
+        // 2) 수식키 + 클릭 (채팅 닉네임/금액 감지)
+        handleModifierClick(event);
+    }
+
+
     function attachChatFrameListener() {
 
         try {
@@ -4118,13 +4425,13 @@
 
                 iframe.contentDocument.removeEventListener(
                     'click',
-                    handleModifierClick,
+                    handleGlobalClick,
                     true
                 );
 
                 iframe.contentDocument.addEventListener(
                     'click',
-                    handleModifierClick,
+                    handleGlobalClick,
                     true
                 );
             }
@@ -4143,13 +4450,13 @@
 
         document.addEventListener(
             'click',
-            handleModifierClick,
+            handleGlobalClick,
             true
         );
 
         window.addEventListener(
             'click',
-            handleModifierClick,
+            handleGlobalClick,
             true
         );
 
