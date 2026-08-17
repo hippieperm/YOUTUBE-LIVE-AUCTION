@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Live 낙찰 자동화
 // @namespace    https://youtube.com/
-// @version      1.0
-// @description  YouTube Live 낙찰 자동화 + 안내 버튼 + 밑줄 버튼
+// @version      1.1
+// @description  YouTube Live 낙찰 자동화 + 스마트 입찰 금액 추출 + 안내 버튼 + 밑줄 버튼
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
 // @match        https://www.youtube.com/live_chat*
@@ -21,25 +21,16 @@
 
 
     // =========================================================
-    // OS
+    // OS 및 수식키 감지 (⌘, Alt/Option, Ctrl 모두 지원)
     // =========================================================
 
-    const IS_MAC =
-        /Mac|iPhone|iPad|iPod/i.test(
-            navigator.platform ||
-            navigator.userAgent
+    function isModifierPressed(event) {
+
+        return !!(
+            event &&
+            (event.metaKey || event.altKey || event.ctrlKey)
         );
-
-    const MODIFIER_KEY =
-        IS_MAC ? 'metaKey' : 'altKey';
-
-
-    console.log(
-        PREFIX,
-        IS_MAC
-            ? 'Mac: ⌘ + 클릭'
-            : 'Windows/Linux: Alt + 클릭'
-    );
+    }
 
 
     // =========================================================
@@ -55,11 +46,48 @@
     }
 
 
+    function getEventElements(event) {
+
+        if (!event) {
+            return [];
+        }
+
+        if (
+            typeof event.composedPath === 'function'
+        ) {
+            const path =
+                event.composedPath();
+
+            if (
+                Array.isArray(path) &&
+                path.length > 0
+            ) {
+                return path;
+            }
+        }
+
+        const elements = [];
+
+        let curr =
+            event.target;
+
+        while (curr) {
+
+            elements.push(curr);
+
+            curr =
+                curr.parentElement;
+        }
+
+        return elements;
+    }
+
+
     // =========================================================
-    // 닉네임 찾기
+    // 채팅 메시지 요소 찾기
     // =========================================================
 
-    function findAuthor(target) {
+    function findChatMessageItem(target) {
 
         if (!target) {
             return null;
@@ -79,16 +107,83 @@
             return null;
         }
 
-        if (
-            target.id ===
-            'author-name'
+        return target.closest(
+            'yt-live-chat-text-message-renderer, ' +
+            'yt-live-chat-paid-message-renderer, ' +
+            'yt-live-chat-membership-item-renderer, ' +
+            'yt-live-chat-paid-sticker-renderer, ' +
+            'ytd-sponsorships-live-chat-gift-redemption-announcement-renderer'
+        );
+    }
+
+
+    // =========================================================
+    // 닉네임 찾기 (Shadow DOM / Composed Path 지원)
+    // =========================================================
+
+    function findAuthor(target, event = null) {
+
+        const elements =
+            event
+                ? getEventElements(event)
+                : (target ? [target] : []);
+
+        for (
+            const el
+            of elements
         ) {
-            return target;
+
+            if (
+                !el ||
+                !(el instanceof Element)
+            ) {
+                continue;
+            }
+
+            if (
+                el.id ===
+                'author-name'
+            ) {
+                return el;
+            }
+
+            const insideAuthor =
+                el.querySelector &&
+                el.querySelector('#author-name');
+
+            if (insideAuthor) {
+                return insideAuthor;
+            }
+
+            if (
+                typeof el.closest === 'function'
+            ) {
+                const chipAuthor =
+                    el.closest(
+                        'yt-live-chat-author-chip #author-name, #author-name'
+                    );
+
+                if (chipAuthor) {
+                    return chipAuthor;
+                }
+
+                const messageItem =
+                    findChatMessageItem(el);
+
+                if (messageItem) {
+                    const itemAuthor =
+                        messageItem.querySelector(
+                            '#author-name, yt-live-chat-author-chip'
+                        );
+
+                    if (itemAuthor) {
+                        return itemAuthor;
+                    }
+                }
+            }
         }
 
-        return target.closest(
-            'yt-live-chat-author-chip #author-name'
-        );
+        return null;
     }
 
 
@@ -102,13 +197,158 @@
             return null;
         }
 
+        let text = '';
+
+        if (author instanceof Element) {
+            const nameEl =
+                author.id === 'author-name'
+                    ? author
+                    : (author.querySelector('#author-name') || author);
+
+            text =
+                nameEl.innerText ||
+                nameEl.textContent ||
+                nameEl.getAttribute('aria-label') ||
+                '';
+
+        } else if (typeof author === 'string') {
+            text = author;
+        }
+
         const nickname =
-            author.textContent
+            text
                 .trim()
                 .replace(/^@+/, '')
                 .trim();
 
         return nickname || null;
+    }
+
+
+    // =========================================================
+    // 채팅 메시지 추출 (클릭 요소 및 최근 채팅)
+    // =========================================================
+
+    function extractChatMessage(target, nickname, event = null) {
+
+        const elements =
+            event
+                ? getEventElements(event)
+                : (target ? [target] : []);
+
+        // 1. 이벤트 path 상의 모든 메시지 요소 또는 message ID 탐색
+        for (
+            const el
+            of elements
+        ) {
+
+            if (
+                !el ||
+                !(el instanceof Element)
+            ) {
+                continue;
+            }
+
+            if (
+                el.id === 'message' &&
+                el.textContent
+            ) {
+                const text =
+                    el.textContent.trim();
+
+                if (text) {
+                    return text;
+                }
+            }
+
+            const msgEl =
+                el.querySelector &&
+                el.querySelector('#message');
+
+            if (
+                msgEl &&
+                msgEl.textContent
+            ) {
+                const text =
+                    msgEl.textContent.trim();
+
+                if (text) {
+                    return text;
+                }
+            }
+
+            const item =
+                findChatMessageItem(el);
+
+            if (item) {
+                const itemMsg =
+                    item.querySelector('#message');
+
+                if (
+                    itemMsg &&
+                    itemMsg.textContent
+                ) {
+                    const text =
+                        itemMsg.textContent.trim();
+
+                    if (text) {
+                        return text;
+                    }
+                }
+            }
+        }
+
+        // 2. 닉네임 기준 가장 최근 메시지 역순 검색
+        if (nickname) {
+            const chatItems =
+                document.querySelectorAll(
+                    'yt-live-chat-text-message-renderer, ' +
+                    'yt-live-chat-paid-message-renderer'
+                );
+
+            for (
+                let i = chatItems.length - 1;
+                i >= 0;
+                i--
+            ) {
+                const chatItem =
+                    chatItems[i];
+
+                const authorEl =
+                    chatItem.querySelector(
+                        '#author-name'
+                    );
+
+                if (authorEl) {
+                    const authorName =
+                        getNickname(authorEl);
+
+                    if (
+                        authorName ===
+                        nickname
+                    ) {
+                        const msgEl =
+                            chatItem.querySelector(
+                                '#message'
+                            );
+
+                        if (
+                            msgEl &&
+                            msgEl.textContent
+                        ) {
+                            const text =
+                                msgEl.textContent.trim();
+
+                            if (text) {
+                                return text;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
 
@@ -146,6 +386,154 @@
         }
 
         return String(number);
+    }
+
+
+    // =========================================================
+    // 스마트 금액 파싱 (입찰 채팅에서 만원 단위 추출)
+    // - .5, .3 등 소수점 시작 형태 지원 (.5 ➔ 0.5만원 = 5천원)
+    // - 15만, 15.5만, 15만 5천, 150000, 5000, 20 등 자동 변환
+    // =========================================================
+
+    function parseBidPrice(text) {
+
+        if (
+            !text ||
+            typeof text !== 'string'
+        ) {
+            return null;
+        }
+
+        let clean =
+            text.trim();
+
+        // 0. ".5", ".3", ".5만" 등 소수점으로 바로 시작하는 경우 -> 0.5, 0.3 (0.5만원 = 5천원)
+        clean =
+            clean
+                .replace(/,/g, '')
+                .replace(/(?:^|[^\d])\.(\d+)/g, ' 0.$1');
+
+        // 1. "15만 5천", "15만5000", "15만 3천원", "15만 5" 등 만+천 복합 단위
+        const manChonMatch =
+            clean.match(
+                /(\d+(?:\.\d+)?)\s*만\s*(\d+(?:\.\d+)?)\s*(천|000|원)?/i
+            );
+
+        if (manChonMatch) {
+            const man =
+                parseFloat(manChonMatch[1]);
+
+            let sub =
+                parseFloat(manChonMatch[2]);
+
+            const unit =
+                manChonMatch[3];
+
+            if (
+                unit === '천' ||
+                unit === '000' ||
+                (sub < 10 && !unit)
+            ) {
+                if (sub >= 1000) {
+                    sub = sub / 10000;
+                } else if (sub < 10) {
+                    sub = sub / 10;
+                } else if (sub < 100) {
+                    sub = sub / 100;
+                }
+
+                return normalizePrice(man + sub);
+            }
+        }
+
+        // 2. "15만", "15만원", "15.5만", "0.5만", ".5만"
+        const manMatch =
+            clean.match(
+                /(\d+(?:\.\d+)?)\s*만/
+            );
+
+        if (manMatch) {
+            return normalizePrice(manMatch[1]);
+        }
+
+        // 3. "5천", "5천원", "5000원", "3천"
+        const chonMatch =
+            clean.match(
+                /(\d+(?:\.\d+)?)\s*천\s*원?/
+            );
+
+        if (chonMatch) {
+            const chon =
+                parseFloat(chonMatch[1]);
+
+            return normalizePrice(chon * 0.1);
+        }
+
+        // 4. 원 단위 숫자가 명시된 경우 (예: "150000원", "150,000원", "15000원", "5000원")
+        const wonMatch =
+            clean.match(
+                /(\d{4,9})\s*원/
+            );
+
+        if (wonMatch) {
+            const num =
+                parseFloat(wonMatch[1]);
+
+            return normalizePrice(num / 10000);
+        }
+
+        // 5. 콤마가 포함되어 있던 원 단위 숫자 (예: "150,000" -> 15)
+        if (/,/.test(text)) {
+            const commaNumMatch =
+                clean.match(
+                    /(\d{4,9})/
+                );
+
+            if (commaNumMatch) {
+                const num =
+                    parseFloat(commaNumMatch[1]);
+
+                return normalizePrice(num / 10000);
+            }
+        }
+
+        // 6. 단독 큰 숫자 (10,000 이상, 예: 150000, 200000)
+        const largeNumMatch =
+            clean.match(
+                /(?:^|[^\d.])(\d{5,9})(?:[^\d.]|$)/
+            );
+
+        if (largeNumMatch) {
+            const num =
+                parseFloat(largeNumMatch[1]);
+
+            return normalizePrice(num / 10000);
+        }
+
+        // 7. 천 단위 4자리 숫자 (예: "5000", "3000" 등 단독으로 쓰인 4자리 천원 단위 -> 0.5, 0.3)
+        const fourDigitChonMatch =
+            clean.match(
+                /(?:^|[^\d.])([1-9]000)(?:[^\d.]|$)/
+            );
+
+        if (fourDigitChonMatch) {
+            const num =
+                parseFloat(fourDigitChonMatch[1]);
+
+            return normalizePrice(num / 10000);
+        }
+
+        // 8. 일반 숫자 (예: "15", "20", "15.5", "0.5", "2", "35")
+        const numMatch =
+            clean.match(
+                /(\d+(?:\.\d+)?)/
+            );
+
+        if (numMatch) {
+            return normalizePrice(numMatch[1]);
+        }
+
+        return null;
     }
 
 
@@ -252,15 +640,22 @@
     // =========================================================
 
     function openAuctionModal(
-        nickname
+        nickname,
+        lastChatMessage = null
     ) {
 
         console.log(
             PREFIX,
             'openAuctionModal:',
-            nickname
+            nickname,
+            'chat:',
+            lastChatMessage
         );
 
+        const parsedPrice =
+            lastChatMessage
+                ? parseBidPrice(lastChatMessage)
+                : null;
 
         removeAuctionUI();
 
@@ -802,6 +1197,12 @@
             );
 
 
+        if (parsedPrice) {
+            input.value =
+                parsedPrice;
+        }
+
+
         input.addEventListener(
             'focus',
             function () {
@@ -1015,11 +1416,15 @@
         // 삽입
         // =====================================================
 
-        document.documentElement.appendChild(
+        const mountTarget =
+            document.body ||
+            document.documentElement;
+
+        mountTarget.appendChild(
             backdrop
         );
 
-        document.documentElement.appendChild(
+        mountTarget.appendChild(
             modal
         );
 
@@ -1206,6 +1611,10 @@
             function () {
 
                 input.focus();
+
+                if (parsedPrice) {
+                    input.select();
+                }
 
             },
             20
@@ -1566,7 +1975,7 @@
     ) {
 
         if (
-            !event[MODIFIER_KEY]
+            !isModifierPressed(event)
         ) {
             return;
         }
@@ -1574,7 +1983,8 @@
 
         const author =
             findAuthor(
-                event.target
+                event.target,
+                event
             );
 
 
@@ -1598,16 +2008,33 @@
 
         event.stopPropagation();
 
+        if (
+            typeof event.stopImmediatePropagation === 'function'
+        ) {
+            event.stopImmediatePropagation();
+        }
+
+
+        const lastChatMessage =
+            extractChatMessage(
+                event.target,
+                nickname,
+                event
+            );
+
 
         console.log(
             PREFIX,
-            'modifier + 클릭:',
-            nickname
+            '수식키 + 클릭 성공:',
+            nickname,
+            '채팅:',
+            lastChatMessage
         );
 
 
         openAuctionModal(
-            nickname
+            nickname,
+            lastChatMessage
         );
     }
 
@@ -2487,7 +2914,7 @@
 
 
         // -----------------------------------------------------
-        // YouTube 채팅 재생성 대응
+        // YouTube 채팅 재생성 및 프레임 감지
         // -----------------------------------------------------
 
         setInterval(
@@ -2495,9 +2922,48 @@
 
                 createAllUI();
 
+                attachChatFrameListener();
+
             },
             1500
         );
+    }
+
+
+    // =========================================================
+    // iframe#chatframe 내부 리스너 부착
+    // =========================================================
+
+    function attachChatFrameListener() {
+
+        try {
+
+            const iframe =
+                document.querySelector(
+                    'iframe#chatframe'
+                );
+
+            if (
+                iframe &&
+                iframe.contentDocument
+            ) {
+
+                iframe.contentDocument.removeEventListener(
+                    'click',
+                    handleModifierClick,
+                    true
+                );
+
+                iframe.contentDocument.addEventListener(
+                    'click',
+                    handleModifierClick,
+                    true
+                );
+            }
+
+        } catch (e) {
+            // cross-origin 보호 환경일 경우 무시
+        }
     }
 
 
@@ -2513,13 +2979,19 @@
             true
         );
 
+        window.addEventListener(
+            'click',
+            handleModifierClick,
+            true
+        );
+
+        attachChatFrameListener();
 
         startUIObserver();
 
-
         console.log(
             PREFIX,
-            '준비 완료'
+            '준비 완료 (수식키 + 클릭 대기 중)'
         );
     }
 
