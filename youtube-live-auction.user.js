@@ -1536,6 +1536,117 @@
             modal.appendChild(sortTabBar);
 
 
+            // -- 닉네임 검색 바 --
+            let searchQuery = '';
+
+            const searchWrap = createElement(
+                'div',
+                {
+                    style: `
+                        position:relative !important;
+                        display:flex !important;
+                        align-items:center !important;
+                        width:100% !important;
+                        box-sizing:border-box !important;
+                    `
+                }
+            );
+
+            const searchIcon = createElement(
+                'span',
+                {
+                    text: '🔍',
+                    style: `
+                        position:absolute !important;
+                        left:8px !important;
+                        font-size:11px !important;
+                        opacity:0.5 !important;
+                        pointer-events:none !important;
+                    `
+                }
+            );
+
+            const searchInput = createElement(
+                'input',
+                {
+                    type: 'text',
+                    placeholder: '닉네임 검색...',
+                    style: `
+                        width:100% !important;
+                        height:27px !important;
+                        padding:0 24px 0 25px !important;
+                        border:1px solid rgba(255,255,255,.08) !important;
+                        border-radius:7px !important;
+                        background:rgba(255,255,255,.04) !important;
+                        color:#fff !important;
+                        font-size:11px !important;
+                        font-weight:500 !important;
+                        outline:none !important;
+                        box-sizing:border-box !important;
+                        transition:all .15s ease !important;
+                    `
+                }
+            );
+
+            searchInput.addEventListener('focus', () => {
+                searchInput.style.borderColor = 'rgba(255,204,0,.45)';
+                searchInput.style.background = 'rgba(255,255,255,.07)';
+            });
+            searchInput.addEventListener('blur', () => {
+                searchInput.style.borderColor = 'rgba(255,255,255,.08)';
+                searchInput.style.background = 'rgba(255,255,255,.04)';
+            });
+
+            const searchClearBtn = createElement(
+                'button',
+                {
+                    type: 'button',
+                    text: '×',
+                    title: '검색어 지우기',
+                    style: `
+                        position:absolute !important;
+                        right:5px !important;
+                        width:16px !important;
+                        height:16px !important;
+                        padding:0 !important;
+                        border:0 !important;
+                        border-radius:50% !important;
+                        background:rgba(255,255,255,.12) !important;
+                        color:rgba(255,255,255,.7) !important;
+                        font-size:12px !important;
+                        line-height:14px !important;
+                        cursor:pointer !important;
+                        display:none !important;
+                        align-items:center !important;
+                        justify-content:center !important;
+                    `
+                }
+            );
+
+            searchClearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchQuery = '';
+                searchClearBtn.style.display = 'none';
+                renderBidList();
+                searchInput.focus();
+            });
+
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value;
+                if (searchQuery.trim().length > 0) {
+                    searchClearBtn.style.display = 'flex';
+                } else {
+                    searchClearBtn.style.display = 'none';
+                }
+                renderBidList();
+            });
+
+            searchWrap.appendChild(searchIcon);
+            searchWrap.appendChild(searchInput);
+            searchWrap.appendChild(searchClearBtn);
+            modal.appendChild(searchWrap);
+
+
             // -- 낙찰 목록 컨테이너 --
 
             const listWrap = createElement(
@@ -1544,7 +1655,7 @@
                     style: `
                         flex:1 !important;
                         overflow-y:auto !important;
-                        max-height:235px !important;
+                        max-height:210px !important;
                         display:flex !important;
                         flex-direction:column !important;
                         gap:5px !important;
@@ -1589,7 +1700,36 @@
                     }
                 }
                 const rawList = getTodayBidRecords();
-                const sortedList = sortBidRecords(rawList, currentSort);
+
+                let filteredList = rawList;
+                const q = searchQuery.trim().toLowerCase().replace(/^@/, '');
+                if (q) {
+                    filteredList = rawList.filter(r => {
+                        if (!r) return false;
+                        const nick = String(r.nickname || '').toLowerCase().replace(/^@/, '');
+                        const origChat = String(r.originalChat || '').toLowerCase();
+                        return nick.includes(q) || origChat.includes(q);
+                    });
+                }
+
+                const sortedList = sortBidRecords(filteredList, currentSort);
+
+                if (rawList.length === 0) {
+                    const empty = createElement(
+                        'div',
+                        {
+                            style: `
+                                text-align:center !important;
+                                padding:28px 0 !important;
+                                color:rgba(255,255,255,.35) !important;
+                                font-size:12px !important;
+                            `
+                        }
+                    );
+                    empty.textContent = '현재 방송의 낙찰 내역이 없습니다.';
+                    listWrap.appendChild(empty);
+                    return;
+                }
 
                 if (sortedList.length === 0) {
                     const empty = createElement(
@@ -1603,7 +1743,7 @@
                             `
                         }
                     );
-                    empty.textContent = '현재 방송의 낙찰 내역이 없습니다.';
+                    empty.textContent = `"${searchQuery}" 검색 결과가 없습니다.`;
                     listWrap.appendChild(empty);
                     return;
                 }
