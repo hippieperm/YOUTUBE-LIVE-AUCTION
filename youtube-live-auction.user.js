@@ -2011,8 +2011,68 @@ ${xmlRows.join('')}
             modal.appendChild(sortTabBar);
 
 
-            // -- 닉네임 검색 바 --
+            // -- 닉네임 검색 바 & 초성 검색 지원 --
             let searchQuery = '';
+
+            // 한글 초성 분기 맵
+            const CHOSUNG_MAP = {
+                'ㄱ': '[가-깋ㄱ]',
+                'ㄲ': '[까-낗ㄲ]',
+                'ㄴ': '[나-닣ㄴ]',
+                'ㄷ': '[다-딯ㄷ]',
+                'ㄸ': '[따-띻ㄸ]',
+                'ㄹ': '[라-맇ㄹ]',
+                'ㅁ': '[마-밓ㅁ]',
+                'ㅂ': '[바-빟ㅂ]',
+                'ㅃ': '[빠-삫ㅃ]',
+                'ㅅ': '[사-싷ㅅ]',
+                'ㅆ': '[싸-앃ㅆ]',
+                'ㅇ': '[아-잏ㅇ]',
+                'ㅈ': '[자-즿ㅈ]',
+                'ㅉ': '[짜-찧ㅉ]',
+                'ㅊ': '[차-칳ㅊ]',
+                'ㅋ': '[카-킿ㅋ]',
+                'ㅌ': '[타-팋ㅌ]',
+                'ㅍ': '[파-핗ㅍ]',
+                'ㅎ': '[하-힣ㅎ]'
+            };
+
+            function escapeRegex(str) {
+                return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+
+            function makeChosungRegex(query) {
+                if (!query) return null;
+                let pattern = '';
+                for (let i = 0; i < query.length; i++) {
+                    const ch = query[i];
+                    if (CHOSUNG_MAP[ch]) {
+                        pattern += CHOSUNG_MAP[ch];
+                    } else {
+                        pattern += escapeRegex(ch);
+                    }
+                }
+                try {
+                    return new RegExp(pattern, 'i');
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            function isChosungMatch(targetText, queryStr, chosungRegex) {
+                if (!queryStr) return true;
+                if (!targetText) return false;
+                const cleanTarget = String(targetText).toLowerCase().replace(/^@/, '');
+                const cleanQuery = queryStr.toLowerCase().replace(/^@/, '');
+
+                // 1) 기본 문자열 포함 검사
+                if (cleanTarget.includes(cleanQuery)) return true;
+
+                // 2) 초성 정규표현식 일치 검사
+                if (chosungRegex && chosungRegex.test(cleanTarget)) return true;
+
+                return false;
+            }
 
             const searchWrap = createElement(
                 'div',
@@ -2045,7 +2105,7 @@ ${xmlRows.join('')}
                 'input',
                 {
                     type: 'text',
-                    placeholder: '닉네임 검색...',
+                    placeholder: '닉네임 / 초성 검색 (예: ㅎㄱㄷ)...',
                     style: `
                         width:100% !important;
                         height:27px !important;
@@ -2181,11 +2241,12 @@ ${xmlRows.join('')}
                 let filteredList = rawList;
                 const q = searchQuery.trim().toLowerCase().replace(/^@/, '');
                 if (q) {
+                    const chosungRegex = makeChosungRegex(q);
                     filteredList = rawList.filter(r => {
                         if (!r) return false;
-                        const nick = String(r.nickname || '').toLowerCase().replace(/^@/, '');
-                        const origChat = String(r.originalChat || '').toLowerCase();
-                        return nick.includes(q) || origChat.includes(q);
+                        const nick = String(r.nickname || '');
+                        const origChat = String(r.originalChat || '');
+                        return isChosungMatch(nick, q, chosungRegex) || isChosungMatch(origChat, q, chosungRegex);
                     });
                 }
 
