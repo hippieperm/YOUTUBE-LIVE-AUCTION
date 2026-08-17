@@ -1508,16 +1508,54 @@
                     }
                     const allRecords = groupBidRecordsByNickname(rawRecords, currentSort);
                     const BOM = '\uFEFF';
-                    const csvHeader = '번호,시간,낙찰자,낙찰가,전송문구';
-                    const rows = allRecords.map((r, i) =>
-                        [
-                            i + 1,
+                    const csvHeader = '번호,시간,낙찰자,낙찰가,전송문구,닉네임별합산';
+
+                    // 닉네임별 총합 사전 계산
+                    const nickTotals = {};
+                    allRecords.forEach(r => {
+                        const nick = (r && r.nickname) ? String(r.nickname).trim() : '';
+                        const p = parseFloat(r && r.price);
+                        const val = !isNaN(p) ? p : 0;
+                        if (!nickTotals[nick]) {
+                            nickTotals[nick] = { total: 0, count: 0 };
+                        }
+                        nickTotals[nick].total += val;
+                        nickTotals[nick].count += 1;
+                    });
+
+                    let rowIndex = 0;
+                    const rows = [];
+                    for (let i = 0; i < allRecords.length; i++) {
+                        const r = allRecords[i];
+                        rowIndex++;
+                        const nick = (r && r.nickname) ? String(r.nickname).trim() : '';
+                        const nextNick = (i + 1 < allRecords.length && allRecords[i + 1] && allRecords[i + 1].nickname)
+                            ? String(allRecords[i + 1].nickname).trim()
+                            : null;
+
+                        const isLastOfNick = (nextNick !== nick);
+                        const nickSumWon = Math.round((nickTotals[nick]?.total || 0) * 10000);
+                        const nickCount = nickTotals[nick]?.count || 1;
+                        const sumLabel = isLastOfNick
+                            ? (nickCount > 1
+                                ? `총 ${nickCount}건 / ${nickSumWon.toLocaleString('ko-KR')}원`
+                                : `${nickSumWon.toLocaleString('ko-KR')}원`)
+                            : '';
+
+                        rows.push([
+                            rowIndex,
                             r.videoTime || r.time || '',
                             `"${String(r.nickname || '').replace(/"/g, '""')}"`,
                             `"${formatActualPrice(r.price)}"`,
-                            `"${String(r.message || '').replace(/"/g, '""')}"`
-                        ].join(',')
-                    );
+                            `"${String(r.message || '').replace(/"/g, '""')}"`,
+                            `"${sumLabel}"`
+                        ].join(','));
+
+                        // 다른 닉네임으로 넘어가기 전 빈 줄(공백 행: 6개 열 쉼표) 추가
+                        if (isLastOfNick && i < allRecords.length - 1) {
+                            rows.push(',,,,,');
+                        }
+                    }
                     const csv = BOM + csvHeader + '\n' + rows.join('\n');
                     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
@@ -1544,23 +1582,41 @@
                     }
                     const allRecords = groupBidRecordsByNickname(rawRecords, currentSort);
                     let sum = 0;
+                    const nickGroups = new Map();
                     allRecords.forEach(r => {
                         const p = parseFloat(r && r.price);
                         if (!isNaN(p)) sum += p;
+                        const nick = (r && r.nickname) ? String(r.nickname).trim() : '';
+                        if (!nickGroups.has(nick)) {
+                            nickGroups.set(nick, { records: [], total: 0 });
+                        }
+                        const g = nickGroups.get(nick);
+                        g.records.push(r);
+                        if (!isNaN(p)) g.total += p;
                     });
                     const totalWon = Math.round(sum * 10000);
                     const sumStr = totalWon.toLocaleString('ko-KR') + '원';
 
-                    const lines = allRecords.map((r, i) => {
-                        const datePrefix = (r.date && r.date !== getTodayString()) ? `${r.date} ` : '';
-                        const timeVal = r.videoTime || r.time || '';
-                        const priceVal = formatActualPrice(r.price);
-                        return `${i + 1}. ${datePrefix}${timeVal} | @${r.nickname || ''} | ${priceVal ? priceVal + '원' : ''}`;
+                    let itemCounter = 0;
+                    const groupBlocks = [];
+                    nickGroups.forEach((groupData, nick) => {
+                        const blockLines = groupData.records.map(r => {
+                            itemCounter++;
+                            const datePrefix = (r.date && r.date !== getTodayString()) ? `${r.date} ` : '';
+                            const timeVal = r.videoTime || r.time || '';
+                            const priceVal = formatActualPrice(r.price);
+                            return `${itemCounter}. ${datePrefix}${timeVal} | @${r.nickname || ''} | ${priceVal ? priceVal + '원' : ''}`;
+                        });
+                        const groupWon = Math.round(groupData.total * 10000);
+                        const groupSumStr = groupWon.toLocaleString('ko-KR') + '원';
+                        const summaryLine = `  └ [소계] @${nick || '익명'}: ${groupData.records.length}건 / ${groupSumStr}`;
+                        groupBlocks.push(blockLines.join('\n') + '\n' + summaryLine);
                     });
+
                     const text =
                         `[낙찰 내역]\n` +
-                        lines.join('\n') +
-                        `\n\n총 ${allRecords.length}건 / ${sumStr}`;
+                        groupBlocks.join('\n\n') +
+                        `\n\n══════════════════════\n총 ${allRecords.length}건 / 합계: ${sumStr}`;
 
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(text).then(() => {
