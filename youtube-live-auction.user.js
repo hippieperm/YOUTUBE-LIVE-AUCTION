@@ -681,6 +681,10 @@
 
     function normalizePrice(value) {
 
+        if (value === null || value === undefined) {
+            return null;
+        }
+
         let price =
             String(value)
                 .trim()
@@ -688,6 +692,10 @@
 
         if (!price) {
             return null;
+        }
+
+        if (price.startsWith('.')) {
+            price = '0' + price;
         }
 
         if (
