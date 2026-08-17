@@ -1411,36 +1411,17 @@
             modal.appendChild(listWrap);
 
 
-            // -- DOM 삽입 (메인 body 및 채팅 문서 body 모두 안전하게 지원) --
+            // -- DOM 삽입 --
 
-            const mountTargets = [];
-            if (document.body) mountTargets.push(document.body);
-            const input = findChatInput();
-            if (input && input.ownerDocument && input.ownerDocument.body && input.ownerDocument.body !== document.body) {
-                mountTargets.push(input.ownerDocument.body);
-            }
+            const mountTarget = document.body || document.documentElement;
+            mountTarget.appendChild(backdrop);
+            mountTarget.appendChild(modal);
 
-            mountTargets.forEach(target => {
-                try {
-                    target.appendChild(backdrop.cloneNode(true));
-                    target.appendChild(modal.cloneNode(true));
-                } catch (e) {}
-            });
-
-            // 원본 요소가 마운트 안 된 경우 폴백 마운트
-            if (!document.getElementById('__auction_bid_list_modal')) {
-                const fbTarget = document.body || document.documentElement;
-                fbTarget.appendChild(backdrop);
-                fbTarget.appendChild(modal);
-            }
-
-            // 백드롭 클릭 시 닫기
-            document.addEventListener('click', function _onBackdropClick(e) {
-                if (e.target && e.target.id === '__auction_bid_list_backdrop') {
+            backdrop.addEventListener('click', (e) => {
+                if (e.target === backdrop) {
                     removeBidListUI();
-                    document.removeEventListener('click', _onBackdropClick, true);
                 }
-            }, true);
+            });
 
             // ESC 키로 닫기
             _bidListKeydownHandler = function (event) {
