@@ -158,15 +158,13 @@
     }
 
 
-    /** 오늘 날짜의 현재 방송 기록 필터링 */
+    /** 현재 방송 기록 필터링 (날짜 무관, 현재 방송 기준 유지) */
     function getTodayBidRecords() {
 
-        const today   = getTodayString();
         const videoId = getCurrentVideoId();
         const records = loadBidRecords();
 
         return records.filter(r => {
-            if (r.date !== today) return false;
             // videoId가 둘 다 명확하고 유효한 경우 매칭 확인
             if (
                 videoId && videoId !== 'unknown' && videoId !== 'live_chat' &&
@@ -174,7 +172,7 @@
             ) {
                 return r.videoId === videoId;
             }
-            // videoId를 특정하기 어려운 환경(iframe 등)에서는 오늘 날짜 기록 포함
+            // videoId를 특정하기 어려운 환경(iframe 등)에서는 전체 기록 포함
             return true;
         });
     }
@@ -1019,7 +1017,7 @@
                     font-weight:800 !important;
                 `
             });
-            const titleText = createElement('span', { text: '오늘 낙찰 내역' });
+            const titleText = createElement('span', { text: '낙찰 내역' });
             title.appendChild(titleIcon);
             title.appendChild(titleText);
 
@@ -1220,11 +1218,12 @@
                         return;
                     }
                     const allRecords = sortBidRecords(rawRecords, currentSort);
-                    const lines = allRecords.map((r, i) =>
-                        `${i + 1}. ${r.time || ''} | @${r.nickname || ''} | ${r.price || ''}만원`
-                    );
+                    const lines = allRecords.map((r, i) => {
+                        const datePrefix = (r.date && r.date !== getTodayString()) ? `${r.date} ` : '';
+                        return `${i + 1}. ${datePrefix}${r.time || ''} | @${r.nickname || ''} | ${r.price || ''}만원`;
+                    });
                     const text =
-                        `[낙찰 내역 ${getTodayString()}]\n` +
+                        `[낙찰 내역]\n` +
                         lines.join('\n') +
                         `\n\n총 ${allRecords.length}건 / ${totalPriceStr}만원`;
 
@@ -1266,12 +1265,10 @@
                         showAuctionToast('삭제할 내역이 없습니다.', 'auction');
                         return;
                     }
-                    if (!confirm(`오늘 낙찰 내역 ${cur.length}건을 모두 삭제할까요?`)) return;
+                    if (!confirm(`낙찰 내역 ${cur.length}건을 모두 삭제할까요?`)) return;
                     const allRecords = loadBidRecords();
-                    const today = getTodayString();
                     const videoId = getCurrentVideoId();
                     const filtered = allRecords.filter(r => {
-                        if (r.date !== today) return true;
                         if (videoId && videoId !== 'unknown' && videoId !== 'live_chat' &&
                             r.videoId && r.videoId !== 'unknown' && r.videoId !== 'live_chat') {
                             return r.videoId !== videoId;
@@ -1432,7 +1429,7 @@
                             `
                         }
                     );
-                    empty.textContent = '오늘 낙찰 내역이 없습니다.';
+                    empty.textContent = '낙찰 내역이 없습니다.';
                     listWrap.appendChild(empty);
                     return;
                 }
@@ -1492,8 +1489,9 @@
                         `
                     });
 
+                    const datePrefix = (record.date && record.date !== getTodayString()) ? `${record.date} ` : '';
                     const timeDiv = createElement('div', {
-                        text: `${record.time || ''}${chatPreview}`,
+                        text: `${datePrefix}${record.time || ''}${chatPreview}`,
                         style: 'font-size:10px !important; color:rgba(255,255,255,.45) !important; margin-top:1px !important;'
                     });
 
