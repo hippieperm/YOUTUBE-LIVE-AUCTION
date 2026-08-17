@@ -1726,8 +1726,8 @@
   <Table ss:DefaultRowHeight="18">
    <Column ss:Width="50"/>
    <Column ss:Width="80"/>
-   <Column ss:Width="180"/>
-   <Column ss:Width="120"/>
+   <Column ss:Width="110"/>
+   <Column ss:Width="100"/>
 ${xmlRows.join('')}
   </Table>
  </Worksheet>
