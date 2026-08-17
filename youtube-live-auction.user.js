@@ -1559,13 +1559,13 @@
                                 `"${subtotalNote}"`
                             ].join(','));
 
-                            // 다음 닉네임 그룹이 있으면 완전한 빈 행 한 칸(공백) 추가
+                            // 다음 닉네임 그룹이 있으면 엑셀에서 기본 높이로 정상 렌더링되는 완전한 빈 행 추가
                             if (i < allRecords.length - 1) {
-                                rows.push(',,,,');
+                                rows.push('" "," "," "," "," "');
                             }
                         }
                     }
-                    const csv = BOM + csvHeader + '\n' + rows.join('\n');
+                    const csv = BOM + csvHeader + '\r\n' + rows.join('\r\n');
                     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
