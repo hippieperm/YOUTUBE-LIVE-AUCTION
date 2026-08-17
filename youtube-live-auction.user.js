@@ -967,26 +967,44 @@
 
     function getTargetDocs() {
         const docs = [document];
-        const input = findChatInput();
-        if (input && input.ownerDocument && !docs.includes(input.ownerDocument)) {
-            docs.push(input.ownerDocument);
-        }
+        const addDoc = (d) => {
+            if (d && !docs.includes(d)) {
+                docs.push(d);
+            }
+        };
+
+        try {
+            const input = findChatInput();
+            if (input && input.ownerDocument) {
+                addDoc(input.ownerDocument);
+            }
+        } catch (e) {}
+
         try {
             const iframe = document.querySelector('iframe#chatframe');
-            if (iframe && iframe.contentDocument && !docs.includes(iframe.contentDocument)) {
-                docs.push(iframe.contentDocument);
+            if (iframe && iframe.contentDocument) {
+                addDoc(iframe.contentDocument);
             }
         } catch (e) {}
+
         try {
-            if (window.top && window.top.document && !docs.includes(window.top.document)) {
-                docs.push(window.top.document);
+            if (window.top && window.top.document) {
+                addDoc(window.top.document);
+                const topIframes = window.top.document.querySelectorAll('iframe');
+                topIframes.forEach(f => {
+                    try {
+                        if (f.contentDocument) addDoc(f.contentDocument);
+                    } catch (e) {}
+                });
             }
         } catch (e) {}
+
         try {
-            if (window.parent && window.parent.document && !docs.includes(window.parent.document)) {
-                docs.push(window.parent.document);
+            if (window.parent && window.parent.document) {
+                addDoc(window.parent.document);
             }
         } catch (e) {}
+
         return docs;
     }
 
@@ -2093,25 +2111,16 @@
         let targetDoc = document;
         let bidListModal = null;
 
-        // 낙찰 내역 모달이 열려있는지 확인
-        const docsToCheck = [document];
-        try {
-            if (window.top && window.top.document && !docsToCheck.includes(window.top.document)) {
-                docsToCheck.push(window.top.document);
-            }
-        } catch (e) {}
-        try {
-            if (window.parent && window.parent.document && !docsToCheck.includes(window.parent.document)) {
-                docsToCheck.push(window.parent.document);
-            }
-        } catch (e) {}
+        // 낙찰 내역 모달 및 경매 모달이 열려있는지 확인
+        const docsToCheck = getTargetDocs();
 
         for (const doc of docsToCheck) {
             try {
-                const found = doc.getElementById('__auction_bid_list_modal');
+                if (!doc) continue;
+                const found = doc.getElementById('__auction_bid_list_modal') || doc.getElementById('__auction_auto_modal');
                 if (found && found.isConnected) {
                     bidListModal = found;
-                    targetDoc = doc;
+                    targetDoc = found.ownerDocument || doc;
                     break;
                 }
             } catch (e) {}
