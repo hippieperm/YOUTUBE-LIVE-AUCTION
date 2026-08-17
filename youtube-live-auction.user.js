@@ -3862,24 +3862,29 @@
 
 
     // =========================================================
-    // ⌘ + 클릭 / Alt + 클릭
+    // 채팅 메시지 좌클릭 핸들러 (수식키 없이 좌클릭만으로 동작)
     // =========================================================
 
-    function handleModifierClick(
+    function handleChatMessageClick(
         event
     ) {
 
+        // 🛑 좌클릭(button === 0)만 허용 (우클릭/휠클릭 무시)
         if (
-            !isModifierPressed(event)
+            event.button !== undefined &&
+            event.button !== 0
         ) {
             return;
         }
 
-        // 🛑 가드 1: 버튼, 입력창, 안내 패널, 모달 내부 클릭은 수식키 클릭 무시
+        // 🛑 가드 1: 버튼, 입력창, 링크, 메뉴, 안내 패널, 모달 내부 클릭은 무시
         const ignoreSelectors = [
             'button',
             'input',
             'textarea',
+            'a',
+            'yt-icon-button',
+            '#menu',
             '#__auction_guide_panel',
             '#__auction_separator_button',
             '#__auction_bid_list_btn',
@@ -3951,7 +3956,7 @@
 
         console.log(
             PREFIX,
-            '수식키 + 클릭 성공:',
+            '채팅 좌클릭 감지 성공:',
             nickname,
             '채팅:',
             lastChatMessage
@@ -5053,8 +5058,8 @@
             }
         } catch (e) {}
 
-        // 2) 수식키 + 클릭 (채팅 닉네임/금액 감지)
-        handleModifierClick(event);
+        // 2) 채팅 클릭 (채팅 닉네임/금액 감지 -> 다이렉트 입력 또는 모달 팝업)
+        handleChatMessageClick(event);
     }
 
 
@@ -5125,7 +5130,7 @@
 
         console.log(
             PREFIX,
-            '준비 완료 (수식키 + 클릭 대기 중)'
+            '준비 완료 (채팅 좌클릭 대기 중)'
         );
     }
 
