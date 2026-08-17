@@ -1444,7 +1444,7 @@
 
 
     // =========================================================
-    // 멋진 토스트 메시지 알림 (채팅창 영역 위 표시)
+    // 멋진 토스트 메시지 알림 (브라우저 전체 중앙 하단 표시)
     // =========================================================
 
     function showAuctionToast(
@@ -1453,13 +1453,14 @@
         duration = 2600
     ) {
 
-        const input =
-            findChatInput();
-
-        const targetDoc =
-            input
-                ? (input.ownerDocument || document)
-                : document;
+        let targetDoc = document;
+        try {
+            if (window.top && window.top.document && window.top.document.body) {
+                targetDoc = window.top.document;
+            }
+        } catch (e) {
+            targetDoc = document;
+        }
 
         const mountTarget =
             targetDoc.body ||
@@ -1469,13 +1470,20 @@
             return;
         }
 
-        // 기존 토스트 정리
-        const existingToasts =
+        // 기존 토스트 정리 (현재 doc 및 targetDoc 모두 확인)
+        try {
             targetDoc.querySelectorAll(
                 '.__auction_toast_notification'
-            );
+            ).forEach(el => el.remove());
+        } catch (e) {}
 
-        existingToasts.forEach(el => el.remove());
+        if (targetDoc !== document) {
+            try {
+                document.querySelectorAll(
+                    '.__auction_toast_notification'
+                ).forEach(el => el.remove());
+            } catch (e) {}
+        }
 
         const toast =
             targetDoc.createElement('div');
@@ -1537,19 +1545,19 @@
             'style',
             `
                 position:fixed !important;
-                bottom:78px !important;
+                bottom:36px !important;
                 left:50% !important;
                 transform:translateX(-50%) translateY(20px) !important;
                 background:linear-gradient(135deg, rgba(32,32,38,.96), rgba(18,18,22,.98)) !important;
                 border:1px solid ${borderCol} !important;
                 box-shadow:0 12px 36px rgba(0,0,0,.70), 0 0 22px ${glowCol} !important;
                 border-radius:14px !important;
-                padding:10px 18px !important;
+                padding:11px 20px !important;
                 display:flex !important;
                 align-items:center !important;
                 gap:10px !important;
                 color:#fff !important;
-                font-size:13px !important;
+                font-size:13.5px !important;
                 font-weight:750 !important;
                 font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
                 z-index:2147483647 !important;
@@ -1564,9 +1572,11 @@
             `
         );
 
-        const iconDiv = createElement('div', {
-            text: iconText,
-            style: `
+        const iconDiv = targetDoc.createElement('div');
+        iconDiv.textContent = iconText;
+        iconDiv.setAttribute(
+            'style',
+            `
                 width:26px !important;
                 height:26px !important;
                 display:flex !important;
@@ -1579,18 +1589,20 @@
                 font-weight:800 !important;
                 flex-shrink:0 !important;
             `
-        });
+        );
 
-        const textDiv = createElement('div', {
-            text: text,
-            style: `
+        const textDiv = targetDoc.createElement('div');
+        textDiv.textContent = text;
+        textDiv.setAttribute(
+            'style',
+            `
                 color:#fff !important;
                 line-height:1.3 !important;
                 overflow:hidden !important;
                 text-overflow:ellipsis !important;
                 letter-spacing:-.2px !important;
             `
-        });
+        );
 
         toast.appendChild(iconDiv);
         toast.appendChild(textDiv);
@@ -2656,11 +2668,6 @@
 
                 removeAuctionUI();
 
-                showAuctionToast(
-                    `✓ @${nickname}님 ${price}만 낙찰 전송 완료!`,
-                    'success'
-                );
-
             } catch (error) {
 
                 console.error(
@@ -3315,11 +3322,6 @@
                     message
                 );
 
-                showAuctionToast(
-                    `⚡ @${nickname}님 ${parsedPrice}만 낙찰 문구 입력 완료!`,
-                    'auction'
-                );
-
                 console.log(
                     PREFIX,
                     '숫자 감지 -> 인풋창 자동 입력 완료:',
@@ -3641,11 +3643,6 @@
                 );
 
                 input.focus();
-
-                showAuctionToast(
-                    `📢 [${label}] 문구 입력 완료`,
-                    'guide'
-                );
 
                 console.log(
                     PREFIX,
@@ -4139,11 +4136,6 @@
                 );
 
                 currentInput.focus();
-
-                showAuctionToast(
-                    `📏 밑줄 구분선 입력 완료`,
-                    'separator'
-                );
 
                 console.log(
                     PREFIX,
