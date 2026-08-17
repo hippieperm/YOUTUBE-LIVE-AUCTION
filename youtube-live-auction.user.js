@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Live 낙찰 자동화
 // @namespace    https://youtube.com/
-// @version      1.2
-// @description  YouTube Live 낙찰 자동화 + 스마트 입찰 금액 추출 + 안내 버튼 + 밑줄 버튼
+// @version      1.5
+// @description  YouTube Live 낙찰 자동화 + 스마트 입찰 금액 추출 + 정사각형 가상 키패드 + 실시간 플로팅 토스트 알림 + 안내 버튼 + 밑줄 버튼
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
 // @match        https://www.youtube.com/live_chat*
@@ -636,6 +636,171 @@
 
 
     // =========================================================
+    // 멋진 토스트 메시지 알림 (채팅창 영역 위 표시)
+    // =========================================================
+
+    function showAuctionToast(
+        text,
+        type = 'auction',
+        duration = 2600
+    ) {
+
+        const input =
+            findChatInput();
+
+        const targetDoc =
+            input
+                ? (input.ownerDocument || document)
+                : document;
+
+        const mountTarget =
+            targetDoc.body ||
+            targetDoc.documentElement;
+
+        if (!mountTarget) {
+            return;
+        }
+
+        // 기존 토스트 정리
+        const existingToasts =
+            targetDoc.querySelectorAll(
+                '.__auction_toast_notification'
+            );
+
+        existingToasts.forEach(el => el.remove());
+
+        const toast =
+            targetDoc.createElement('div');
+
+        toast.className =
+            '__auction_toast_notification';
+
+        let iconBg =
+            'rgba(255,204,0,.20)';
+
+        let iconColor =
+            '#ffcc00';
+
+        let iconText =
+            '⚡';
+
+        let borderCol =
+            'rgba(255,204,0,.40)';
+
+        let glowCol =
+            'rgba(255,204,0,.15)';
+
+        if (type === 'guide') {
+            iconBg =
+                'rgba(80,160,255,.20)';
+            iconColor =
+                '#6eb4ff';
+            iconText =
+                '📢';
+            borderCol =
+                'rgba(80,160,255,.40)';
+            glowCol =
+                'rgba(80,160,255,.15)';
+        } else if (type === 'separator') {
+            iconBg =
+                'rgba(235,90,90,.20)';
+            iconColor =
+                '#ff8f8f';
+            iconText =
+                '📏';
+            borderCol =
+                'rgba(235,90,90,.40)';
+            glowCol =
+                'rgba(235,90,90,.15)';
+        } else if (type === 'success') {
+            iconBg =
+                'rgba(70,200,120,.20)';
+            iconColor =
+                '#6ee0a0';
+            iconText =
+                '✓';
+            borderCol =
+                'rgba(70,200,120,.40)';
+            glowCol =
+                'rgba(70,200,120,.15)';
+        }
+
+        toast.setAttribute(
+            'style',
+            `
+                position:fixed !important;
+                bottom:78px !important;
+                left:50% !important;
+                transform:translateX(-50%) translateY(20px) !important;
+                background:linear-gradient(135deg, rgba(32,32,38,.96), rgba(18,18,22,.98)) !important;
+                border:1px solid ${borderCol} !important;
+                box-shadow:0 12px 36px rgba(0,0,0,.70), 0 0 22px ${glowCol} !important;
+                border-radius:14px !important;
+                padding:10px 18px !important;
+                display:flex !important;
+                align-items:center !important;
+                gap:10px !important;
+                color:#fff !important;
+                font-size:13px !important;
+                font-weight:750 !important;
+                font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+                z-index:2147483647 !important;
+                pointer-events:none !important;
+                backdrop-filter:blur(10px) !important;
+                -webkit-backdrop-filter:blur(10px) !important;
+                opacity:0 !important;
+                transition:transform .25s cubic-bezier(0.16, 1, 0.3, 1), opacity .25s ease !important;
+                white-space:nowrap !important;
+                max-width:calc(100vw - 32px) !important;
+                box-sizing:border-box !important;
+            `
+        );
+
+        toast.innerHTML = `
+            <div style="
+                width:26px;
+                height:26px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                border-radius:8px;
+                background:${iconBg};
+                color:${iconColor};
+                font-size:13.5px;
+                font-weight:800;
+                flex-shrink:0;
+            ">${iconText}</div>
+            <div style="
+                color:#fff;
+                line-height:1.3;
+                overflow:hidden;
+                text-overflow:ellipsis;
+                letter-spacing:-.2px;
+            ">${text}</div>
+        `;
+
+        mountTarget.appendChild(toast);
+
+        requestAnimationFrame(() => {
+            toast.style.transform =
+                'translateX(-50%) translateY(0)';
+            toast.style.opacity =
+                '1';
+        });
+
+        setTimeout(() => {
+            toast.style.transform =
+                'translateX(-50%) translateY(10px)';
+            toast.style.opacity =
+                '0';
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }, duration);
+    }
+
+
+    // =========================================================
     // 낙찰 모달
     // =========================================================
 
@@ -704,7 +869,7 @@
 
 
         // =====================================================
-        // MODAL
+        // MODAL (Compact Layout - No Overflow/Scroll)
         // =====================================================
 
         const modal =
@@ -724,24 +889,30 @@
                             translate(-50%,-50%)
                             !important;
 
-                        width:440px !important;
+                        width:330px !important;
 
                         max-width:
-                            calc(100vw - 32px)
+                            calc(100vw - 24px)
                             !important;
+
+                        max-height:
+                            calc(100vh - 32px)
+                            !important;
+
+                        overflow:hidden !important;
 
                         box-sizing:border-box
                             !important;
 
                         padding:
-                            26px
+                            16px 18px
                             !important;
 
                         background:
                             linear-gradient(
                                 145deg,
                                 rgba(38,38,42,.98),
-                                rgba(24,24,27,.98)
+                                rgba(22,22,25,.99)
                             )
                             !important;
 
@@ -749,18 +920,18 @@
 
                         border:
                             1px solid
-                            rgba(255,255,255,.10)
+                            rgba(255,255,255,.11)
                             !important;
 
                         border-radius:
-                            20px
+                            18px
                             !important;
 
                         box-shadow:
-                            0 30px 100px
-                            rgba(0,0,0,.65),
+                            0 25px 80px
+                            rgba(0,0,0,.75),
                             0 0 0 1px
-                            rgba(255,255,255,.03)
+                            rgba(255,255,255,.04)
                             !important;
 
                         z-index:
@@ -804,7 +975,7 @@
                             space-between;
 
                         margin-bottom:
-                            20px;
+                            10px;
                     `
                 }
             );
@@ -819,7 +990,7 @@
 
                         align-items:center;
 
-                        gap:10px;
+                        gap:8px;
                     `
                 }
             );
@@ -833,8 +1004,8 @@
                         '✓',
 
                     style: `
-                        width:32px;
-                        height:32px;
+                        width:26px;
+                        height:26px;
 
                         display:flex;
 
@@ -842,16 +1013,16 @@
 
                         justify-content:center;
 
-                        border-radius:10px;
+                        border-radius:8px;
 
                         background:
-                            rgba(255,204,0,.12);
+                            rgba(255,204,0,.14);
 
                         color:#ffcc00;
 
-                        font-size:17px;
+                        font-size:14px;
 
-                        font-weight:700;
+                        font-weight:800;
                     `
                 }
             );
@@ -862,12 +1033,6 @@
         );
 
 
-        const titleWrap =
-            createElement(
-                'div'
-            );
-
-
         const title =
             createElement(
                 'div',
@@ -876,43 +1041,18 @@
                         '낙찰 처리',
 
                     style: `
-                        font-size:17px;
+                        font-size:15px;
 
-                        font-weight:700;
+                        font-weight:800;
+
+                        color:#fff;
                     `
                 }
             );
 
-
-        const subtitle =
-            createElement(
-                'div',
-                {
-                    text:
-                        '낙찰 정보를 입력하세요',
-
-                    style: `
-                        margin-top:2px;
-
-                        color:
-                            rgba(255,255,255,.42);
-
-                        font-size:11px;
-                    `
-                }
-            );
-
-
-        titleWrap.appendChild(
-            title
-        );
-
-        titleWrap.appendChild(
-            subtitle
-        );
 
         headerLeft.appendChild(
-            titleWrap
+            title
         );
 
         header.appendChild(
@@ -935,15 +1075,15 @@
                         '×',
 
                     style: `
-                        width:32px;
+                        width:26px;
 
-                        height:32px;
+                        height:26px;
 
                         padding:0;
 
                         border:0;
 
-                        border-radius:9px;
+                        border-radius:8px;
 
                         background:
                             rgba(255,255,255,.06);
@@ -951,9 +1091,9 @@
                         color:
                             rgba(255,255,255,.65);
 
-                        font-size:22px;
+                        font-size:19px;
 
-                        line-height:30px;
+                        line-height:24px;
 
                         cursor:pointer;
                     `
@@ -966,7 +1106,7 @@
             function () {
 
                 close.style.background =
-                    'rgba(255,255,255,.12)';
+                    'rgba(255,255,255,.14)';
 
                 close.style.color =
                     '#fff';
@@ -1003,7 +1143,7 @@
 
 
         // =====================================================
-        // 닉네임
+        // 닉네임 (컴팩트 인라인 카드)
         // =====================================================
 
         const userCard =
@@ -1012,24 +1152,32 @@
                 {
                     style: `
                         padding:
-                            17px 18px;
+                            8px 12px;
 
                         border-radius:
-                            14px;
+                            10px;
 
                         background:
                             linear-gradient(
                                 135deg,
                                 rgba(255,204,0,.10),
-                                rgba(255,255,255,.045)
+                                rgba(255,255,255,.03)
                             );
 
                         border:
                             1px solid
-                            rgba(255,204,0,.13);
+                            rgba(255,204,0,.16);
 
                         margin-bottom:
-                            20px;
+                            10px;
+
+                        display:flex;
+
+                        align-items:center;
+
+                        justify-content:space-between;
+
+                        gap:8px;
                     `
                 }
             );
@@ -1040,17 +1188,17 @@
                 'div',
                 {
                     text:
-                        '낙찰자',
+                        '낙찰 대상자',
 
                     style: `
                         color:
-                            rgba(255,255,255,.42);
+                            rgba(255,255,255,.45);
 
                         font-size:11px;
 
                         font-weight:600;
 
-                        margin-bottom:7px;
+                        white-space:nowrap;
                     `
                 }
             );
@@ -1064,21 +1212,21 @@
                         `@${nickname}`,
 
                     style: `
-                        color:#fff;
+                        color:#ffcc00;
 
-                        font-size:22px;
+                        font-size:15px;
 
                         line-height:1.2;
 
                         font-weight:800;
-
-                        letter-spacing:-.5px;
 
                         overflow:hidden;
 
                         text-overflow:ellipsis;
 
                         white-space:nowrap;
+
+                        text-align:right;
                     `
                 }
             );
@@ -1098,34 +1246,8 @@
 
 
         // =====================================================
-        // 금액
+        // 금액 입력창
         // =====================================================
-
-        const priceLabel =
-            createElement(
-                'div',
-                {
-                    text:
-                        '낙찰가',
-
-                    style: `
-                        color:
-                            rgba(255,255,255,.55);
-
-                        font-size:12px;
-
-                        font-weight:600;
-
-                        margin-bottom:8px;
-                    `
-                }
-            );
-
-
-        modal.appendChild(
-            priceLabel
-        );
-
 
         const inputWrap =
             createElement(
@@ -1164,32 +1286,32 @@
 
                         width:100% !important;
 
-                        height:64px !important;
+                        height:44px !important;
 
                         box-sizing:border-box
                             !important;
 
                         padding:
-                            0 75px 0 18px
+                            0 56px 0 12px
                             !important;
 
                         border:
                             1px solid
-                            rgba(255,204,0,.20)
+                            rgba(255,204,0,.25)
                             !important;
 
                         border-radius:
-                            14px !important;
+                            10px !important;
 
                         background:
-                            rgba(0,0,0,.25)
+                            rgba(0,0,0,.30)
                             !important;
 
                         color:#fff !important;
 
                         outline:none !important;
 
-                        font-size:27px !important;
+                        font-size:21px !important;
 
                         font-weight:800 !important;
                     `
@@ -1208,10 +1330,10 @@
             function () {
 
                 input.style.borderColor =
-                    'rgba(255,204,0,.70)';
+                    'rgba(255,204,0,.75)';
 
                 input.style.boxShadow =
-                    '0 0 0 3px rgba(255,204,0,.08)';
+                    '0 0 0 2px rgba(255,204,0,.12)';
             }
         );
 
@@ -1221,7 +1343,7 @@
             function () {
 
                 input.style.borderColor =
-                    'rgba(255,204,0,.20)';
+                    'rgba(255,204,0,.25)';
 
                 input.style.boxShadow =
                     'none';
@@ -1239,7 +1361,7 @@
                     style: `
                         position:absolute;
 
-                        right:18px;
+                        right:12px;
 
                         top:50%;
 
@@ -1249,9 +1371,9 @@
                         color:
                             #ffcc00;
 
-                        font-size:15px;
+                        font-size:13px;
 
-                        font-weight:750;
+                        font-weight:800;
 
                         pointer-events:none;
                     `
@@ -1273,6 +1395,196 @@
 
 
         // =====================================================
+        // 가상 키패드 (정사각형 1:1 비율 / Compact Square Keypad)
+        // =====================================================
+
+        const keypadWrap =
+            createElement(
+                'div',
+                {
+                    style: `
+                        display:grid;
+
+                        grid-template-columns:
+                            repeat(4, 1fr);
+
+                        gap:6px;
+
+                        margin-top:10px;
+                    `
+                }
+            );
+
+
+        const keypadButtons = [
+            { label: '1', value: '1', type: 'num' },
+            { label: '2', value: '2', type: 'num' },
+            { label: '3', value: '3', type: 'num' },
+            { label: '+1', value: '+1', type: 'fn', amount: 1 },
+
+            { label: '4', value: '4', type: 'num' },
+            { label: '5', value: '5', type: 'num' },
+            { label: '6', value: '6', type: 'num' },
+            { label: '+5', value: '+5', type: 'fn', amount: 5 },
+
+            { label: '7', value: '7', type: 'num' },
+            { label: '8', value: '8', type: 'num' },
+            { label: '9', value: '9', type: 'num' },
+            { label: '+10', value: '+10', type: 'fn', amount: 10 },
+
+            { label: '.', value: '.', type: 'dot' },
+            { label: '0', value: '0', type: 'num' },
+            { label: '⌫', value: 'backspace', type: 'del' },
+            { label: 'C', value: 'clear', type: 'clear' }
+        ];
+
+
+        keypadButtons.forEach(btnInfo => {
+
+            const isFn =
+                btnInfo.type === 'fn';
+
+            const isDelOrClear =
+                btnInfo.type === 'del' ||
+                btnInfo.type === 'clear';
+
+            let bg =
+                isFn
+                    ? 'rgba(255,204,0,.11)'
+                    : (isDelOrClear ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.07)');
+
+            let border =
+                isFn
+                    ? 'rgba(255,204,0,.22)'
+                    : 'rgba(255,255,255,.08)';
+
+            let color =
+                isFn
+                    ? '#ffcc00'
+                    : (isDelOrClear ? 'rgba(255,255,255,.65)' : '#fff');
+
+            let fontSize =
+                isFn ? '12.5px' : (isDelOrClear ? '15px' : '17px');
+
+            const btn =
+                createElement(
+                    'button',
+                    {
+                        type: 'button',
+
+                        text: btnInfo.label,
+
+                        style: `
+                            aspect-ratio:1 / 1 !important;
+
+                            width:100% !important;
+
+                            box-sizing:border-box !important;
+
+                            display:flex !important;
+
+                            align-items:center !important;
+
+                            justify-content:center !important;
+
+                            border:1px solid ${border} !important;
+
+                            border-radius:10px !important;
+
+                            background:${bg} !important;
+
+                            color:${color} !important;
+
+                            font-size:${fontSize} !important;
+
+                            font-weight:800 !important;
+
+                            cursor:pointer !important;
+
+                            outline:none !important;
+
+                            user-select:none !important;
+
+                            box-shadow:0 2px 6px rgba(0,0,0,.20) !important;
+
+                            transition:
+                                background .12s ease,
+                                border-color .12s ease,
+                                transform .06s ease,
+                                box-shadow .12s ease !important;
+                        `
+                    }
+                );
+
+            btn.addEventListener(
+                'mouseenter',
+                function () {
+                    btn.style.background =
+                        isFn
+                            ? 'rgba(255,204,0,.22)'
+                            : 'rgba(255,255,255,.14)';
+                }
+            );
+
+            btn.addEventListener(
+                'mouseleave',
+                function () {
+                    btn.style.background = bg;
+                }
+            );
+
+            btn.addEventListener(
+                'mousedown',
+                function (e) {
+                    e.preventDefault();
+                    btn.style.transform = 'scale(.91)';
+                }
+            );
+
+            btn.addEventListener(
+                'mouseup',
+                function () {
+                    btn.style.transform = 'scale(1)';
+                }
+            );
+
+            btn.addEventListener(
+                'click',
+                function (e) {
+                    e.preventDefault();
+
+                    if (btnInfo.type === 'num') {
+                        if (input.value === '0') {
+                            input.value = btnInfo.value;
+                        } else {
+                            input.value += btnInfo.value;
+                        }
+                    } else if (btnInfo.type === 'dot') {
+                        if (!input.value.includes('.')) {
+                            input.value = input.value ? input.value + '.' : '0.';
+                        }
+                    } else if (btnInfo.type === 'del') {
+                        input.value = input.value.slice(0, -1);
+                    } else if (btnInfo.type === 'clear') {
+                        input.value = '';
+                    } else if (btnInfo.type === 'fn') {
+                        const current = parseFloat(input.value) || 0;
+                        const nextVal = Math.round((current + btnInfo.amount) * 100) / 100;
+                        input.value = String(nextVal);
+                    }
+
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.focus();
+                }
+            );
+
+            keypadWrap.appendChild(btn);
+        });
+
+        modal.appendChild(keypadWrap);
+
+
+        // =====================================================
         // BUTTON
         // =====================================================
 
@@ -1283,9 +1595,9 @@
                     style: `
                         display:flex;
 
-                        gap:9px;
+                        gap:8px;
 
-                        margin-top:20px;
+                        margin-top:12px;
                     `
                 }
             );
@@ -1307,25 +1619,25 @@
                     style: `
                         flex:1;
 
-                        height:48px;
+                        height:54px;
 
                         border:
                             1px solid
-                            rgba(255,255,255,.09);
+                            rgba(255,255,255,.11);
 
-                        border-radius:11px;
+                        border-radius:12px;
 
                         background:
-                            rgba(255,255,255,.055);
+                            rgba(255,255,255,.06);
 
                         color:
-                            rgba(255,255,255,.70);
+                            rgba(255,255,255,.75);
 
                         cursor:pointer;
 
-                        font-size:13px;
+                        font-size:15px;
 
-                        font-weight:600;
+                        font-weight:700;
                     `
                 }
             );
@@ -1347,11 +1659,11 @@
                     style: `
                         flex:1;
 
-                        height:48px;
+                        height:54px;
 
                         border:0;
 
-                        border-radius:11px;
+                        border-radius:12px;
 
                         background:#ffcc00;
 
@@ -1359,9 +1671,9 @@
 
                         cursor:pointer;
 
-                        font-size:13px;
+                        font-size:15px;
 
-                        font-weight:800;
+                        font-weight:850;
                     `
                 }
             );
@@ -1392,7 +1704,7 @@
                         '__auction_status',
 
                     style: `
-                        margin-top:9px;
+                        margin-top:8px;
 
                         min-height:16px;
 
@@ -1519,6 +1831,11 @@
                 );
 
                 removeAuctionUI();
+
+                showAuctionToast(
+                    `✓ @${nickname}님 ${price}만 낙찰 전송 완료!`,
+                    'success'
+                );
 
             } catch (error) {
 
@@ -1669,6 +1986,44 @@
         }
 
 
+        try {
+            const iframe =
+                document.querySelector(
+                    'iframe#chatframe'
+                );
+
+            if (
+                iframe &&
+                iframe.contentDocument
+            ) {
+                for (
+                    const selector
+                    of selectors
+                ) {
+                    const elements =
+                        iframe.contentDocument.querySelectorAll(
+                            selector
+                        );
+
+                    for (
+                        const element
+                        of elements
+                    ) {
+                        const rect =
+                            element.getBoundingClientRect();
+
+                        if (
+                            rect.width > 0 &&
+                            rect.height > 0
+                        ) {
+                            return element;
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+
+
         return null;
     }
 
@@ -1718,6 +2073,44 @@
                 }
             }
         }
+
+
+        try {
+            const iframe =
+                document.querySelector(
+                    'iframe#chatframe'
+                );
+
+            if (
+                iframe &&
+                iframe.contentDocument
+            ) {
+                for (
+                    const selector
+                    of selectors
+                ) {
+                    const elements =
+                        iframe.contentDocument.querySelectorAll(
+                            selector
+                        );
+
+                    for (
+                        const element
+                        of elements
+                    ) {
+                        const rect =
+                            element.getBoundingClientRect();
+
+                        if (
+                            rect.width > 0 &&
+                            rect.height > 0
+                        ) {
+                            return element;
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
 
 
         return null;
@@ -2032,10 +2425,60 @@
         );
 
 
-        openAuctionModal(
-            nickname,
+        const parsedPrice =
             lastChatMessage
-        );
+                ? parseBidPrice(lastChatMessage)
+                : null;
+
+
+        if (parsedPrice) {
+
+            removeAuctionUI();
+
+            const message =
+                createMessage(
+                    nickname,
+                    parsedPrice
+                );
+
+            const input =
+                findChatInput();
+
+            if (input) {
+
+                setChatInput(
+                    input,
+                    message
+                );
+
+                input.focus();
+
+                showAuctionToast(
+                    `⚡ @${nickname}님 ${parsedPrice}만 낙찰 문구 입력 완료!`,
+                    'auction'
+                );
+
+                console.log(
+                    PREFIX,
+                    '숫자 감지 -> 인풋창 자동 입력 완료:',
+                    message
+                );
+
+            } else {
+
+                console.warn(
+                    PREFIX,
+                    '채팅 입력창을 찾지 못했습니다.'
+                );
+            }
+
+        } else {
+
+            openAuctionModal(
+                nickname,
+                lastChatMessage
+            );
+        }
     }
 
 
@@ -2335,9 +2778,12 @@
                     message
                 );
 
-
                 input.focus();
 
+                showAuctionToast(
+                    `📢 [${label}] 문구 입력 완료`,
+                    'guide'
+                );
 
                 console.log(
                     PREFIX,
@@ -2358,20 +2804,27 @@
 
     function createGuidePanel() {
 
-        if (
-            document.getElementById(
-                '__auction_guide_panel'
-            )
-        ) {
-            return;
-        }
-
-
         const input =
             findChatInput();
 
-
         if (!input) {
+            return;
+        }
+
+        const targetDoc =
+            input.ownerDocument ||
+            document;
+
+        // 중복 패널이 이미 있으면 모두 정리하고 1개만 남기거나 조기 반환
+        const existingPanels =
+            targetDoc.querySelectorAll(
+                '#__auction_guide_panel'
+            );
+
+        if (existingPanels.length > 0) {
+            for (let i = 1; i < existingPanels.length; i++) {
+                existingPanels[i].remove();
+            }
             return;
         }
 
@@ -2385,20 +2838,25 @@
                 'yt-live-chat-text-input-field-renderer'
             );
 
-
         const messageInputRenderer =
             input.closest(
                 'yt-live-chat-message-input-renderer'
             );
-
 
         let host =
             messageInputRenderer ||
             inputRenderer ||
             input.parentElement;
 
-
         if (!host) {
+            return;
+        }
+
+        if (
+            host.querySelector(
+                '#__auction_guide_panel'
+            )
+        ) {
             return;
         }
 
@@ -2411,7 +2869,6 @@
             createElement(
                 'div',
                 {
-
                     id:
                         '__auction_guide_panel',
 
@@ -2464,14 +2921,12 @@
             )
         );
 
-
         panel.appendChild(
             createGuideButton(
                 '🔨 입찰 안내',
                 GUIDE_MESSAGES.bid
             )
         );
-
 
         panel.appendChild(
             createGuideButton(
@@ -2480,14 +2935,12 @@
             )
         );
 
-
         panel.appendChild(
             createGuideButton(
                 '🚫 낙찰 취소',
                 GUIDE_MESSAGES.cancel
             )
         );
-
 
         panel.appendChild(
             createGuideButton(
@@ -2496,7 +2949,6 @@
             )
         );
 
-
         panel.appendChild(
             createGuideButton(
                 '🏠 경매장',
@@ -2504,14 +2956,12 @@
             )
         );
 
-
         panel.appendChild(
             createGuideButton(
                 '💬 채팅 안내',
                 GUIDE_MESSAGES.chat
             )
         );
-
 
         panel.appendChild(
             createGuideButton(
@@ -2528,26 +2978,20 @@
         if (
             messageInputRenderer
         ) {
-
             const children =
                 Array.from(
                     messageInputRenderer.children
                 );
 
-
             const firstChild =
                 children[0];
 
-
             if (firstChild) {
-
                 messageInputRenderer.insertBefore(
                     panel,
                     firstChild
                 );
-
             } else {
-
                 messageInputRenderer.appendChild(
                     panel
                 );
@@ -2556,20 +3000,17 @@
         } else if (
             inputRenderer
         ) {
-
             inputRenderer.parentElement.insertBefore(
                 panel,
                 inputRenderer
             );
 
         } else {
-
             host.parentElement.insertBefore(
                 panel,
                 host
             );
         }
-
 
         console.log(
             PREFIX,
@@ -2584,29 +3025,41 @@
 
     function createSeparatorButton() {
 
-        if (
-            document.getElementById(
-                '__auction_separator_button'
-            )
-        ) {
-            return;
-        }
-
-
         const input =
             findChatInput();
-
 
         if (!input) {
             return;
         }
 
+        const targetDoc =
+            input.ownerDocument ||
+            document;
+
+        const existingSeparators =
+            targetDoc.querySelectorAll(
+                '#__auction_separator_button'
+            );
+
+        if (existingSeparators.length > 0) {
+            for (let i = 1; i < existingSeparators.length; i++) {
+                existingSeparators[i].remove();
+            }
+            return;
+        }
 
         const parent =
             input.parentElement;
 
-
         if (!parent) {
+            return;
+        }
+
+        if (
+            parent.querySelector(
+                '#__auction_separator_button'
+            )
+        ) {
             return;
         }
 
@@ -2615,7 +3068,6 @@
             createElement(
                 'button',
                 {
-
                     id:
                         '__auction_separator_button',
 
@@ -2700,7 +3152,6 @@
         button.addEventListener(
             'mouseenter',
             function () {
-
                 button.style.background =
                     'rgba(190,60,60,.25)';
 
@@ -2712,11 +3163,9 @@
             }
         );
 
-
         button.addEventListener(
             'mouseleave',
             function () {
-
                 button.style.background =
                     'rgba(190,60,60,.14)';
 
@@ -2728,59 +3177,50 @@
             }
         );
 
-
         button.addEventListener(
             'mousedown',
             function () {
-
                 button.style.transform =
                     'scale(.97)';
             }
         );
 
-
         button.addEventListener(
             'mouseup',
             function () {
-
                 button.style.transform =
                     'scale(1)';
             }
         );
 
-
         button.addEventListener(
             'click',
             function (event) {
-
                 event.preventDefault();
-
                 event.stopPropagation();
-
 
                 const currentInput =
                     findChatInput();
 
-
                 if (!currentInput) {
-
                     console.warn(
                         PREFIX,
                         '채팅 입력창을 찾지 못했습니다.'
                     );
-
                     return;
                 }
-
 
                 setChatInput(
                     currentInput,
                     '==================='
                 );
 
-
                 currentInput.focus();
 
+                showAuctionToast(
+                    `📏 밑줄 구분선 입력 완료`,
+                    'separator'
+                );
 
                 console.log(
                     PREFIX,
@@ -2799,12 +3239,10 @@
                 parent
             );
 
-
         if (
             computed.display ===
             'flex'
         ) {
-
             input.style.flex =
                 '1 1 auto';
 
@@ -2812,7 +3250,6 @@
                 '0';
 
         } else {
-
             parent.style.display =
                 'flex';
 
@@ -2826,11 +3263,9 @@
                 '0';
         }
 
-
         parent.appendChild(
             button
         );
-
 
         console.log(
             PREFIX,
@@ -2845,18 +3280,50 @@
 
     function createAllUI() {
 
+        const input =
+            findChatInput();
+
+        if (!input) {
+            return;
+        }
+
+        const targetDoc =
+            input.ownerDocument ||
+            document;
+
+        // 중복 요소 청소
+        const existingPanels =
+            targetDoc.querySelectorAll(
+                '#__auction_guide_panel'
+            );
+
+        if (existingPanels.length > 1) {
+            for (let i = 1; i < existingPanels.length; i++) {
+                existingPanels[i].remove();
+            }
+        }
+
+        const existingSeparators =
+            targetDoc.querySelectorAll(
+                '#__auction_separator_button'
+            );
+
+        if (existingSeparators.length > 1) {
+            for (let i = 1; i < existingSeparators.length; i++) {
+                existingSeparators[i].remove();
+            }
+        }
+
         const guidePanel =
-            document.getElementById(
+            targetDoc.getElementById(
                 '__auction_guide_panel'
             );
 
         const separatorButton =
-            document.getElementById(
+            targetDoc.getElementById(
                 '__auction_separator_button'
             );
 
-
-        // 안내 패널과 밑줄 버튼이 이미 모두 부착되어 있으면 불필요한 DOM 탐색 및 강제 리플로우 방지
         if (
             guidePanel &&
             separatorButton
@@ -2864,19 +3331,13 @@
             return;
         }
 
-
-        const input =
-            findChatInput();
-
-
-        if (!input) {
-            return;
+        if (!guidePanel) {
+            createGuidePanel();
         }
 
-
-        createGuidePanel();
-
-        createSeparatorButton();
+        if (!separatorButton) {
+            createSeparatorButton();
+        }
     }
 
 
@@ -2894,12 +3355,19 @@
             new MutationObserver(
                 function () {
 
-                    // 이미 UI가 정상 부착된 경우 조기 반환 (불필요한 타이머 스케줄링 방지)
+                    const input =
+                        findChatInput();
+
+                    const targetDoc =
+                        input
+                            ? (input.ownerDocument || document)
+                            : document;
+
                     if (
-                        document.getElementById(
+                        targetDoc.getElementById(
                             '__auction_guide_panel'
                         ) &&
-                        document.getElementById(
+                        targetDoc.getElementById(
                             '__auction_separator_button'
                         )
                     ) {
@@ -2931,12 +3399,10 @@
                 return;
             }
 
-
             observer.observe(
                 document.body,
                 {
                     childList:true,
-
                     subtree:true
                 }
             );
@@ -2944,11 +3410,8 @@
 
 
         if (document.body) {
-
             startObserve();
-
         } else {
-
             document.addEventListener(
                 'DOMContentLoaded',
                 startObserve,
@@ -2971,7 +3434,7 @@
                 attachChatFrameListener();
 
             },
-            1500
+            2000
         );
     }
 
