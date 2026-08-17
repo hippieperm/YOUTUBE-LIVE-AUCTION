@@ -1508,7 +1508,7 @@
                     }
                     const allRecords = groupBidRecordsByNickname(rawRecords, currentSort);
                     const BOM = '\uFEFF';
-                    const csvHeader = '번호,시간,낙찰자,낙찰가,전송문구,닉네임별합산';
+                    const csvHeader = '번호,시간,낙찰자,낙찰가,전송문구';
 
                     // 닉네임별 총합 사전 계산
                     const nickTotals = {};
@@ -1536,24 +1536,33 @@
                         const isLastOfNick = (nextNick !== nick);
                         const nickSumWon = Math.round((nickTotals[nick]?.total || 0) * 10000);
                         const nickCount = nickTotals[nick]?.count || 1;
-                        const sumLabel = isLastOfNick
-                            ? (nickCount > 1
-                                ? `총 ${nickCount}건 / ${nickSumWon.toLocaleString('ko-KR')}원`
-                                : `${nickSumWon.toLocaleString('ko-KR')}원`)
-                            : '';
 
+                        // 본문 행 추가
                         rows.push([
                             rowIndex,
                             r.videoTime || r.time || '',
                             `"${String(r.nickname || '').replace(/"/g, '""')}"`,
                             `"${formatActualPrice(r.price)}"`,
-                            `"${String(r.message || '').replace(/"/g, '""')}"`,
-                            `"${sumLabel}"`
+                            `"${String(r.message || '').replace(/"/g, '""')}"`
                         ].join(','));
 
-                        // 다른 닉네임으로 넘어가기 전 빈 줄(공백 행: 6개 열 쉼표) 추가
-                        if (isLastOfNick && i < allRecords.length - 1) {
-                            rows.push(',,,,,');
+                        // 닉네임별 소계 행 (해당 닉네임의 마지막 행 직후에 낙찰가 열 위치에 합산 표기)
+                        if (isLastOfNick) {
+                            const subtotalLabel = `[소계] @${nick || '익명'}`;
+                            const subtotalAmount = `${nickSumWon.toLocaleString('ko-KR')}`;
+                            const subtotalNote = `${nickCount}건 합산`;
+                            rows.push([
+                                '',
+                                '',
+                                `"${subtotalLabel}"`,
+                                `"${subtotalAmount}"`,
+                                `"${subtotalNote}"`
+                            ].join(','));
+
+                            // 다음 닉네임 그룹이 있으면 완전한 빈 행 한 칸(공백) 추가
+                            if (i < allRecords.length - 1) {
+                                rows.push(',,,,');
+                            }
                         }
                     }
                     const csv = BOM + csvHeader + '\n' + rows.join('\n');
