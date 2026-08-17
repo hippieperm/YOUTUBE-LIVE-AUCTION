@@ -1216,7 +1216,25 @@
                     });
                     saveBidRecords(filtered);
                     updateBidBadge();
-                    removeBidListUI();
+
+                    // 통계 재갱신
+                    statsCard.querySelector('div:nth-child(1) div:nth-child(2)').textContent = '0건';
+                    statsCard.querySelector('div:nth-child(2) div:nth-child(2)').textContent = '0만';
+                    listWrap.innerHTML = '';
+                    const empty = createElement(
+                        'div',
+                        {
+                            style: `
+                                text-align:center !important;
+                                padding:28px 0 !important;
+                                color:rgba(255,255,255,.35) !important;
+                                font-size:12px !important;
+                            `
+                        }
+                    );
+                    empty.textContent = '오늘 낙찰 내역이 없습니다.';
+                    listWrap.appendChild(empty);
+
                     showAuctionToast('🗑️ 낙찰 내역이 삭제되었습니다.', 'separator');
                 }
             ));
@@ -1454,96 +1472,116 @@
     ) {
 
         let targetDoc = document;
+        let bidListModal = null;
+
+        // 낙찰 내역 모달이 열려있는지 확인
+        const docsToCheck = [document];
         try {
-            if (window.top && window.top.document && window.top.document.body) {
-                targetDoc = window.top.document;
+            if (window.top && window.top.document && !docsToCheck.includes(window.top.document)) {
+                docsToCheck.push(window.top.document);
             }
-        } catch (e) {
-            targetDoc = document;
+        } catch (e) {}
+        try {
+            if (window.parent && window.parent.document && !docsToCheck.includes(window.parent.document)) {
+                docsToCheck.push(window.parent.document);
+            }
+        } catch (e) {}
+
+        for (const doc of docsToCheck) {
+            try {
+                const found = doc.getElementById('__auction_bid_list_modal');
+                if (found && found.isConnected) {
+                    bidListModal = found;
+                    targetDoc = doc;
+                    break;
+                }
+            } catch (e) {}
         }
 
-        const mountTarget =
-            targetDoc.body ||
-            targetDoc.documentElement;
+        if (!bidListModal) {
+            try {
+                if (window.top && window.top.document && window.top.document.body) {
+                    targetDoc = window.top.document;
+                }
+            } catch (e) {
+                targetDoc = document;
+            }
+        }
+
+        const isInsideModal = Boolean(bidListModal);
+        const mountTarget = isInsideModal
+            ? bidListModal
+            : (targetDoc.body || targetDoc.documentElement);
 
         if (!mountTarget) {
             return;
         }
 
-        // 기존 토스트 정리 (현재 doc 및 targetDoc 모두 확인)
-        try {
-            targetDoc.querySelectorAll(
-                '.__auction_toast_notification'
-            ).forEach(el => el.remove());
-        } catch (e) {}
-
-        if (targetDoc !== document) {
+        // 기존 토스트 정리 (관련 문서들 모두 확인)
+        docsToCheck.forEach(doc => {
             try {
-                document.querySelectorAll(
-                    '.__auction_toast_notification'
-                ).forEach(el => el.remove());
+                doc.querySelectorAll('.__auction_toast_notification').forEach(el => el.remove());
             } catch (e) {}
-        }
+        });
 
-        const toast =
-            targetDoc.createElement('div');
+        const toast = targetDoc.createElement('div');
+        toast.className = '__auction_toast_notification';
 
-        toast.className =
-            '__auction_toast_notification';
-
-        let iconBg =
-            'rgba(255,204,0,.20)';
-
-        let iconColor =
-            '#ffcc00';
-
-        let iconText =
-            '⚡';
-
-        let borderCol =
-            'rgba(255,204,0,.40)';
-
-        let glowCol =
-            'rgba(255,204,0,.15)';
+        let iconBg = 'rgba(255,204,0,.20)';
+        let iconColor = '#ffcc00';
+        let iconText = '⚡';
+        let borderCol = 'rgba(255,204,0,.40)';
+        let glowCol = 'rgba(255,204,0,.15)';
 
         if (type === 'guide') {
-            iconBg =
-                'rgba(80,160,255,.20)';
-            iconColor =
-                '#6eb4ff';
-            iconText =
-                '📢';
-            borderCol =
-                'rgba(80,160,255,.40)';
-            glowCol =
-                'rgba(80,160,255,.15)';
+            iconBg = 'rgba(80,160,255,.20)';
+            iconColor = '#6eb4ff';
+            iconText = '📢';
+            borderCol = 'rgba(80,160,255,.40)';
+            glowCol = 'rgba(80,160,255,.15)';
         } else if (type === 'separator') {
-            iconBg =
-                'rgba(235,90,90,.20)';
-            iconColor =
-                '#ff8f8f';
-            iconText =
-                '📏';
-            borderCol =
-                'rgba(235,90,90,.40)';
-            glowCol =
-                'rgba(235,90,90,.15)';
+            iconBg = 'rgba(235,90,90,.20)';
+            iconColor = '#ff8f8f';
+            iconText = '📏';
+            borderCol = 'rgba(235,90,90,.40)';
+            glowCol = 'rgba(235,90,90,.15)';
         } else if (type === 'success') {
-            iconBg =
-                'rgba(70,200,120,.20)';
-            iconColor =
-                '#6ee0a0';
-            iconText =
-                '✓';
-            borderCol =
-                'rgba(70,200,120,.40)';
-            glowCol =
-                'rgba(70,200,120,.15)';
+            iconBg = 'rgba(70,200,120,.20)';
+            iconColor = '#6ee0a0';
+            iconText = '✓';
+            borderCol = 'rgba(70,200,120,.40)';
+            glowCol = 'rgba(70,200,120,.15)';
         }
 
-        toast.setAttribute(
-            'style',
+        const toastStyle = isInsideModal
+            ? `
+                position:absolute !important;
+                bottom:14px !important;
+                left:50% !important;
+                transform:translateX(-50%) translateY(12px) !important;
+                background:linear-gradient(135deg, rgba(28,28,34,.98), rgba(16,16,20,.99)) !important;
+                border:1px solid ${borderCol} !important;
+                box-shadow:0 10px 30px rgba(0,0,0,.85), 0 0 18px ${glowCol} !important;
+                border-radius:12px !important;
+                padding:8px 16px !important;
+                display:flex !important;
+                align-items:center !important;
+                gap:8px !important;
+                color:#fff !important;
+                font-size:12.5px !important;
+                font-weight:750 !important;
+                font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+                z-index:2147483647 !important;
+                pointer-events:none !important;
+                backdrop-filter:blur(10px) !important;
+                -webkit-backdrop-filter:blur(10px) !important;
+                opacity:0 !important;
+                transition:transform .22s cubic-bezier(0.16, 1, 0.3, 1), opacity .22s ease !important;
+                white-space:nowrap !important;
+                max-width:calc(100% - 24px) !important;
+                box-sizing:border-box !important;
             `
+            : `
                 position:fixed !important;
                 bottom:36px !important;
                 left:50% !important;
@@ -1569,23 +1607,28 @@
                 white-space:nowrap !important;
                 max-width:calc(100vw - 32px) !important;
                 box-sizing:border-box !important;
-            `
-        );
+            `;
+
+        toast.setAttribute('style', toastStyle);
+
+        const iconSize = isInsideModal ? '22px' : '26px';
+        const iconFontSize = isInsideModal ? '12px' : '13.5px';
+        const iconRadius = isInsideModal ? '6px' : '8px';
 
         const iconDiv = targetDoc.createElement('div');
         iconDiv.textContent = iconText;
         iconDiv.setAttribute(
             'style',
             `
-                width:26px !important;
-                height:26px !important;
+                width:${iconSize} !important;
+                height:${iconSize} !important;
                 display:flex !important;
                 align-items:center !important;
                 justify-content:center !important;
-                border-radius:8px !important;
+                border-radius:${iconRadius} !important;
                 background:${iconBg} !important;
                 color:${iconColor} !important;
-                font-size:13.5px !important;
+                font-size:${iconFontSize} !important;
                 font-weight:800 !important;
                 flex-shrink:0 !important;
             `
@@ -1610,17 +1653,13 @@
         mountTarget.appendChild(toast);
 
         requestAnimationFrame(() => {
-            toast.style.transform =
-                'translateX(-50%) translateY(0)';
-            toast.style.opacity =
-                '1';
+            toast.style.transform = 'translateX(-50%) translateY(0)';
+            toast.style.opacity = '1';
         });
 
         setTimeout(() => {
-            toast.style.transform =
-                'translateX(-50%) translateY(10px)';
-            toast.style.opacity =
-                '0';
+            toast.style.transform = 'translateX(-50%) translateY(10px)';
+            toast.style.opacity = '0';
             setTimeout(() => {
                 toast.remove();
             }, 300);
