@@ -1884,18 +1884,8 @@
             modal.appendChild(listWrap);
 
 
-            // -- DOM 삽입 (최상위 창 우선 지원) --
-
-            let targetDoc = document;
-            try {
-                if (window.top && window.top.document && window.top.document.body) {
-                    targetDoc = window.top.document;
-                }
-            } catch (e) {
-                targetDoc = document;
-            }
-
-            const mountTarget = targetDoc.body || targetDoc.documentElement || document.body;
+            // -- DOM 삽입 (채팅창 내부 렌더링 - 낙찰 처리 모달과 동일) --
+            const mountTarget = document.body || document.documentElement;
             mountTarget.appendChild(backdrop);
             mountTarget.appendChild(modal);
 
