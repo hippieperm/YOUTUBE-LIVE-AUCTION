@@ -843,24 +843,16 @@
     // =========================================================
 
     function removeAuctionUI() {
-
-        const modal =
-            document.getElementById(
-                '__auction_auto_modal'
-            );
-
-        const backdrop =
-            document.getElementById(
-                '__auction_auto_backdrop'
-            );
-
-        if (modal) {
-            modal.remove();
-        }
-
-        if (backdrop) {
-            backdrop.remove();
-        }
+        const docs = getTargetDocs();
+        docs.forEach(doc => {
+            try {
+                if (!doc) return;
+                const modal = doc.getElementById('__auction_auto_modal');
+                const backdrop = doc.getElementById('__auction_auto_backdrop');
+                if (modal) modal.remove();
+                if (backdrop) backdrop.remove();
+            } catch (e) {}
+        });
     }
 
 
@@ -878,6 +870,12 @@
             docs.push(input.ownerDocument);
         }
         try {
+            const iframe = document.querySelector('iframe#chatframe');
+            if (iframe && iframe.contentDocument && !docs.includes(iframe.contentDocument)) {
+                docs.push(iframe.contentDocument);
+            }
+        } catch (e) {}
+        try {
             if (window.top && window.top.document && !docs.includes(window.top.document)) {
                 docs.push(window.top.document);
             }
@@ -888,6 +886,26 @@
             }
         } catch (e) {}
         return docs;
+    }
+
+    /** 채팅창 내부 우선 마운트 타겟 획득 (라이브 및 다시보기/일반 영상 대응) */
+    function getChatMountTarget() {
+        if (window.location.pathname.startsWith('/live_chat')) {
+            return document.body || document.documentElement;
+        }
+        try {
+            const input = findChatInput();
+            if (input && input.ownerDocument && input.ownerDocument.body) {
+                return input.ownerDocument.body;
+            }
+        } catch (e) {}
+        try {
+            const iframe = document.querySelector('iframe#chatframe');
+            if (iframe && iframe.contentDocument && iframe.contentDocument.body) {
+                return iframe.contentDocument.body;
+            }
+        } catch (e) {}
+        return document.body || document.documentElement;
     }
 
     function removeBidListUI() {
@@ -1889,7 +1907,7 @@
 
 
             // -- DOM 삽입 (채팅창 내부 렌더링 - 낙찰 처리 모달과 동일) --
-            const mountTarget = document.body || document.documentElement;
+            const mountTarget = getChatMountTarget();
             mountTarget.appendChild(backdrop);
             mountTarget.appendChild(modal);
 
@@ -2227,6 +2245,8 @@
                         visibility:visible !important;
 
                         pointer-events:auto !important;
+
+                        overscroll-behavior:contain !important;
                     `
                 }
             );
@@ -2264,6 +2284,8 @@
                             !important;
 
                         overflow:hidden !important;
+
+                        overscroll-behavior:contain !important;
 
                         box-sizing:border-box
                             !important;
@@ -3092,9 +3114,7 @@
         // 삽입
         // =====================================================
 
-        const mountTarget =
-            document.body ||
-            document.documentElement;
+        const mountTarget = getChatMountTarget();
 
         mountTarget.appendChild(
             backdrop
@@ -3103,6 +3123,17 @@
         mountTarget.appendChild(
             modal
         );
+
+        // 스크롤 체이닝 방지 (전체 창 / 부모 창 스크롤 전파 차단)
+        modal.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+
+        backdrop.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
 
 
         // =====================================================
