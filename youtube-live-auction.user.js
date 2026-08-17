@@ -1772,27 +1772,30 @@ ${xmlRows.join('')}
                     });
                     const totalWon = Math.round(sum * 10000);
                     const sumStr = totalWon.toLocaleString('ko-KR') + '원';
+                    const todayStr = getTodayString();
+                    const totalUsersCount = nickGroups.size;
 
                     let itemCounter = 0;
                     const groupBlocks = [];
                     nickGroups.forEach((groupData, nick) => {
                         const blockLines = groupData.records.map(r => {
                             itemCounter++;
-                            const datePrefix = (r.date && r.date !== getTodayString()) ? `${r.date} ` : '';
+                            const datePrefix = (r.date && r.date !== todayStr) ? `${r.date} ` : '';
                             const timeVal = r.videoTime || r.time || '';
                             const priceVal = formatActualPrice(r.price);
-                            return `${itemCounter}. ${datePrefix}${timeVal} | @${r.nickname || ''} | ${priceVal ? priceVal + '원' : ''}`;
+                            return `${itemCounter}. ${datePrefix}${timeVal} | @${r.nickname || ''} | ${priceVal ? priceVal + '원' : '0원'}`;
                         });
                         const groupWon = Math.round(groupData.total * 10000);
                         const groupSumStr = groupWon.toLocaleString('ko-KR') + '원';
-                        const summaryLine = `  └ [소계] @${nick || '익명'}: ${groupData.records.length}건 / ${groupSumStr}`;
+                        const summaryLine = `▶ @${nick || '익명'} 소계 (${groupData.records.length}건) | ${groupSumStr}`;
                         groupBlocks.push(blockLines.join('\n') + '\n' + summaryLine);
                     });
 
                     const text =
-                        `[낙찰 내역]\n` +
+                        `[방송일자: ${todayStr}] [총 낙찰: ${allRecords.length}건 / 낙찰자: ${totalUsersCount}명] [총 매출: ${sumStr}]\n\n` +
                         groupBlocks.join('\n\n') +
-                        `\n\n══════════════════════\n총 ${allRecords.length}건 / 합계: ${sumStr}`;
+                        `\n\n══════════════════════════════════════\n` +
+                        `★ [전체 총 합 계] (총 ${totalUsersCount}명 / ${allRecords.length}건) | ${sumStr}`;
 
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(text).then(() => {
