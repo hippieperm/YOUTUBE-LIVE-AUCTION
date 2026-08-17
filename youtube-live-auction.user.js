@@ -1249,7 +1249,7 @@
                 });
                 const val = createElement('div', {
                     text: value,
-                    style: `font-size:16px !important; font-weight:800 !important; color:${color} !important;`
+                    style: `font-size:16px !important; font-weight:800 !important; color:${color} !important; font-variant-numeric:tabular-nums !important; font-feature-settings:"tnum" 1 !important;`
                 });
                 if (role === 'count') statCountValEl = val;
                 if (role === 'price') statPriceValEl = val;
@@ -1641,6 +1641,8 @@
                             color:#ffcc00 !important;
                             font-size:10px !important;
                             font-weight:800 !important;
+                            font-variant-numeric:tabular-nums !important;
+                            font-feature-settings:"tnum" 1 !important;
                             display:flex !important;
                             align-items:center !important;
                             justify-content:center !important;
@@ -1666,7 +1668,7 @@
                     const datePrefix = (record.date && record.date !== getTodayString()) ? `${record.date} ` : '';
                     const timeDiv = createElement('div', {
                         text: `${datePrefix}${record.time || ''}${chatPreview}`,
-                        style: 'font-size:10px !important; color:rgba(255,255,255,.45) !important; margin-top:1px !important;'
+                        style: 'font-size:10px !important; color:rgba(255,255,255,.45) !important; margin-top:1px !important; font-variant-numeric:tabular-nums !important; font-feature-settings:"tnum" 1 !important;'
                     });
 
                     infoWrap.appendChild(nickDiv);
@@ -1680,6 +1682,9 @@
                             font-weight:800 !important;
                             color:#6ee0a0 !important;
                             white-space:nowrap !important;
+                            font-variant-numeric:tabular-nums !important;
+                            font-feature-settings:"tnum" 1 !important;
+                            margin-right:2px !important;
                         `
                     });
 
@@ -1693,6 +1698,7 @@
                         {
                             type: 'button',
                             text: '×',
+                            title: '삭제',
                             style: `
                                 flex-shrink:0 !important;
                                 width:18px !important;
@@ -1700,21 +1706,25 @@
                                 padding:0 !important;
                                 border:0 !important;
                                 border-radius:5px !important;
-                                background:rgba(255,255,255,.06) !important;
-                                color:rgba(255,255,255,.45) !important;
+                                background:rgba(255,255,255,.05) !important;
+                                color:rgba(255,255,255,.4) !important;
+                                opacity:0.4 !important;
                                 font-size:13px !important;
                                 line-height:16px !important;
                                 cursor:pointer !important;
+                                transition:opacity .15s ease, background-color .15s ease, color .15s ease !important;
                             `
                         }
                     );
                     delBtn.addEventListener('mouseenter', () => {
-                        delBtn.style.background = 'rgba(220,70,70,.20)';
-                        delBtn.style.color = '#ee9292';
+                        delBtn.style.opacity = '1';
+                        delBtn.style.background = 'rgba(220,70,70,.25)';
+                        delBtn.style.color = '#ff8888';
                     });
                     delBtn.addEventListener('mouseleave', () => {
-                        delBtn.style.background = 'rgba(255,255,255,.06)';
-                        delBtn.style.color = 'rgba(255,255,255,.45)';
+                        delBtn.style.opacity = '0.4';
+                        delBtn.style.background = 'rgba(255,255,255,.05)';
+                        delBtn.style.color = 'rgba(255,255,255,.4)';
                     });
                     delBtn.addEventListener('click', () => {
                         const all = loadBidRecords();
