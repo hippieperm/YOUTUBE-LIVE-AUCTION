@@ -5,6 +5,8 @@
 // @description  YouTube Live 낙찰 자동화 + 안내 버튼 + 밑줄 버튼
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
+// @match        https://www.youtube.com/live_chat*
+// @match        https://www.youtube.com/live_chat_replay*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
