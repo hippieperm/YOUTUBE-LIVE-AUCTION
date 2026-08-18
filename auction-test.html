@@ -638,8 +638,8 @@
                     <div id="items" class="yt-live-chat-item-list-renderer">
                         <!-- 초기 안내 메시지 -->
                         <yt-live-chat-text-message-renderer class="system-host" author-type="owner">
-                            <div class="yt-avatar" style="background: #e11d48;">경</div>
-                            <span id="author-name">경매진행자<span class="host-badge" type="owner">진행자</span></span>
+                            <div class="yt-avatar" style="background: #e11d48;">해</div>
+                            <span id="author-name">해담분재경매장<span class="host-badge" type="owner">진행자</span></span>
                             <div id="message">✨ 유튜브 라이브 경매 가상 테스트룸에 오신 것을 환영합니다! 좌측 도구함에서 시나리오를 실행해보세요.</div>
                         </yt-live-chat-text-message-renderer>
                     </div>
@@ -755,7 +755,7 @@
 
         /** 진행자 밑줄 즉시 전송 */
         function sendSeparatorFromHost() {
-            addChatMessage('경매진행자', '===================', true);
+            addChatMessage('해담분재경매장', '===================', true);
         }
 
         /** 채팅창 비우기 */
@@ -763,9 +763,9 @@
             const items = document.getElementById('items');
             if (items) {
                 items.innerHTML = `
-                    <yt-live-chat-text-message-renderer class="system-host">
-                        <div class="yt-avatar" style="background: #e11d48;">경</div>
-                        <span id="author-name">경매진행자<span class="host-badge">진행자</span></span>
+                    <yt-live-chat-text-message-renderer class="system-host" author-type="owner">
+                        <div class="yt-avatar" style="background: #e11d48;">해</div>
+                        <span id="author-name">해담분재경매장<span class="host-badge" type="owner">진행자</span></span>
                         <div id="message">🧹 채팅창이 초기화되었습니다. 새로운 테스트를 시작해보세요!</div>
                     </yt-live-chat-text-message-renderer>
                 `;
@@ -788,7 +788,7 @@
             const text = (input.innerText || input.textContent || '').trim();
             if (!text) return;
 
-            addChatMessage('경매진행자', text, true);
+            addChatMessage('해담분재경매장', text, true);
             input.innerText = '';
             input.textContent = '';
             input.focus();
@@ -810,14 +810,14 @@
         let _scenarioTimer = null;
         function runStandardAuctionScenario() {
             clearTimeout(_scenarioTimer);
-            addChatMessage('경매진행자', '📢 [품목 #1] 명품 분재 경매를 시작합니다! 시작가 10만원', true);
+            addChatMessage('해담분재경매장', '📢 [품목 #1] 명품 분재 경매를 시작합니다! 시작가 10만원', true);
 
             const steps = [
                 { nick: '산수화', msg: '10만', delay: 800 },
                 { nick: '소나무사랑', msg: '12만', delay: 1800 },
                 { nick: '분재마니아', msg: '15만', delay: 2900 },
                 { nick: '푸른언덕', msg: '15.5만', delay: 4000 },
-                { nick: '경매진행자', msg: '===================', delay: 5200, isHost: true }
+                { nick: '해담분재경매장', msg: '===================', delay: 5200, isHost: true }
             ];
 
             steps.forEach(step => {
@@ -829,7 +829,7 @@
 
         /** 2. 다양한 금액 포맷 일괄 생성 시나리오 */
         function runFormatTestScenario() {
-            addChatMessage('경매진행자', '📢 다양한 금액 포맷 테스트 메시지를 생성합니다. 각 채팅을 클릭해보세요!', true);
+            addChatMessage('해담분재경매장', '📢 다양한 금액 포맷 테스트 메시지를 생성합니다. 각 채팅을 클릭해보세요!', true);
 
             const samples = [
                 { nick: '철수', msg: '15만' },
@@ -850,13 +850,13 @@
 
         /** 3. 동일 금액 선착순 우선 및 진행자 공지 제외 테스트 시나리오 */
         function runTieBreakerScenario() {
-            addChatMessage('경매진행자', '👉 @다은님 20만 낙찰입니다. 감사합니다😄', true);
-            setTimeout(() => addChatMessage('경매진행자', '📢 [동일가 선착순 검증] 3명이 동일한 20만을 입찰합니다.', true), 500);
+            addChatMessage('해담분재경매장', '👉 @다은님 20만 낙찰입니다. 감사합니다😄', true);
+            setTimeout(() => addChatMessage('해담분재경매장', '📢 [동일가 선착순 검증] 3명이 동일한 20만을 입찰합니다.', true), 500);
 
             setTimeout(() => addChatMessage('1등선착순', '20만'), 1200);
             setTimeout(() => addChatMessage('2등입찰자', '20만'), 1900);
             setTimeout(() => addChatMessage('3등입찰자', '20만'), 2600);
-            setTimeout(() => addChatMessage('경매진행자', '===================', true), 3400);
+            setTimeout(() => addChatMessage('해담분재경매장', '===================', true), 3400);
         }
 
         /** 봇 입찰 시뮬레이터 */

@@ -514,6 +514,29 @@
 
 
     // =========================================================
+    // 방장 / 진행자 닉네임 목록 (이 닉네임의 채팅은 입찰/낙찰에서 절대 제외)
+    // =========================================================
+
+    const HOST_NICKNAMES = [
+        '해담분재경매장',
+        '해담분재',
+        '경매진행자'
+    ];
+
+    /**
+     * 방장/진행자 닉네임인지 판별
+     */
+    function isHostNickname(nickname) {
+        if (!nickname || typeof nickname !== 'string') return false;
+        const clean = nickname.trim().replace(/^@+/, '').replace(/\s+/g, '').toLowerCase();
+        return HOST_NICKNAMES.some(h => {
+            const hClean = h.replace(/\s+/g, '').toLowerCase();
+            return clean === hClean || clean.includes(hClean);
+        });
+    }
+
+
+    // =========================================================
     // 진행자 / 운영자 / 시스템 메시지 판별
     // =========================================================
 
@@ -522,6 +545,13 @@
      */
     function isHostOrSystemElement(el) {
         if (!el || !(el instanceof Element)) return false;
+
+        // 0) 작성자 닉네임이 방장/진행자 닉네임(해담분재경매장 등)인지 확인
+        const authorEl = el.querySelector('#author-name') || (el.id === 'author-name' ? el : null);
+        if (authorEl) {
+            const rawNick = authorEl.innerText || authorEl.textContent || '';
+            if (isHostNickname(rawNick)) return true;
+        }
 
         // 1) author-type 속성 확인 (YouTube 표준: "owner", "moderator")
         const authorType = (el.getAttribute('author-type') || '').toLowerCase();
@@ -1098,7 +1128,7 @@
 
             const authorEl = findAuthor(item);
             const nickname = getNickname(authorEl);
-            if (!nickname || nickname === '경매진행자') {
+            if (!nickname || isHostNickname(nickname)) {
                 return;
             }
 
@@ -4592,7 +4622,7 @@ ${xmlRows.join('')}
             );
 
 
-        if (!nickname || nickname === '경매진행자') {
+        if (!nickname || isHostNickname(nickname)) {
             return;
         }
 
