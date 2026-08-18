@@ -441,6 +441,65 @@
     }
 
 
+    /**
+     * 특정 경매 블록 또는 닉네임의 낙찰 기록 취소/삭제
+     * @param {string|null} blockKey - 경매 블록 키 (예: "round_1")
+     * @param {string|null} nickname - 낙찰자 닉네임
+     * @returns {boolean} 삭제 성공 여부
+     */
+    function removeBidRecord(blockKey = null, nickname = null) {
+
+        // 🛑 다시보기 환경: 낙찰자 수정/삭제 방지
+        if (isReplayMode()) {
+            return false;
+        }
+
+        const curVideoId = getCurrentVideoId();
+        const today = getTodayString();
+        const allRecords = loadBidRecords();
+        let targetRecordId = null;
+
+        for (let i = allRecords.length - 1; i >= 0; i--) {
+            const r = allRecords[i];
+            if (!r) continue;
+            const isCurrentVid = (curVideoId && curVideoId !== 'unknown' && curVideoId !== 'live_chat' && curVideoId !== 'live_chat_replay')
+                ? (r.videoId === curVideoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false))
+                : (r.date === today || !r.videoId || r.videoId === 'unknown');
+
+            if (isCurrentVid) {
+                if (blockKey && r.blockKey === blockKey) {
+                    targetRecordId = r.id;
+                    break;
+                } else if (nickname && r.nickname === nickname) {
+                    targetRecordId = r.id;
+                    break;
+                }
+            }
+        }
+
+        let updatedRecords;
+        if (targetRecordId) {
+            updatedRecords = allRecords.filter(r => r && r.id !== targetRecordId);
+        } else if (blockKey || nickname) {
+            updatedRecords = allRecords.filter(r => {
+                if (!r) return false;
+                const matchBlock = blockKey && r.blockKey === blockKey;
+                const matchNick = nickname && r.nickname === nickname;
+                const isCurrent = (curVideoId && curVideoId !== 'unknown' && curVideoId !== 'live_chat' && curVideoId !== 'live_chat_replay')
+                    ? (r.videoId === curVideoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false))
+                    : (r.date === today || !r.videoId || r.videoId === 'unknown');
+                return !(isCurrent && (matchBlock || matchNick));
+            });
+        } else {
+            return false;
+        }
+
+        saveBidRecords(updatedRecords);
+        updateBidBadge();
+        return true;
+    }
+
+
     /** 현재 방송/영상 기록 필터링 (현재 영상 videoId 또는 당일 기준 필터링) */
     function getTodayBidRecords() {
 
@@ -5198,6 +5257,57 @@ ${xmlRows.join('')}
     }
 
 
+    /**
+     * 채팅 입력창 내용 비우기 (YouTube Live 채팅 입력창 완전 초기화)
+     */
+    function clearChatInput(input = null) {
+
+        const inputs = [];
+        if (input) {
+            inputs.push(input);
+        } else {
+            const found = findChatInput();
+            if (found) inputs.push(found);
+        }
+
+        const docs = typeof getTargetDocs === 'function' ? getTargetDocs() : [document];
+        for (const doc of docs) {
+            try {
+                if (!doc) continue;
+                const els = doc.querySelectorAll('yt-live-chat-text-input-field-renderer #input, #input[contenteditable="true"]');
+                els.forEach(el => {
+                    if (el && !inputs.includes(el)) inputs.push(el);
+                });
+            } catch (e) {}
+        }
+
+        for (const inp of inputs) {
+            try {
+                inp.focus();
+                try {
+                    const sel = (inp.ownerDocument && inp.ownerDocument.defaultView ? inp.ownerDocument.defaultView.getSelection() : window.getSelection());
+                    if (sel) {
+                        const range = (inp.ownerDocument || document).createRange();
+                        range.selectNodeContents(inp);
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    }
+                } catch (e) {}
+                try {
+                    (inp.ownerDocument || document).execCommand('delete', false, null);
+                } catch (e) {}
+                inp.textContent = '';
+                inp.innerText = '';
+                try {
+                    inp.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'deleteContentBackward' }));
+                } catch (e) {
+                    inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                }
+            } catch (e) {}
+        }
+    }
+
+
     // =========================================================
     // 채팅 전송
     // =========================================================
@@ -5370,6 +5480,50 @@ ${xmlRows.join('')}
         // 🛑 가드 3: 진행자, 운영자 또는 시스템 메시지는 낙찰 대상에서 제외
         if (isHostOrSystemElement(messageItem)) {
             console.log(PREFIX, '진행자/운영자 메시지는 낙찰 처리 대상이 아닙니다.');
+            return;
+        }
+
+        // 🛑 [낙찰 취소 확인] 이미 낙찰자로 하이라이트된 메시지를 다시 클릭한 경우 낙찰 취소 확인 및 실행
+        const isWinner = messageItem.classList.contains('auction-winner-highlight') || Boolean(messageItem.querySelector('.auction-winner-badge'));
+        if (isWinner) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+
+            const author = findAuthor(event.target, event) || messageItem.querySelector('#author-name');
+            const nickname = author ? getNickname(author) : '';
+            const nickLabel = nickname ? `@${nickname}님` : '해당 낙찰자';
+            const confirmMsg = `[낙찰 취소 확인]\n${nickLabel}의 낙찰 처리를 취소하시겠습니까?\n\n- 채팅 하이라이트 해제\n- 채팅 입력창 내용 비우기\n- 낙찰 내역에서 삭제`;
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            const targetDoc = event.target.ownerDocument || document;
+
+            // 1) 채팅창 하이라이트 및 뱃지 해제
+            clearWinnerHighlightsInBlock(messageItem, targetDoc);
+            messageItem.classList.remove('auction-winner-highlight');
+            const badges = messageItem.querySelectorAll('.auction-winner-badge');
+            badges.forEach(b => {
+                if (b && typeof b.remove === 'function') {
+                    b.remove();
+                } else if (b && b.parentNode) {
+                    b.parentNode.removeChild(b);
+                }
+            });
+
+            // 2) 인풋창 내용 비우기
+            clearChatInput();
+
+            // 3) 낙찰 내역에서 해당 기록 삭제
+            const blockKey = getAuctionBlockKey(messageItem, targetDoc);
+            removeBidRecord(blockKey, nickname);
+
+            showAuctionToast(`🚫 ${nickLabel} 낙찰이 취소되었습니다.`, 'separator');
+            console.log(PREFIX, `🚫 ${nickLabel} 낙찰 취소 완료 (하이라이트, 인풋창, 낙찰내역 취소)`);
             return;
         }
 
