@@ -1527,7 +1527,7 @@
 
             // 엑셀 다운로드 (.xls)
             actionRow.appendChild(makeActionBtn(
-                '📊', '엑셀',
+                '📊', '엑셀다운',
                 'rgba(40,167,69,.15)', 'rgba(40,167,69,.4)', '#75d888',
                 () => {
                     const rawRecords = getTodayBidRecords();
@@ -1854,7 +1854,7 @@ ${xmlRows.join('')}
 
             // 현재 방송 내역 전체 삭제
             actionRow.appendChild(makeActionBtn(
-                '🗑️', '삭제',
+                '🗑️', '전체삭제',
                 'rgba(220,70,70,.12)', 'rgba(220,70,70,.32)', '#ee9292',
                 () => {
                     const cur = getTodayBidRecords();
