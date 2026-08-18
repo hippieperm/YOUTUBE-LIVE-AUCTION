@@ -1028,15 +1028,15 @@
 
 
     // =========================================================
-    // 스마트 금액 파싱 (입찰 채팅에서 만원 단위 추출)
+    // 스마트 금액 파싱 (입찰 채팅에서 만원 단위 추출 & 상세 메타데이터 반환)
     // - 첫 번째 등장하는 숫자/단위를 우선 추출하여 자동 낙찰 지원
     // - .5, .3 등 소수점 시작 형태 지원 (.5 ➔ 0.5만원 = 5천원)
     // - 3,5, 15,5, ,5 등 쉼표 소수점 형태 지원 (3,5 ➔ 3.5만원)
     // - 15만, 15.5만, 15만 5천, 150000, 150,000, 5000, 3천, 3천원, 20 등 자동 변환
-    // - 문장형 채팅(예: '15만 부탁드립니다', '3천으로', '15.5 갑니다') 지원
+    // - 65, 55, 75 등 소수점(.)을 생략하고 입력된 십의 자리 약칭 입찰의 문맥 분석 지원
     // =========================================================
 
-    function parseBidPrice(text) {
+    function parseBidPriceDetail(text) {
 
         if (
             !text ||
@@ -1048,20 +1048,25 @@
         let clean =
             text.trim();
 
+        let isPointNumber = false;
+
         // 0-1. ",5", ",3", ",5만" 등 쉼표로 바로 시작하는 소수점 형태 -> 0.5, 0.3 (0.5만원 = 5천원)
-        clean =
-            clean
-                .replace(/(?:^|[^\d])\,(\d+)/g, ' 0.$1');
+        if (/(?:^|[^\d])\,(\d+)/.test(clean)) {
+            clean = clean.replace(/(?:^|[^\d])\,(\d+)/g, ' 0.$1');
+            isPointNumber = true;
+        }
 
         // 0-2. ".5", ".3", ".5만" 등 점으로 바로 시작하는 소수점 형태 -> 0.5, 0.3 (0.5만원 = 5천원)
-        clean =
-            clean
-                .replace(/(?:^|[^\d])\.(\d+)/g, ' 0.$1');
+        if (/(?:^|[^\d])\.(\d+)/.test(clean)) {
+            clean = clean.replace(/(?:^|[^\d])\.(\d+)/g, ' 0.$1');
+            isPointNumber = true;
+        }
 
         // 0-3. "3,5", "15,5", "3,25", "3, 5" 등 쉼표 뒤 1~2자리 숫자가 오는 소수점 쉼표 -> "3.5", "15.5"
-        clean =
-            clean
-                .replace(/(\d+)\s*,\s*(\d{1,2})(?!\d)/g, '$1.$2');
+        if (/(\d+)\s*,\s*(\d{1,2})(?!\d)/.test(clean)) {
+            clean = clean.replace(/(\d+)\s*,\s*(\d{1,2})(?!\d)/g, '$1.$2');
+            isPointNumber = true;
+        }
 
         // 0-4. "150,000", "15,000", "1,000,000" 등 3자리 단위 구분 쉼표 -> 쉼표 제거 ("150000", "15000")
         clean =
@@ -1072,6 +1077,10 @@
         clean =
             clean
                 .replace(/,/g, '');
+
+        if (/\d+\.\d+/.test(clean)) {
+            isPointNumber = true;
+        }
 
         // 1. "15만 5천", "15만5000", "15만 3천원", "15만 5", "15만 5백" 등 만+천/백 복합 단위
         const manChonMatch =
@@ -1089,6 +1098,7 @@
             const unit =
                 manChonMatch[3];
 
+            let calcPrice = man;
             if (
                 unit === '천' ||
                 unit === '000' ||
@@ -1101,8 +1111,7 @@
                 } else if (sub < 100) {
                     sub = sub / 100;
                 }
-
-                return normalizePrice(man + sub);
+                calcPrice = man + sub;
             } else if (
                 unit === '백' ||
                 unit === '00'
@@ -1112,11 +1121,21 @@
                 } else if (sub < 10) {
                     sub = sub / 100;
                 }
-
-                return normalizePrice(man + sub);
+                calcPrice = man + sub;
             } else if (sub > 0 && sub < 10000) {
-                return normalizePrice(man + (sub / 10000));
+                calcPrice = man + (sub / 10000);
             }
+
+            const pStr = normalizePrice(calcPrice);
+            return pStr ? {
+                priceStr: pStr,
+                priceNum: parseFloat(pStr),
+                rawNum: man,
+                hasExplicitUnit: true,
+                isRawInteger: false,
+                isPointNumber: isPointNumber || String(calcPrice).includes('.'),
+                isChonUnit: false
+            } : null;
         }
 
         // 2. "15만", "15만원", "15.5만", "0.5만", ".5만", "15만으로"
@@ -1126,7 +1145,17 @@
             );
 
         if (manMatch) {
-            return normalizePrice(manMatch[1]);
+            const pStr = normalizePrice(manMatch[1]);
+            const pNum = parseFloat(pStr);
+            return pStr ? {
+                priceStr: pStr,
+                priceNum: pNum,
+                rawNum: parseFloat(manMatch[1]),
+                hasExplicitUnit: true,
+                isRawInteger: !manMatch[1].includes('.'),
+                isPointNumber: isPointNumber || manMatch[1].includes('.'),
+                isChonUnit: false
+            } : null;
         }
 
         // 3. "5천", "5천원", "3천", "3천원", "3천으로", "3.5천"
@@ -1138,8 +1167,16 @@
         if (chonMatch) {
             const chon =
                 parseFloat(chonMatch[1]);
-
-            return normalizePrice(chon / 10);
+            const pStr = normalizePrice(chon / 10);
+            return pStr ? {
+                priceStr: pStr,
+                priceNum: parseFloat(pStr),
+                rawNum: chon,
+                hasExplicitUnit: true,
+                isRawInteger: false,
+                isPointNumber: isPointNumber || chonMatch[1].includes('.'),
+                isChonUnit: true
+            } : null;
         }
 
         // 4. 원 단위 숫자가 명시된 경우 (예: "150000원", "150,000원", "15000원", "5000원", "3000원")
@@ -1151,8 +1188,16 @@
         if (wonMatch) {
             const num =
                 parseFloat(wonMatch[1]);
-
-            return normalizePrice(num / 10000);
+            const pStr = normalizePrice(num / 10000);
+            return pStr ? {
+                priceStr: pStr,
+                priceNum: parseFloat(pStr),
+                rawNum: num,
+                hasExplicitUnit: true,
+                isRawInteger: false,
+                isPointNumber: isPointNumber,
+                isChonUnit: false
+            } : null;
         }
 
         // 5. 3자리 단위 콤마가 포함되어 있던 원 단위 숫자 (예: "150,000" -> 15, "15,000" -> 1.5, "5,000" -> 0.5)
@@ -1165,8 +1210,16 @@
             if (commaNumMatch) {
                 const num =
                     parseFloat(commaNumMatch[1]);
-
-                return normalizePrice(num / 10000);
+                const pStr = normalizePrice(num / 10000);
+                return pStr ? {
+                    priceStr: pStr,
+                    priceNum: parseFloat(pStr),
+                    rawNum: num,
+                    hasExplicitUnit: true,
+                    isRawInteger: false,
+                    isPointNumber: isPointNumber,
+                    isChonUnit: false
+                } : null;
             }
         }
 
@@ -1179,8 +1232,16 @@
         if (largeNumMatch) {
             const num =
                 parseFloat(largeNumMatch[1]);
-
-            return normalizePrice(num / 10000);
+            const pStr = normalizePrice(num / 10000);
+            return pStr ? {
+                priceStr: pStr,
+                priceNum: parseFloat(pStr),
+                rawNum: num,
+                hasExplicitUnit: false,
+                isRawInteger: false,
+                isPointNumber: isPointNumber,
+                isChonUnit: false
+            } : null;
         }
 
         // 7. 천 단위 4자리 숫자 (예: "5000", "3000", "3500", "7500" -> 0.5, 0.3, 0.35, 0.75)
@@ -1192,21 +1253,108 @@
         if (fourDigitChonMatch) {
             const num =
                 parseFloat(fourDigitChonMatch[1]);
-
-            return normalizePrice(num / 10000);
+            const pStr = normalizePrice(num / 10000);
+            return pStr ? {
+                priceStr: pStr,
+                priceNum: parseFloat(pStr),
+                rawNum: num,
+                hasExplicitUnit: false,
+                isRawInteger: false,
+                isPointNumber: isPointNumber,
+                isChonUnit: true
+            } : null;
         }
 
-        // 8. 일반 숫자 (예: "15", "20", "15.5", "3.5", "0.5", "2", "35", "100")
+        // 8. 일반 숫자 (예: "15", "20", "15.5", "3.5", "0.5", "2", "35", "65", "100")
         const numMatch =
             clean.match(
                 /(\d+(?:\.\d+)?)/
             );
 
         if (numMatch) {
-            return normalizePrice(numMatch[1]);
+            const rawVal = numMatch[1];
+            const pStr = normalizePrice(rawVal);
+            const pNum = parseFloat(pStr);
+            const isInt = !rawVal.includes('.');
+            return pStr ? {
+                priceStr: pStr,
+                priceNum: pNum,
+                rawNum: parseFloat(rawVal),
+                hasExplicitUnit: false,
+                isRawInteger: isInt,
+                isPointNumber: isPointNumber || !isInt,
+                isChonUnit: false
+            } : null;
         }
 
         return null;
+    }
+
+    /** 스마트 금액 파싱 (문자열 반환) */
+    function parseBidPrice(text) {
+        const detail = parseBidPriceDetail(text);
+        return detail ? detail.priceStr : null;
+    }
+
+    /**
+     * 문맥(주변 채팅/경매 블록)을 고려한 스마트 입찰가 파싱
+     * @param {string} text - 채팅 메시지
+     * @param {Element|null} [element] - 채팅 DOM 요소
+     * @returns {string|null} 파싱된 만원 단위 문자열 (예: 65 ➔ "6.5")
+     */
+    function parseBidPriceWithContext(text, element = null) {
+        if (!text) return null;
+        const detail = parseBidPriceDetail(text);
+        if (!detail) return null;
+
+        // 단위가 이미 명시되어 있거나 소수점이 있는 경우 그대로 반환
+        if (detail.hasExplicitUnit || !detail.isRawInteger) {
+            return detail.priceStr;
+        }
+
+        const raw = detail.rawNum;
+
+        // DOM 요소가 전달된 경우 해당 경매 블록 내 다른 채팅들의 호가 문맥 분석
+        if (element) {
+            const blockItems = getAuctionBlockItems(element, element.ownerDocument || document);
+            const lowScaleAnchors = [];
+            let hasExplicitTenPlus = false;
+
+            blockItems.forEach(item => {
+                if (isHostOrSystemElement(item) || item === element) return;
+                const msgEl = item.querySelector('#message');
+                const chatText = msgEl ? msgEl.textContent.trim() : '';
+                if (!chatText || isSystemOrNoticeMessage(chatText)) return;
+                const d = parseBidPriceDetail(chatText);
+                if (d && d.priceNum > 0) {
+                    if (d.isPointNumber || d.priceNum < 10 || /출발/i.test(chatText)) {
+                        if (d.priceNum < 20) lowScaleAnchors.push(d.priceNum);
+                    }
+                    if (d.hasExplicitUnit && d.priceNum >= 10) {
+                        hasExplicitTenPlus = true;
+                    }
+                }
+            });
+
+            const isLowScale = lowScaleAnchors.length > 0 && (!hasExplicitTenPlus || lowScaleAnchors.length >= 2);
+            const anchorAvg = lowScaleAnchors.length > 0
+                ? (lowScaleAnchors.reduce((sum, v) => sum + v, 0) / lowScaleAnchors.length)
+                : null;
+
+            const isEndsWithFive = (raw >= 15 && raw <= 195 && raw % 10 === 5);
+            const isScaleMismatch = (isLowScale && anchorAvg !== null && anchorAvg < 10 && raw >= 15 && raw <= 99);
+
+            if (isEndsWithFive || isScaleMismatch) {
+                const corrected = raw / 10;
+                console.log(
+                    PREFIX,
+                    `💡 [문맥 보정 파싱] "${text}" (${raw}) ➔ ${normalizePrice(corrected)}만 으로 보정됨`
+                );
+                return normalizePrice(corrected);
+            }
+        }
+
+        return detail.priceStr;
     }
 
 
@@ -1239,7 +1387,7 @@
 
 
     // =========================================================
-    // 밑줄 위 최고가 입찰자 자동 선별 (동일가 선착순 우선)
+    // 밑줄 위 최고가 입찰자 자동 선별 (동일가 선착순 우선 + 스마트 문맥 보정)
     // =========================================================
 
     function findTopBidAboveSeparator(separatorEl = null, targetDoc = null) {
@@ -1300,8 +1448,8 @@
             return null;
         }
 
-        // 각 메시지에서 작성자와 입찰가 파싱
-        const validBids = [];
+        // 1단계: 각 메시지에서 작성자와 입찰가 파싱 및 상세 메타데이터 수집
+        const rawBids = [];
 
         targetItems.forEach((item, index) => {
             // 🛑 진행자, 방장, 운영자 또는 시스템 메시지는 입찰 대상에서 완벽 제외
@@ -1321,36 +1469,92 @@
                 return;
             }
 
-            const parsedPrice = parseBidPrice(chatText);
-            if (parsedPrice) {
-                const numPrice = parseFloat(parsedPrice);
-                if (Number.isFinite(numPrice) && numPrice > 0) {
-                    validBids.push({
-                        element: item,
-                        nickname: nickname,
-                        price: numPrice,
-                        priceStr: parsedPrice,
-                        originalChat: chatText,
-                        index: index // DOM 순서 (먼저 올라온 채팅이 낮은 index = 선착순 1위)
-                    });
-                }
+            const detail = parseBidPriceDetail(chatText);
+            if (detail && detail.priceNum > 0) {
+                rawBids.push({
+                    element: item,
+                    nickname: nickname,
+                    price: detail.priceNum,
+                    priceStr: detail.priceStr,
+                    originalChat: chatText,
+                    detail: detail,
+                    index: index // DOM 순서 (먼저 올라온 채팅이 낮은 index = 선착순 1위)
+                });
             }
         });
 
-        if (!validBids.length) {
+        if (!rawBids.length) {
             return null;
         }
 
-        // 최고가 탐색
+        // 2단계: 경매 블록 내 호가 문맥 분석 (Context Scale Analysis)
+        // 신뢰도 높은 앵커 가격(Anchor Bids: 소수점 포함, 한 자릿수 정수, 10 미만 단위 입찰 등) 수집
+        const lowScaleAnchors = [];
+        let hasExplicitTenPlus = false;
+
+        rawBids.forEach(b => {
+            if (b.detail.isPointNumber || b.detail.priceNum < 10 || /출발/i.test(b.originalChat)) {
+                if (b.detail.priceNum < 20) {
+                    lowScaleAnchors.push(b.detail.priceNum);
+                }
+            }
+            if (b.detail.hasExplicitUnit && b.detail.priceNum >= 10) {
+                hasExplicitTenPlus = true;
+            }
+        });
+
+        // 10만원 미만 경매인지 판정 (앵커 가격들이 10 미만 위주인 경우)
+        const isLowScaleAuction = lowScaleAnchors.length > 0 && (!hasExplicitTenPlus || lowScaleAnchors.length >= 2);
+        const anchorAvg = lowScaleAnchors.length > 0
+            ? (lowScaleAnchors.reduce((sum, v) => sum + v, 0) / lowScaleAnchors.length)
+            : null;
+
+        // 3단계: 스마트 문맥 보정 (65 ➔ 6.5만, 55 ➔ 5.5만 등 소수점 생략 입력 보정)
+        const resolvedBids = rawBids.map(b => {
+            let finalPrice = b.price;
+            let finalPriceStr = b.priceStr;
+
+            // 보정 조건:
+            // 1) '만', '원' 등의 명시적 단위가 없고,
+            // 2) 소수점이 없는 순수 정수이며,
+            // 3) 2자리 또는 3자리 정수 (예: 55, 65, 75, 85, 95, 105, 115, 125 등)
+            if (!b.detail.hasExplicitUnit && b.detail.isRawInteger) {
+                const raw = b.detail.rawNum;
+
+                // 케이스 A: 끝자리가 5인 2~3자리 정수 (55, 65, 75, 85, 95, 105, 115, 125 등)
+                const isEndsWithFive = (raw >= 15 && raw <= 195 && raw % 10 === 5);
+
+                // 케이스 B: 10만원 미만 경매 문맥에서 10배 스케일로 들어온 숫자 (예: 기준가 5~7만인데 50~99 입력)
+                const isScaleMismatch = (isLowScaleAuction && anchorAvg !== null && anchorAvg < 10 && raw >= 15 && raw <= 99);
+
+                if (isEndsWithFive || isScaleMismatch) {
+                    const corrected = raw / 10;
+                    finalPrice = corrected;
+                    finalPriceStr = normalizePrice(corrected);
+                    console.log(
+                        PREFIX,
+                        `💡 [스마트 문맥 보정] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
+                    );
+                }
+            }
+
+            return {
+                ...b,
+                price: finalPrice,
+                priceStr: finalPriceStr
+            };
+        });
+
+        // 4단계: 최고가 탐색 및 동일가 선착순 우선 선별
         let maxPrice = -Infinity;
-        validBids.forEach(b => {
+        resolvedBids.forEach(b => {
             if (b.price > maxPrice) {
                 maxPrice = b.price;
             }
         });
 
         // 최고가 입찰자들 필터링
-        const topBids = validBids.filter(b => b.price === maxPrice);
+        const topBids = resolvedBids.filter(b => b.price === maxPrice);
 
         // 동일 가격일 경우 가장 먼저 올라온 채팅(index가 가장 작은 것) 우선
         const winner = topBids[0];
@@ -3495,7 +3699,7 @@ ${xmlRows.join('')}
 
         const parsedPrice =
             lastChatMessage
-                ? parseBidPrice(lastChatMessage)
+                ? parseBidPriceWithContext(lastChatMessage, targetChatItem)
                 : null;
 
         removeAuctionUI();
@@ -5166,10 +5370,9 @@ ${xmlRows.join('')}
             lastChatMessage
         );
 
-
+        const chatItem = findChatMessageItem(event.target);
         const parsedPrice =
-            parseBidPrice(lastChatMessage);
-
+            parseBidPriceWithContext(lastChatMessage, chatItem);
 
         if (parsedPrice) {
 
@@ -5202,7 +5405,6 @@ ${xmlRows.join('')}
                 );
             }
 
-            const chatItem = findChatMessageItem(event.target);
             const blockKey = getAuctionBlockKey(chatItem, event.target.ownerDocument || document);
 
             // ✅ 낙찰 내역 기록 (실시간/다시보기 무관하게 항상 100% 저장)
@@ -5223,7 +5425,6 @@ ${xmlRows.join('')}
 
         } else {
 
-            const chatItem = findChatMessageItem(event.target);
             openAuctionModal(
                 nickname,
                 lastChatMessage,

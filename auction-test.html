@@ -546,6 +546,9 @@
                     <button class="sim-btn primary" onclick="runTieBreakerScenario()">
                         <span>⏱️ 3. 동일 금액 선착순 우선 테스트</span>
                     </button>
+                    <button class="sim-btn gold" onclick="runContextAwareScenario()">
+                        <span>💡 4. 소수점 생략(65=6.5만 vs 7만) 스마트 문맥 보정 테스트</span>
+                    </button>
                 </div>
             </div>
 
@@ -896,6 +899,28 @@
             setTimeout(() => addChatMessage('2등입찰자', '20만'), 1400);
             setTimeout(() => addChatMessage('3등입찰자', '20만'), 2100);
             setTimeout(() => addChatMessage('해담분재경매장', '===================', true), 2900);
+        }
+
+        /** 4. 소수점 생략(65=6.5만 vs 7만) 스마트 문맥 보정 테스트 시나리오 */
+        function runContextAwareScenario() {
+            addChatMessage('해담분재경매장', '📢 [스마트 문맥 보정] 5만~7만 경매에서 소수점(.)을 생략한 "65"는 6.5만으로 자동 보정되어 "7만" 입찰자가 낙찰되어야 합니다.', true);
+
+            const steps = [
+                { nick: '산그늘-y2y', msg: '출발5', delay: 600 },
+                { nick: '나팔림', msg: '5', delay: 1200 },
+                { nick: '아리까리-w4y', msg: '6', delay: 1800 },
+                { nick: '나팔림', msg: '6', delay: 2400 },
+                { nick: '사랑아-g7d', msg: '6.5', delay: 3000 },
+                { nick: '비키비키-k', msg: '65', delay: 3700 }, // 65 -> 6.5만으로 스마트 보정!
+                { nick: '아리까리-w4y', msg: '7', delay: 4500 }, // 최종 최고가: 7만!
+                { nick: '해담분재경매장', msg: '===================', delay: 5400, isHost: true }
+            ];
+
+            steps.forEach(step => {
+                setTimeout(() => {
+                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                }, step.delay);
+            });
         }
 
         /** 봇 입찰 시뮬레이터 */
