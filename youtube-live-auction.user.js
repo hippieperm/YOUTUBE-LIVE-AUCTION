@@ -1425,16 +1425,27 @@
                     return normalizePrice(candidate);
                 }
             }
-            // [케이스 2] 3자리 숫자 (105, 125, 155, 205, 255, 355 등)
-            else if (raw >= 105 && raw <= 995 && raw % 10 === 5) {
-                const candidate = raw / 10;
-                const avg = baselineAvg !== null ? baselineAvg : 20;
-                if (Math.abs(candidate - avg) < Math.abs(raw - avg)) {
-                    console.log(
-                        PREFIX,
-                        `💡 [문맥 보정 파싱 (3자리)] "${text}" (${raw}) ➔ ${normalizePrice(candidate)}만 으로 보정됨`
-                    );
-                    return normalizePrice(candidate);
+            // [케이스 2] 3자리 숫자 (100~999: 366 ➔ 36.6만 또는 3.66만, 255 ➔ 25.5만 등)
+            else if (raw >= 100 && raw <= 999) {
+                if (isLowScale && underTenAvg !== null) {
+                    const candidate = raw / 100;
+                    if (Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg)) {
+                        console.log(
+                            PREFIX,
+                            `💡 [문맥 보정 파싱 (3자리/소액)] "${text}" (${raw}) ➔ ${normalizePrice(candidate)}만 으로 보정됨`
+                        );
+                        return normalizePrice(candidate);
+                    }
+                } else {
+                    const candidate = raw / 10;
+                    const avg = baselineAvg !== null ? baselineAvg : 20;
+                    if (Math.abs(candidate - avg) < Math.abs(raw - avg)) {
+                        console.log(
+                            PREFIX,
+                            `💡 [문맥 보정 파싱 (3자리/중고가)] "${text}" (${raw}) ➔ ${normalizePrice(candidate)}만 으로 보정됨`
+                        );
+                        return normalizePrice(candidate);
+                    }
                 }
             }
         }
@@ -1685,20 +1696,32 @@
                         );
                     }
                 }
-                // [케이스 2] 3자리 숫자 중 끝자리가 5인 숫자 (105, 115, 125, 155, 205, 255, 355 등):
-                // 10~100만원대 경매에서 10.5만, 15.5만, 25.5만 등으로 보정 (255만 -> 25.5만)
-                else if (raw >= 105 && raw <= 995 && raw % 10 === 5) {
-                    const candidate = raw / 10; // 예: 255 -> 25.5
-                    const avg = baselineAvg !== null ? baselineAvg : 20;
+                // [케이스 2] 3자리 숫자 (100~999: 366 ➔ 36.6만 또는 3.66만, 255 ➔ 25.5만 등)
+                else if (raw >= 100 && raw <= 999) {
+                    if (isLowScaleAuction && underTenAvg !== null) {
+                        // 10만원 미만 경매에서 3자리 입력 시 (예: 366 ➔ 3.66만, 255 ➔ 2.55만)
+                        const candidate = raw / 100;
+                        if (Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg)) {
+                            finalPrice = candidate;
+                            finalPriceStr = normalizePrice(candidate);
+                            console.log(
+                                PREFIX,
+                                `💡 [스마트 문맥 보정 (3자리/소액)] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
+                            );
+                        }
+                    } else {
+                        // 10~99만원대 경매에서 3자리 입력 시 (예: 366 ➔ 36.6만, 255 ➔ 25.5만)
+                        const candidate = raw / 10;
+                        const avg = baselineAvg !== null ? baselineAvg : 20;
 
-                    // candidate(25.5)가 raw(255)보다 기준 호가대(예: 15~30만)와 훨씬 가까운 경우
-                    if (Math.abs(candidate - avg) < Math.abs(raw - avg)) {
-                        finalPrice = candidate;
-                        finalPriceStr = normalizePrice(candidate);
-                        console.log(
-                            PREFIX,
-                            `💡 [스마트 문맥 보정 (3자리)] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
-                        );
+                        if (Math.abs(candidate - avg) < Math.abs(raw - avg)) {
+                            finalPrice = candidate;
+                            finalPriceStr = normalizePrice(candidate);
+                            console.log(
+                                PREFIX,
+                                `💡 [스마트 문맥 보정 (3자리/중고가)] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
+                            );
+                        }
                     }
                 }
             }
