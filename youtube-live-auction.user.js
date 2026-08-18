@@ -1341,16 +1341,16 @@
                 ? (lowScaleAnchors.reduce((sum, v) => sum + v, 0) / lowScaleAnchors.length)
                 : null;
 
-            const isEndsWithFive = (raw >= 15 && raw <= 195 && raw % 10 === 5);
-            const isScaleMismatch = (isLowScale && anchorAvg !== null && anchorAvg < 10 && raw >= 15 && raw <= 99);
+            const isEndsWithFive = (raw >= 25 && raw <= 195 && raw % 10 === 5);
+            const candidate = raw / 10;
+            const isBetterFit = isLowScale && anchorAvg !== null && (Math.abs(candidate - anchorAvg) < Math.abs(raw - anchorAvg));
 
-            if (isEndsWithFive || isScaleMismatch) {
-                const corrected = raw / 10;
+            if (isEndsWithFive && isBetterFit) {
                 console.log(
                     PREFIX,
-                    `💡 [문맥 보정 파싱] "${text}" (${raw}) ➔ ${normalizePrice(corrected)}만 으로 보정됨`
+                    `💡 [문맥 보정 파싱] "${text}" (${raw}) ➔ ${normalizePrice(candidate)}만 으로 보정됨`
                 );
-                return normalizePrice(corrected);
+                return normalizePrice(candidate);
             }
         }
 
@@ -1518,24 +1518,29 @@
             // 보정 조건:
             // 1) '만', '원' 등의 명시적 단위가 없고,
             // 2) 소수점이 없는 순수 정수이며,
-            // 3) 2자리 또는 3자리 정수 (예: 55, 65, 75, 85, 95, 105, 115, 125 등)
+            // 3) 끝자리가 5인 정수 (25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125 등 - 소수점 .5 생략형)
+            // ※ 20, 30, 40, 15 등 일반 정수는 무조건 원본 금액(20만, 30만 등) 유지!
             if (!b.detail.hasExplicitUnit && b.detail.isRawInteger) {
                 const raw = b.detail.rawNum;
 
-                // 케이스 A: 끝자리가 5인 2~3자리 정수 (55, 65, 75, 85, 95, 105, 115, 125 등)
-                const isEndsWithFive = (raw >= 15 && raw <= 195 && raw % 10 === 5);
+                // 끝자리가 5인 2~3자리 정수 (25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125 등)
+                const isEndsWithFive = (raw >= 25 && raw <= 195 && raw % 10 === 5);
 
-                // 케이스 B: 10만원 미만 경매 문맥에서 10배 스케일로 들어온 숫자 (예: 기준가 5~7만인데 50~99 입력)
-                const isScaleMismatch = (isLowScaleAuction && anchorAvg !== null && anchorAvg < 10 && raw >= 15 && raw <= 99);
+                if (isEndsWithFive) {
+                    const candidate = raw / 10; // 예: 65 ➔ 6.5, 55 ➔ 5.5
 
-                if (isEndsWithFive || isScaleMismatch) {
-                    const corrected = raw / 10;
-                    finalPrice = corrected;
-                    finalPriceStr = normalizePrice(corrected);
-                    console.log(
-                        PREFIX,
-                        `💡 [스마트 문맥 보정] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
-                    );
+                    // 문맥 호가대와 비교:
+                    // candidate(6.5)가 현재 경매의 기준 호가대(anchorAvg, 예: 5~7만)와 더 가까운 경우에만 보정
+                    const isBetterFit = isLowScaleAuction && anchorAvg !== null && (Math.abs(candidate - anchorAvg) < Math.abs(raw - anchorAvg));
+
+                    if (isBetterFit) {
+                        finalPrice = candidate;
+                        finalPriceStr = normalizePrice(candidate);
+                        console.log(
+                            PREFIX,
+                            `💡 [스마트 문맥 보정] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
+                        );
+                    }
                 }
             }
 
