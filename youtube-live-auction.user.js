@@ -431,6 +431,98 @@
 
 
     /**
+     * 낙찰 내역 더미 데이터 일괄 생성 및 추가 (테스트 & 시뮬레이터 전용)
+     * @param {number} count - 생성할 더미 데이터 건수 (기본 5)
+     * @returns {Array} 생성되어 추가된 더미 레코드 배열
+     */
+    function addDummyBidRecords(count = 5) {
+        const records = loadBidRecords();
+        const currentVideoId = getCurrentVideoId();
+        const today = getTodayString();
+        const numCount = Math.max(1, parseInt(count, 10) || 5);
+
+        // 실전 경매 더미 데이터 풀 (품목명, 닉네임, 가격(만원), 원본채팅, 수량)
+        const DUMMY_SAMPLES = [
+            { nick: '솔향기', price: '8.5', chat: '8.5만', item: '해송 소품 분재' },
+            { nick: '소나무장인', price: '25', chat: '25', item: '진백 명품 사간형' },
+            { nick: '도예가', price: '4.5', chat: '4,5', item: '소품 왜철쭉' },
+            { nick: '황금송', price: '12', chat: '12만', item: '자연 문양 수석' },
+            { nick: '산그늘-y2y', price: '35', chat: '350,000원', item: '제주 팽나무 특선' },
+            { nick: '솔향기', price: '18.5', chat: '18.5만', item: '주목 고목 분재' },
+            { nick: '사랑아-g7d', price: '7', chat: '7만', item: '느릅나무 근상' },
+            { nick: '소나무장인', price: '15', chat: '15', item: '단풍나무 쌍간' },
+            { nick: '비키비키-k', price: '10.5', chat: '10만 5천', item: '소품 흑송' },
+            { nick: '청송매니아', price: '22', chat: '22만', item: '문인목 소나무' },
+            { nick: '도예가', price: '3', chat: '3', item: '야생화 화분 세트' },
+            { nick: '대박농원', price: '45', chat: '45만', item: '단풍나무 특대작' },
+            { nick: '솔향기', price: '6.5', chat: '65', item: '소품 진백' },
+            { nick: '괴목사랑', price: '16', chat: '16만', item: '명품 남수석' },
+            { nick: '초록정원', price: '5.5', chat: '.55', item: '석곡 착생목' },
+            { nick: '푸른언덕', price: '28', chat: '28만', item: '해송 취목 대작' },
+            { nick: '백년송', price: '14', chat: '140000원', item: '소사나무 분재' },
+            { nick: '청솔마니아', price: '9.5', chat: '9.5만', item: '철쭉 분재 명품' },
+            { nick: '도예가', price: '50', chat: '50만', item: '특선 괴목 탁자' },
+            { nick: '소나무장인', price: '32.5', chat: '325', item: '진백 명품 반현애' }
+        ];
+
+        const baseTimestamp = Date.now() - (numCount * 90000);
+        const createdRecords = [];
+
+        for (let i = 0; i < numCount; i++) {
+            const sample = DUMMY_SAMPLES[i % DUMMY_SAMPLES.length];
+            const recordTimestamp = baseTimestamp + (i * 90000) + Math.floor(Math.random() * 20000);
+            
+            // 영상 시간 (예: 00:03:20, 00:05:10 ...)
+            const videoSec = (i + 1) * 90 + Math.floor(Math.random() * 40);
+            const videoTimeStr = formatVideoTime(videoSec);
+            
+            const recordDate = new Date(recordTimestamp);
+            const realTimeStr = 
+                String(recordDate.getHours()).padStart(2, '0') + ':' +
+                String(recordDate.getMinutes()).padStart(2, '0') + ':' +
+                String(recordDate.getSeconds()).padStart(2, '0');
+
+            const itemText = sample.item ? `[${sample.item}] ` : '';
+            const newRecord = {
+                id: recordTimestamp,
+                blockKey: `dummy_bid_${recordTimestamp}_${i + 1}`,
+                date: today,
+                time: videoTimeStr || realTimeStr,
+                videoTime: videoTimeStr || realTimeStr,
+                realTime: realTimeStr,
+                videoId: currentVideoId,
+                nickname: sample.nick,
+                price: sample.price,
+                qty: 1,
+                originalChat: sample.chat,
+                message: `👉 @${sample.nick} ${sample.price}만 ${itemText}낙찰입니다. 축하드립니다!😄`
+            };
+
+            records.push(newRecord);
+            createdRecords.push(newRecord);
+        }
+
+        saveBidRecords(records);
+        updateBidBadge();
+
+        console.log(PREFIX, `📥 [더미 데이터 추가 완료] +${numCount}건 (총 ${records.length}건)`);
+        
+        // 토스트 알림
+        if (typeof showAuctionToast === 'function') {
+            showAuctionToast(`📥 더미 낙찰 데이터 ${numCount}건이 추가되었습니다. (총 ${records.length}건)`, 'success');
+        }
+
+        // 모달이 열려 있다면 즉시 갱신
+        const modal = document.getElementById('__auction_bid_modal');
+        if (modal) {
+            openBidListModal();
+        }
+
+        return createdRecords;
+    }
+
+
+    /**
      * 특정 경매 블록 또는 닉네임의 낙찰 기록 취소/삭제
      * @param {string|null} blockKey - 경매 블록 키 (예: "round_1")
      * @param {string|null} nickname - 낙찰자 닉네임
@@ -8459,6 +8551,28 @@ ${xmlRows.join('')}
         startUIObserver();
         setupChatObserver();
         updateBidBadge();
+
+        // 시뮬레이터 및 외부 개발/테스트용 브릿지 API 노출
+        try {
+            window.__AuctionAutomation = {
+                version: '2.5',
+                openBidModal: openBidListModal,
+                removeBidModal: removeBidListUI,
+                updateBidBadge: updateBidBadge,
+                loadBidRecords: loadBidRecords,
+                saveBidRecords: saveBidRecords,
+                addBidRecord: addBidRecord,
+                removeBidRecord: removeBidRecord,
+                getTodayBidRecords: getTodayBidRecords,
+                addDummyBidRecords: addDummyBidRecords,
+                clearBidRecords: () => {
+                    saveBidRecords([]);
+                    updateBidBadge();
+                    const modal = document.getElementById('__auction_bid_modal');
+                    if (modal) openBidListModal();
+                }
+            };
+        } catch (e) {}
 
         console.log(
             PREFIX,

@@ -641,9 +641,32 @@
                 </div>
             </div>
 
-            <!-- 밑줄 즉시 긋기 및 관리 -->
+            <!-- 낙찰 내역 & 더미데이터 관리 -->
             <div class="section-card">
-                <div class="section-title">🔴 밑줄 전송 & 관리</div>
+                <div class="section-title">📋 낙찰 내역 & 더미데이터 관리</div>
+                <div class="section-desc">원클릭으로 실전 낙찰 더미 데이터를 생성하여 낙찰 내역 모달, 실시간 배지, 엑셀 집계표/양식 다운로드를 즉시 테스트합니다.</div>
+                
+                <div class="btn-group" style="margin-bottom: 8px;">
+                    <button class="sim-btn gold" onclick="addDummyBidRecords(5)">
+                        <span>📥 더미 데이터 5건 추가</span>
+                    </button>
+                    <button class="sim-btn gold" onclick="addDummyBidRecords(15)">
+                        <span>📦 실전 대량 15건 추가</span>
+                    </button>
+                </div>
+                <div class="btn-group">
+                    <button class="sim-btn primary" onclick="openAuctionBidModal()">
+                        <span>📋 낙찰 내역 창 열기</span>
+                    </button>
+                    <button class="sim-btn red" onclick="clearAuctionRecords()">
+                        <span>🗑️ 낙찰 기록 초기화</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 밑줄 즉시 긋기 및 화면 관리 -->
+            <div class="section-card">
+                <div class="section-title">🔴 밑줄 전송 & 화면 관리</div>
                 <div class="btn-group single-col" style="gap: 8px;">
                     <button class="sim-btn red" onclick="sendSeparatorFromHost()">
                         <span>🔴 진행자 밑줄 즉시 전송 (===================)</span>
@@ -651,13 +674,8 @@
                     <button class="sim-btn" id="btn-toggle-replay" onclick="toggleReplayMode()">
                         <span>🎬 다시보기 모드 시뮬레이션 (ON/OFF)</span>
                     </button>
-                </div>
-                <div class="btn-group" style="margin-top: 8px;">
                     <button class="sim-btn" onclick="clearChatMessages()">
                         <span>🧹 채팅창 비우기</span>
-                    </button>
-                    <button class="sim-btn" onclick="clearAuctionRecords()">
-                        <span>🗑️ 낙찰 기록 초기화</span>
                     </button>
                 </div>
             </div>
@@ -671,7 +689,8 @@
                 4. <strong>📁 기타 안내 ▼</strong>: 접기/펼치기 토글로 추가 공지문구 버튼 확인<br>
                 5. <strong>👑 낙찰자 하이라이터</strong>: 밑줄 전송 시 최고가 낙찰자 채팅에 골드 하이라이트 & 👑 낙찰 뱃지 자동 부착 및 포커스<br>
                 6. <strong>실시간 낙찰 자동화</strong>: 채팅창 메시지 클릭 시 스마트 감지 / 가상 키패드 팝업<br>
-                7. <strong>🚫 낙찰 재클릭 취소</strong>: 이미 선정된 낙찰자 채팅을 다시 클릭하면 확인창(Alert) 후 하이라이트 해제, 인풋창 비우기, 낙찰 내역 삭제가 즉시 취소 처리됩니다.
+                7. <strong>🚫 낙찰 재클릭 취소</strong>: 이미 선정된 낙찰자 채팅을 다시 클릭하면 확인창(Alert) 후 하이라이트 해제, 인풋창 비우기, 낙찰 내역 삭제가 즉시 취소 처리됩니다.<br>
+                8. <strong>📋 낙찰 내역 더미데이터</strong>: 5건/15건 더미 데이터를 즉시 생성하여 실시간 배지 증가, 닉네임별 묶음/소계, 엑셀 집계표/경매양식 다운로드를 원클릭으로 테스트할 수 있습니다.
             </div>
         </div>
     </aside>
@@ -843,17 +862,120 @@
             }
         }
 
-        /** 낙찰 기록 초기화 */
-        function clearAuctionRecords() {
-            localStorage.removeItem('__auction_bid_records');
-            const btn = document.getElementById('__auction_bid_list_btn');
-            if (btn) {
-                btn.innerHTML = `<span>📋 낙찰 내역</span><span class="__auction_badge" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5.5px;box-sizing:border-box;background:linear-gradient(180deg,#ff453a,#ff3b30);color:#fff;border-radius:9999px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;font-size:11px;font-weight:800;line-height:1;letter-spacing:-0.2px;box-shadow:0 1.5px 3px rgba(0,0,0,0.35);margin-left:2px;">0</span>`;
+        /** 낙찰 내역 모달 열기 */
+        function openAuctionBidModal() {
+            if (window.__AuctionAutomation && typeof window.__AuctionAutomation.openBidModal === 'function') {
+                window.__AuctionAutomation.openBidModal();
+                return;
             }
+            const modalBtn = document.getElementById('__auction_bid_list_btn');
+            if (modalBtn) {
+                modalBtn.click();
+            } else {
+                alert('낙찰 내역 버튼을 찾을 수 없습니다.');
+            }
+        }
+
+        /** 더미 낙찰 데이터 생성 및 추가 */
+        function addDummyBidRecords(count = 5) {
+            // 유저스크립트 내장 함수가 있으면 최우선 호출
+            if (window.__AuctionAutomation && typeof window.__AuctionAutomation.addDummyBidRecords === 'function') {
+                window.__AuctionAutomation.addDummyBidRecords(count);
+                const all = (window.__AuctionAutomation.loadBidRecords && window.__AuctionAutomation.loadBidRecords()) || [];
+                addChatMessage('해담분재경매장', `📥 [시뮬레이터] 더미 낙찰 내역 ${count}건이 추가되었습니다. (현재 총 ${all.length}건) 하단 [📋 낙찰 내역] 버튼을 확인해보세요!`, true);
+                return;
+            }
+
+            // 폴백: 시뮬레이터 자체 생성 로직
+            const num = Math.max(1, parseInt(count, 10) || 5);
+            let records = [];
+            try {
+                const raw = localStorage.getItem('__auction_bid_records');
+                records = raw ? JSON.parse(raw) : [];
+            } catch (e) { records = []; }
+
+            const DUMMY_SAMPLES = [
+                { nick: '솔향기', price: '8.5', chat: '8.5만', item: '해송 소품 분재' },
+                { nick: '소나무장인', price: '25', chat: '25', item: '진백 명품 사간형' },
+                { nick: '도예가', price: '4.5', chat: '4,5', item: '소품 왜철쭉' },
+                { nick: '황금송', price: '12', chat: '12만', item: '자연 문양 수석' },
+                { nick: '산그늘-y2y', price: '35', chat: '350,000원', item: '제주 팽나무 특선' },
+                { nick: '솔향기', price: '18.5', chat: '18.5만', item: '주목 고목 분재' },
+                { nick: '사랑아-g7d', price: '7', chat: '7만', item: '느릅나무 근상' },
+                { nick: '소나무장인', price: '15', chat: '15', item: '단풍나무 쌍간' },
+                { nick: '비키비키-k', price: '10.5', chat: '10만 5천', item: '소품 흑송' },
+                { nick: '청송매니아', price: '22', chat: '22만', item: '문인목 소나무' },
+                { nick: '도예가', price: '3', chat: '3', item: '야생화 화분 세트' },
+                { nick: '대박농원', price: '45', chat: '45만', item: '단풍나무 특대작' },
+                { nick: '솔향기', price: '6.5', chat: '65', item: '소품 진백' },
+                { nick: '괴목사랑', price: '16', chat: '16만', item: '명품 남수석' },
+                { nick: '초록정원', price: '5.5', chat: '.55', item: '석곡 착생목' }
+            ];
+
+            const today = new Date().toISOString().slice(0, 10);
+            const baseTs = Date.now() - (num * 90000);
+
+            for (let i = 0; i < num; i++) {
+                const sample = DUMMY_SAMPLES[i % DUMMY_SAMPLES.length];
+                const ts = baseTs + (i * 90000);
+                const d = new Date(ts);
+                const timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+                const vMin = String(Math.floor((i * 2 + 1))).padStart(2, '0');
+                const vSec = String((i * 17) % 60).padStart(2, '0');
+                const videoTime = `00:${vMin}:${vSec}`;
+                const itemText = sample.item ? `[${sample.item}] ` : '';
+
+                records.push({
+                    id: ts,
+                    blockKey: `dummy_sim_${ts}_${i + 1}`,
+                    date: today,
+                    time: videoTime,
+                    videoTime: videoTime,
+                    realTime: timeStr,
+                    videoId: 'unknown',
+                    nickname: sample.nick,
+                    price: sample.price,
+                    qty: 1,
+                    originalChat: sample.chat,
+                    message: `👉 @${sample.nick} ${sample.price}만 ${itemText}낙찰입니다. 축하드립니다!😄`
+                });
+            }
+
+            localStorage.setItem('__auction_bid_records', JSON.stringify(records));
+            if (window.__AuctionAutomation && typeof window.__AuctionAutomation.updateBidBadge === 'function') {
+                window.__AuctionAutomation.updateBidBadge();
+            } else {
+                const btn = document.getElementById('__auction_bid_list_btn');
+                if (btn) {
+                    const badge = btn.querySelector('.__auction_badge');
+                    if (badge) badge.textContent = String(records.length);
+                }
+            }
+
             try {
                 window.dispatchEvent(new Event('storage'));
+                window.postMessage({ type: '__AUCTION_BID_UPDATED', timestamp: Date.now() }, '*');
             } catch (e) {}
-            alert('낙찰 내역이 모두 초기화되었습니다.');
+
+            addChatMessage('해담분재경매장', `📥 [시뮬레이터] 더미 낙찰 내역 ${num}건이 추가되었습니다. (현재 총 ${records.length}건) 하단 [📋 낙찰 내역] 버튼을 확인해보세요!`, true);
+        }
+
+        /** 낙찰 기록 초기화 */
+        function clearAuctionRecords() {
+            if (window.__AuctionAutomation && typeof window.__AuctionAutomation.clearBidRecords === 'function') {
+                window.__AuctionAutomation.clearBidRecords();
+            } else {
+                localStorage.removeItem('__auction_bid_records');
+                const btn = document.getElementById('__auction_bid_list_btn');
+                if (btn) {
+                    btn.innerHTML = `<span>📋 낙찰 내역</span><span class="__auction_badge" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5.5px;box-sizing:border-box;background:linear-gradient(180deg,#ff453a,#ff3b30);color:#fff;border-radius:9999px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;font-size:11px;font-weight:800;line-height:1;letter-spacing:-0.2px;box-shadow:0 1.5px 3px rgba(0,0,0,0.35);margin-left:2px;">0</span>`;
+                }
+                try {
+                    window.dispatchEvent(new Event('storage'));
+                    window.postMessage({ type: '__AUCTION_BID_UPDATED', timestamp: Date.now() }, '*');
+                } catch (e) {}
+            }
+            addChatMessage('해담분재경매장', '🗑️ [시뮬레이터] 낙찰 내역이 모두 초기화되었습니다.', true);
         }
 
         /** 다시보기 모드 시뮬레이션 토글 */
