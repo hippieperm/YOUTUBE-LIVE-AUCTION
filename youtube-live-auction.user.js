@@ -5018,7 +5018,7 @@ ${xmlRows.join('')}
             const combined = values
                 .filter(item => item.val !== '')
                 .map(item => `${item.key}${item.val}`)
-                .join(' ');
+                .join(' · ');
 
             if (combined) {
                 const chatInput = findChatInput();
