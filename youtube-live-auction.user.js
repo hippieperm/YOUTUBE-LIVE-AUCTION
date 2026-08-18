@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Live 낙찰 자동화
 // @namespace    https://youtube.com/
-// @version      2.1
-// @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별(동일가 선착순 우선) + 스마트 입찰 금액 추출 + 정사각형 가상 키패드 + 실시간 플로팅 토스트 알림 + 안내 버튼 + 밑줄 버튼 + 낙찰 내역 관리 & CSV 다운로드
+// @version      2.2
+// @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별 & 낙찰자 채팅 하이라이터 + 스마트 입찰 금액 추출 + 가상 키패드 + 실시간 토스트 알림 + 안내 패널 + 낙찰 내역 관리 & 엑셀 다운로드
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
 // @match        https://www.youtube.com/live_chat*
@@ -1170,6 +1170,151 @@
     }
 
 
+    // =========================================================
+    // 낙찰자 채팅 하이라이트 스타일 주입 및 강조 표시
+    // =========================================================
+
+    const AUCTION_HIGHLIGHT_STYLE_ID = '__auction_highlight_styles';
+
+    /** 낙찰자 하이라이트 전용 스타일 주입 */
+    function injectAuctionHighlightStyles(targetDoc = null) {
+        const docs = targetDoc ? [targetDoc] : getTargetDocs();
+        const css = `
+            yt-live-chat-text-message-renderer.auction-winner-highlight,
+            yt-live-chat-paid-message-renderer.auction-winner-highlight,
+            yt-live-chat-membership-item-renderer.auction-winner-highlight,
+            .auction-winner-highlight {
+                position: relative !important;
+                background: linear-gradient(90deg, rgba(245, 158, 11, 0.32) 0%, rgba(251, 191, 36, 0.18) 60%, rgba(245, 158, 11, 0.06) 100%) !important;
+                border-left: 5px solid #f59e0b !important;
+                border-top: 1px solid rgba(245, 158, 11, 0.45) !important;
+                border-bottom: 1px solid rgba(245, 158, 11, 0.45) !important;
+                box-shadow: inset 0 0 14px rgba(245, 158, 11, 0.2), 0 2px 12px rgba(245, 158, 11, 0.3) !important;
+                border-radius: 4px !important;
+                transition: all 0.2s ease !important;
+                z-index: 10 !important;
+            }
+
+            .auction-winner-badge {
+                display: inline-flex !important;
+                align-items: center !important;
+                gap: 4px !important;
+                margin-left: 8px !important;
+                padding: 2px 8px !important;
+                font-size: 11px !important;
+                font-weight: 800 !important;
+                color: #ffffff !important;
+                background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+                border-radius: 4px !important;
+                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
+                vertical-align: middle !important;
+                letter-spacing: -0.2px !important;
+                line-height: 1.2 !important;
+                user-select: none !important;
+                white-space: nowrap !important;
+            }
+
+            .auction-winner-badge .badge-icon {
+                font-size: 12px !important;
+                line-height: 1 !important;
+            }
+        `;
+
+        docs.forEach(doc => {
+            if (!doc) return;
+            try {
+                let styleEl = doc.getElementById(AUCTION_HIGHLIGHT_STYLE_ID);
+                if (!styleEl) {
+                    styleEl = doc.createElement('style');
+                    styleEl.id = AUCTION_HIGHLIGHT_STYLE_ID;
+                    styleEl.textContent = css;
+                    const head = doc.head || doc.documentElement || doc.body;
+                    if (head) {
+                        head.appendChild(styleEl);
+                    }
+                }
+            } catch (e) {}
+        });
+    }
+
+    /**
+     * 채팅창 내 낙찰자 메시지 하이라이트 표시
+     * @param {Element|null} element - 낙찰된 채팅 DOM 요소
+     * @param {Object} winnerInfo - { nickname, priceStr, originalChat }
+     * @param {Document|null} targetDoc - 대상 document
+     */
+    function highlightWinnerChatMessage(element, winnerInfo = {}, targetDoc = null) {
+        injectAuctionHighlightStyles(targetDoc);
+
+        let targetEl = element;
+
+        // element가 없거나 연결이 끊어진 경우 닉네임 기준 역순 탐색
+        if (!targetEl || !targetEl.isConnected) {
+            const docs = targetDoc ? [targetDoc] : getTargetDocs();
+            for (const doc of docs) {
+                if (!doc) continue;
+                const chatItems = Array.from(
+                    doc.querySelectorAll(
+                        'yt-live-chat-text-message-renderer, ' +
+                        'yt-live-chat-paid-message-renderer, ' +
+                        'yt-live-chat-membership-item-renderer'
+                    )
+                );
+                for (let i = chatItems.length - 1; i >= 0; i--) {
+                    const item = chatItems[i];
+                    if (isHostOrSystemElement(item)) continue;
+                    const authorEl = findAuthor(item);
+                    const nick = getNickname(authorEl);
+                    if (nick && winnerInfo.nickname && nick.trim() === winnerInfo.nickname.trim()) {
+                        targetEl = item;
+                        break;
+                    }
+                }
+                if (targetEl) break;
+            }
+        }
+
+        if (!targetEl) {
+            console.log(PREFIX, '하이라이트 대상 요소를 찾지 못했습니다.');
+            return;
+        }
+
+        // 하이라이트 클래스 적용
+        targetEl.classList.add('auction-winner-highlight');
+
+        // 낙찰 뱃지 추가 (중복 방지)
+        if (!targetEl.querySelector('.auction-winner-badge')) {
+            const badge = (targetEl.ownerDocument || document).createElement('span');
+            badge.className = 'auction-winner-badge';
+            const priceText = winnerInfo.priceStr ? ` ${winnerInfo.priceStr}만` : '';
+            badge.innerHTML = `<span class="badge-icon">👑</span>낙찰${priceText}`;
+
+            const authorEl = targetEl.querySelector('#author-name') || targetEl.querySelector('yt-live-chat-author-chip');
+            if (authorEl && authorEl.parentNode) {
+                if (authorEl.nextSibling) {
+                    authorEl.parentNode.insertBefore(badge, authorEl.nextSibling);
+                } else {
+                    authorEl.parentNode.appendChild(badge);
+                }
+            } else {
+                const msgEl = targetEl.querySelector('#message');
+                if (msgEl && msgEl.parentNode) {
+                    msgEl.parentNode.insertBefore(badge, msgEl);
+                } else {
+                    targetEl.appendChild(badge);
+                }
+            }
+        }
+
+        // 부드럽게 스크롤하여 낙찰자 메시지 포커스
+        try {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (e) {}
+
+        console.log(PREFIX, '🏆 낙찰자 채팅 하이라이트 적용 완료:', winnerInfo.nickname || '', winnerInfo.priceStr ? winnerInfo.priceStr + '만' : '');
+    }
+
+
     /**
      * 밑줄 감지 시 자동 낙찰 처리
      */
@@ -1213,10 +1358,14 @@
                 message
             );
 
+            // 🏆 채팅창에서 최고가 낙찰자 하이라이트 적용
+            highlightWinnerChatMessage(winner.element, winner, targetDoc);
 
-            console.log(PREFIX, '인풋창 자동 입력 완료:', message);
+            console.log(PREFIX, '인풋창 자동 입력 및 채팅 하이라이트 완료:', message);
         } else {
             console.warn(PREFIX, '채팅 입력창을 찾지 못했습니다.');
+            // 입력창을 못 찾아도 하이라이트는 적용
+            highlightWinnerChatMessage(winner.element, winner, targetDoc);
         }
     }
 
@@ -4064,9 +4213,16 @@ ${xmlRows.join('')}
                 message
             );
 
+            // 🏆 채팅창에서 낙찰자 하이라이트 적용
+            highlightWinnerChatMessage(null, {
+                nickname: nickname,
+                priceStr: price,
+                originalChat: lastChatMessage || ''
+            });
+
             console.log(
                 PREFIX,
-                '가상 키패드 -> 인풋창 입력 완료:',
+                '가상 키패드 -> 인풋창 입력 및 하이라이트 완료:',
                 message
             );
 
@@ -4715,9 +4871,17 @@ ${xmlRows.join('')}
                     message
                 );
 
+                // 🏆 채팅창에서 낙찰자 하이라이트 적용
+                const chatItem = findChatMessageItem(event.target);
+                highlightWinnerChatMessage(chatItem, {
+                    nickname: nickname,
+                    priceStr: parsedPrice,
+                    originalChat: lastChatMessage || ''
+                });
+
                 console.log(
                     PREFIX,
-                    '숫자 감지 -> 인풋창 자동 입력 완료:',
+                    '숫자 감지 -> 인풋창 자동 입력 및 하이라이트 완료:',
                     message
                 );
 
@@ -4727,6 +4891,13 @@ ${xmlRows.join('')}
                     PREFIX,
                     '채팅 입력창을 찾지 못했습니다.'
                 );
+
+                const chatItem = findChatMessageItem(event.target);
+                highlightWinnerChatMessage(chatItem, {
+                    nickname: nickname,
+                    priceStr: parsedPrice,
+                    originalChat: lastChatMessage || ''
+                });
             }
 
         } else {
