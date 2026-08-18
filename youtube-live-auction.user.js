@@ -431,98 +431,6 @@
 
 
     /**
-     * 낙찰 내역 더미 데이터 일괄 생성 및 추가 (테스트 & 시뮬레이터 전용)
-     * @param {number} count - 생성할 더미 데이터 건수 (기본 5)
-     * @returns {Array} 생성되어 추가된 더미 레코드 배열
-     */
-    function addDummyBidRecords(count = 5) {
-        const records = loadBidRecords();
-        const currentVideoId = getCurrentVideoId();
-        const today = getTodayString();
-        const numCount = Math.max(1, parseInt(count, 10) || 5);
-
-        // 실전 경매 더미 데이터 풀 (품목명, 닉네임, 가격(만원), 원본채팅, 수량)
-        const DUMMY_SAMPLES = [
-            { nick: '솔향기', price: '8.5', chat: '8.5만', item: '해송 소품 분재' },
-            { nick: '소나무장인', price: '25', chat: '25', item: '진백 명품 사간형' },
-            { nick: '도예가', price: '4.5', chat: '4,5', item: '소품 왜철쭉' },
-            { nick: '황금송', price: '12', chat: '12만', item: '자연 문양 수석' },
-            { nick: '산그늘-y2y', price: '35', chat: '350,000원', item: '제주 팽나무 특선' },
-            { nick: '솔향기', price: '18.5', chat: '18.5만', item: '주목 고목 분재' },
-            { nick: '사랑아-g7d', price: '7', chat: '7만', item: '느릅나무 근상' },
-            { nick: '소나무장인', price: '15', chat: '15', item: '단풍나무 쌍간' },
-            { nick: '비키비키-k', price: '10.5', chat: '10만 5천', item: '소품 흑송' },
-            { nick: '청송매니아', price: '22', chat: '22만', item: '문인목 소나무' },
-            { nick: '도예가', price: '3', chat: '3', item: '야생화 화분 세트' },
-            { nick: '대박농원', price: '45', chat: '45만', item: '단풍나무 특대작' },
-            { nick: '솔향기', price: '6.5', chat: '65', item: '소품 진백' },
-            { nick: '괴목사랑', price: '16', chat: '16만', item: '명품 남수석' },
-            { nick: '초록정원', price: '5.5', chat: '.55', item: '석곡 착생목' },
-            { nick: '푸른언덕', price: '28', chat: '28만', item: '해송 취목 대작' },
-            { nick: '백년송', price: '14', chat: '140000원', item: '소사나무 분재' },
-            { nick: '청솔마니아', price: '9.5', chat: '9.5만', item: '철쭉 분재 명품' },
-            { nick: '도예가', price: '50', chat: '50만', item: '특선 괴목 탁자' },
-            { nick: '소나무장인', price: '32.5', chat: '325', item: '진백 명품 반현애' }
-        ];
-
-        const baseTimestamp = Date.now() - (numCount * 90000);
-        const createdRecords = [];
-
-        for (let i = 0; i < numCount; i++) {
-            const sample = DUMMY_SAMPLES[i % DUMMY_SAMPLES.length];
-            const recordTimestamp = baseTimestamp + (i * 90000) + Math.floor(Math.random() * 20000);
-            
-            // 영상 시간 (예: 00:03:20, 00:05:10 ...)
-            const videoSec = (i + 1) * 90 + Math.floor(Math.random() * 40);
-            const videoTimeStr = formatVideoTime(videoSec);
-            
-            const recordDate = new Date(recordTimestamp);
-            const realTimeStr = 
-                String(recordDate.getHours()).padStart(2, '0') + ':' +
-                String(recordDate.getMinutes()).padStart(2, '0') + ':' +
-                String(recordDate.getSeconds()).padStart(2, '0');
-
-            const itemText = sample.item ? `[${sample.item}] ` : '';
-            const newRecord = {
-                id: recordTimestamp,
-                blockKey: `dummy_bid_${recordTimestamp}_${i + 1}`,
-                date: today,
-                time: videoTimeStr || realTimeStr,
-                videoTime: videoTimeStr || realTimeStr,
-                realTime: realTimeStr,
-                videoId: currentVideoId,
-                nickname: sample.nick,
-                price: sample.price,
-                qty: 1,
-                originalChat: sample.chat,
-                message: `👉 @${sample.nick} ${sample.price}만 ${itemText}낙찰입니다. 축하드립니다!😄`
-            };
-
-            records.push(newRecord);
-            createdRecords.push(newRecord);
-        }
-
-        saveBidRecords(records);
-        updateBidBadge();
-
-        console.log(PREFIX, `📥 [더미 데이터 추가 완료] +${numCount}건 (총 ${records.length}건)`);
-        
-        // 토스트 알림
-        if (typeof showAuctionToast === 'function') {
-            showAuctionToast(`📥 더미 낙찰 데이터 ${numCount}건이 추가되었습니다. (총 ${records.length}건)`, 'success');
-        }
-
-        // 모달이 열려 있다면 즉시 갱신
-        const modal = document.getElementById('__auction_bid_modal');
-        if (modal) {
-            openBidListModal();
-        }
-
-        return createdRecords;
-    }
-
-
-    /**
      * 특정 경매 블록 또는 닉네임의 낙찰 기록 취소/삭제
      * @param {string|null} blockKey - 경매 블록 키 (예: "round_1")
      * @param {string|null} nickname - 낙찰자 닉네임
@@ -617,70 +525,16 @@
     }
 
 
-    /** 낙찰 내역 버튼 내부 콘텐츠 (iOS 스타일 배지 포함) 렌더링 */
-    function renderBidButtonContent(btn, count = 0) {
-        if (!btn) return;
-        injectAuctionHighlightStyles(btn.ownerDocument || document);
-
-        const num = Number(count) || 0;
-        const prevCountAttr = btn.getAttribute('data-bid-count');
-        const hasPrev = prevCountAttr !== null && prevCountAttr !== '';
-        const prevNum = hasPrev ? Number(prevCountAttr) : null;
-        const isChanged = hasPrev && prevNum !== num;
-
-        btn.setAttribute('data-bid-count', String(num));
-
-        const animBadgeStyle = isChanged
-            ? 'animation: auctionBadgePop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both !important;'
-            : '';
-
-        btn.innerHTML = `<span>📋 낙찰 내역</span><span class="__auction_badge" style="
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            min-width: 18px !important;
-            height: 18px !important;
-            padding: 0 5.5px !important;
-            box-sizing: border-box !important;
-            background: linear-gradient(180deg, #ff453a 0%, #ff3b30 100%) !important;
-            color: #ffffff !important;
-            border-radius: 9999px !important;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', Roboto, 'Segoe UI', sans-serif !important;
-            font-size: 11px !important;
-            font-weight: 800 !important;
-            line-height: 1 !important;
-            letter-spacing: -0.2px !important;
-            box-shadow: 0 1.5px 3px rgba(0,0,0,0.35), inset 0 0.5px 0.5px rgba(255,255,255,0.4) !important;
-            vertical-align: middle !important;
-            margin-left: 2px !important;
-            flex-shrink: 0 !important;
-            transform-origin: center center !important;
-            will-change: transform, box-shadow !important;
-            ${animBadgeStyle}
-        ">${num}</span>`;
-
-        if (isChanged) {
-            btn.style.animation = 'none';
-            void btn.offsetHeight; // reflow
-            btn.style.animation = 'auctionBtnPulse 0.6s ease-out';
-            setTimeout(() => {
-                try {
-                    btn.style.animation = '';
-                } catch (e) {}
-            }, 650);
-        }
-    }
-
-
     /** 낙찰 배지 업데이트 (메인창 + iframe + 플로팅 버튼 전역 동기화) */
     function updateBidBadge() {
 
         const count = getTodayBidRecords().length;
+        const text = `📋 낙찰 내역 (${count}건)`;
 
         // 1) 현재 document에서 탐색
         const btn = document.getElementById('__auction_bid_list_btn');
         if (btn) {
-            renderBidButtonContent(btn, count);
+            btn.textContent = text;
         }
 
         // 2) iframe 내부에서도 탐색
@@ -689,7 +543,7 @@
             if (iframe && iframe.contentDocument) {
                 const iframeBtn = iframe.contentDocument.getElementById('__auction_bid_list_btn');
                 if (iframeBtn) {
-                    renderBidButtonContent(iframeBtn, count);
+                    iframeBtn.textContent = text;
                 }
             }
         } catch (e) {}
@@ -698,9 +552,9 @@
         try {
             if (window.top && window.top !== window && window.top.document) {
                 const topBtn = window.top.document.getElementById('__auction_bid_list_btn');
-                if (topBtn) renderBidButtonContent(topBtn, count);
+                if (topBtn) topBtn.textContent = text;
                 const topFloatBtn = window.top.document.getElementById('__auction_floating_bid_btn');
-                if (topFloatBtn) renderBidButtonContent(topFloatBtn, count);
+                if (topFloatBtn) topFloatBtn.textContent = text;
             }
         } catch (e) {}
 
@@ -1922,46 +1776,6 @@
                 font-size: 12px !important;
                 line-height: 1 !important;
             }
-
-            @keyframes auctionBadgePop {
-                0% {
-                    transform: scale(1);
-                    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.35);
-                    filter: brightness(1);
-                }
-                30% {
-                    transform: scale(1.48);
-                    box-shadow: 0 0 16px #ff3b30, 0 0 28px rgba(255, 59, 48, 0.75);
-                    filter: brightness(1.35);
-                }
-                60% {
-                    transform: scale(0.86);
-                    box-shadow: 0 0 8px rgba(255, 59, 48, 0.4);
-                }
-                80% {
-                    transform: scale(1.14);
-                }
-                100% {
-                    transform: scale(1);
-                    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.35);
-                    filter: brightness(1);
-                }
-            }
-
-            @keyframes auctionBtnPulse {
-                0% {
-                    box-shadow: 0 0 0 rgba(255, 204, 0, 0);
-                    border-color: rgba(255, 204, 0, 0.28);
-                }
-                35% {
-                    box-shadow: 0 0 16px rgba(255, 204, 0, 0.6);
-                    border-color: rgba(255, 204, 0, 0.85);
-                }
-                100% {
-                    box-shadow: 0 0 0 rgba(255, 204, 0, 0);
-                    border-color: rgba(255, 204, 0, 0.28);
-                }
-            }
         `;
 
         docs.forEach(doc => {
@@ -2564,7 +2378,7 @@
         const count = getTodayBidRecords().length;
         const totalAll = loadBidRecords().length;
         const displayCount = count > 0 ? count : totalAll;
-        renderBidButtonContent(btn, displayCount);
+        btn.textContent = `📋 낙찰 내역 (${displayCount}건)`;
 
         btn.addEventListener('mouseenter', () => {
             btn.style.transform = 'translateY(-2px) scale(1.02)';
@@ -2622,7 +2436,7 @@
         }
 
         const todayRecords = getTodayBidRecords();
-        renderBidButtonContent(btn, todayRecords.length);
+        btn.textContent = `📋 낙찰 내역 (${todayRecords.length}건)`;
 
         // 안내 패널이 활성화되어 있으면 채팅창 내 버튼이 있으므로 플로팅 숨김,
         // 방송이 종료되거나 채팅창이 닫혀 안내 패널이 없을 때 플로팅 버튼 노출
@@ -3267,7 +3081,7 @@
                         const fc = rview.getUint16(2, true);
                         const lc = rview.getUint16(rdata.length - 2, true);
                         const itemIdx = row - 7;
-                        if (itemIdx >= 1 && itemIdx < sampleBids.length && fc === 2 && lc >= 8) {
+                        if (itemIdx >= 1 && itemIdx < sampleBids.length && fc === 2 && (lc === 8 || lc === 9)) {
                             const bid = sampleBids[itemIdx];
                             const count = lc - fc + 1;
                             const xfs = [];
@@ -3285,22 +3099,30 @@
                             // col 7: 낙찰자 (LABEL)
                             const bidderRec = createLabelRecord(row, 7, xfs[5], bid.bidder);
 
-                            let remRec;
+                            let combined;
                             if (lc === 8) {
-                                remRec = createBlankRecord(row, 8, xfs[6]);
+                                const b8 = createBlankRecord(row, 8, xfs[6]);
+                                const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + b8.length;
+                                combined = new Uint8Array(totalL);
+                                let offset = 0;
+                                combined.set(b2, offset); offset += b2.length;
+                                combined.set(qtyRec, offset); offset += qtyRec.length;
+                                combined.set(mb4_5, offset); offset += mb4_5.length;
+                                combined.set(priceRec, offset); offset += priceRec.length;
+                                combined.set(bidderRec, offset); offset += bidderRec.length;
+                                combined.set(b8, offset);
                             } else {
-                                remRec = createMulblankRecord(row, 8, lc, xfs.slice(6));
+                                const mb8_9 = createMulblankRecord(row, 8, 9, [xfs[6], xfs[7]]);
+                                const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + mb8_9.length;
+                                combined = new Uint8Array(totalL);
+                                let offset = 0;
+                                combined.set(b2, offset); offset += b2.length;
+                                combined.set(qtyRec, offset); offset += qtyRec.length;
+                                combined.set(mb4_5, offset); offset += mb4_5.length;
+                                combined.set(priceRec, offset); offset += priceRec.length;
+                                combined.set(bidderRec, offset); offset += bidderRec.length;
+                                combined.set(mb8_9, offset);
                             }
-                            const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + remRec.length;
-                            const combined = new Uint8Array(totalL);
-                            let offset = 0;
-                            combined.set(b2, offset); offset += b2.length;
-                            combined.set(qtyRec, offset); offset += qtyRec.length;
-                            combined.set(mb4_5, offset); offset += mb4_5.length;
-                            combined.set(priceRec, offset); offset += priceRec.length;
-                            combined.set(bidderRec, offset); offset += bidderRec.length;
-                            combined.set(remRec, offset);
-
                             newRecords.push({ raw: combined });
                             continue;
                         }
@@ -7740,12 +7562,9 @@ ${xmlRows.join('')}
                     color:#e8c56d !important;
                     cursor:pointer !important;
                     font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
-                    font-size:11.5px !important;
+                    font-size:11px !important;
                     font-weight:700 !important;
-                    display:flex !important;
-                    align-items:center !important;
-                    justify-content:center !important;
-                    gap:6px !important;
+                    line-height:30px !important;
                     white-space:nowrap !important;
                     overflow:hidden !important;
                     text-overflow:ellipsis !important;
@@ -7754,7 +7573,7 @@ ${xmlRows.join('')}
             }
         );
         const initCount = getTodayBidRecords().length;
-        renderBidButtonContent(bidListBtn, initCount);
+        bidListBtn.textContent = `📋 낙찰 내역 (${initCount}건)`;
 
         bidListBtn.addEventListener('mouseenter', () => {
             bidListBtn.style.background = 'rgba(255,204,0,.18)';
@@ -8551,28 +8370,6 @@ ${xmlRows.join('')}
         startUIObserver();
         setupChatObserver();
         updateBidBadge();
-
-        // 시뮬레이터 및 외부 개발/테스트용 브릿지 API 노출
-        try {
-            window.__AuctionAutomation = {
-                version: '2.5',
-                openBidModal: openBidListModal,
-                removeBidModal: removeBidListUI,
-                updateBidBadge: updateBidBadge,
-                loadBidRecords: loadBidRecords,
-                saveBidRecords: saveBidRecords,
-                addBidRecord: addBidRecord,
-                removeBidRecord: removeBidRecord,
-                getTodayBidRecords: getTodayBidRecords,
-                addDummyBidRecords: addDummyBidRecords,
-                clearBidRecords: () => {
-                    saveBidRecords([]);
-                    updateBidBadge();
-                    const modal = document.getElementById('__auction_bid_modal');
-                    if (modal) openBidListModal();
-                }
-            };
-        } catch (e) {}
 
         console.log(
             PREFIX,
