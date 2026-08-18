@@ -4870,21 +4870,12 @@ ${xmlRows.join('')}
             hoverText: '#fbb3d0'
         },
 
-        '📁 기타 안내 ▼': {
+        '📁': {
             bg: 'rgba(255,255,255,.06)',
             border: 'rgba(255,255,255,.16)',
-            text: 'rgba(255,255,255,.75)',
-            hoverBg: 'rgba(255,255,255,.12)',
-            hoverBorder: 'rgba(255,255,255,.28)',
-            hoverText: '#fff'
-        },
-
-        '📁 기타 닫기 ▲': {
-            bg: 'rgba(255,255,255,.09)',
-            border: 'rgba(255,255,255,.22)',
-            text: 'rgba(255,255,255,.9)',
-            hoverBg: 'rgba(255,255,255,.16)',
-            hoverBorder: 'rgba(255,255,255,.35)',
+            text: 'rgba(255,255,255,.85)',
+            hoverBg: 'rgba(255,255,255,.14)',
+            hoverBorder: 'rgba(255,255,255,.30)',
             hoverText: '#fff'
         }
     };
@@ -5664,14 +5655,11 @@ ${xmlRows.join('')}
                 }
                 const btn = doc.getElementById('__auction_more_toggle_btn');
                 if (btn) {
-                    const labelText = '📁 기타 안내 ▼';
-                    btn.textContent = labelText;
-                    const colors = GUIDE_COLORS[labelText];
-                    if (colors) {
-                        btn.style.background = colors.bg;
-                        btn.style.borderColor = colors.border;
-                        btn.style.color = colors.text;
-                    }
+                    btn.textContent = '📁';
+                    btn.title = '기타 안내 문구 열기';
+                    btn.style.background = 'rgba(255,255,255,.06)';
+                    btn.style.borderColor = 'rgba(255,255,255,.16)';
+                    btn.style.color = 'rgba(255,255,255,.85)';
                 }
             } catch (e) {}
         });
@@ -5891,7 +5879,7 @@ ${xmlRows.join('')}
 
 
     // =========================================================
-    // 안내 버튼 영역 생성 (메인: 규격/가격/기타토글 + 펼침: 기타 8종)
+    // 안내 버튼 영역 생성 (메인: 규격/가격/정사각형 토글 + 펼침: 기타 8종)
     // =========================================================
 
     let _isMorePanelOpen = false;
@@ -6005,7 +5993,7 @@ ${xmlRows.join('')}
         // =====================================================
         // 버튼 구성:
         // 0행: 낙찰 내역 관리 버튼 (full-width, 고정)
-        // 1행: 메인 상시 노출 3개 (📐 규격입력, 💰 가격입력, 📁 기타 안내 ▼)
+        // 1행: 메인 상시 노출 (📐 규격입력, 💰 가격입력, 📁 정사각형 토글 버튼)
         // 펼침 영역: 8종 안내 버튼 (클릭 시 자동 닫힘)
         // =====================================================
 
@@ -6068,11 +6056,12 @@ ${xmlRows.join('')}
         panel.appendChild(bidListBtn);
 
 
-        // 1행: 메인 상시 노출 3개 버튼 (📐 규격입력, 💰 가격입력, 📁 기타 안내 ▼)
+        // 1행: 메인 상시 노출 버튼 (📐 규격입력, 💰 가격입력, 📁 정사각형 토글)
         const row1 = createElement('div', {
             style: `
                 width:100% !important;
                 display:flex !important;
+                align-items:center !important;
                 gap:5px !important;
             `
         });
@@ -6115,25 +6104,33 @@ ${xmlRows.join('')}
             moreContainer.appendChild(btn);
         });
 
+        // 📁 정사각형 토글 버튼 (텍스트 없이 아이콘만)
         const moreBtn = createGuideButton(
-            _isMorePanelOpen ? '📁 기타 닫기 ▲' : '📁 기타 안내 ▼',
+            '📁',
             null,
             () => {
                 _isMorePanelOpen = !_isMorePanelOpen;
                 if (moreContainer) {
                     moreContainer.style.display = _isMorePanelOpen ? 'flex' : 'none';
                 }
-                const labelText = _isMorePanelOpen ? '📁 기타 닫기 ▲' : '📁 기타 안내 ▼';
-                moreBtn.textContent = labelText;
-                const colors = GUIDE_COLORS[labelText];
-                if (colors) {
-                    moreBtn.style.background = colors.bg;
-                    moreBtn.style.borderColor = colors.border;
-                    moreBtn.style.color = colors.text;
-                }
+                moreBtn.title = _isMorePanelOpen ? '기타 안내 문구 닫기' : '기타 안내 문구 열기';
+                moreBtn.style.background = _isMorePanelOpen ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.06)';
+                moreBtn.style.borderColor = _isMorePanelOpen ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.16)';
             }
         );
         moreBtn.id = '__auction_more_toggle_btn';
+        moreBtn.title = '기타 안내 문구 열기';
+        // 정사각형 모양 스타일 강제 지정
+        moreBtn.style.flex = '0 0 32px';
+        moreBtn.style.width = '32px';
+        moreBtn.style.minWidth = '32px';
+        moreBtn.style.maxWidth = '32px';
+        moreBtn.style.height = '32px';
+        moreBtn.style.padding = '0';
+        moreBtn.style.fontSize = '14px';
+        moreBtn.style.display = 'flex';
+        moreBtn.style.alignItems = 'center';
+        moreBtn.style.justifyContent = 'center';
 
         row1.appendChild(moreBtn);
         panel.appendChild(row1);
