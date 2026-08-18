@@ -1304,17 +1304,31 @@
     // UI 제거
     // =========================================================
 
-    function removeAuctionUI() {
+    function removeCustomModals() {
         const docs = getTargetDocs();
         docs.forEach(doc => {
             try {
                 if (!doc) return;
-                const modal = doc.getElementById('__auction_auto_modal');
-                const backdrop = doc.getElementById('__auction_auto_backdrop');
-                if (modal) modal.remove();
-                if (backdrop) backdrop.remove();
+                const ids = [
+                    '__auction_auto_modal',
+                    '__auction_auto_backdrop',
+                    '__auction_spec_modal',
+                    '__auction_spec_backdrop',
+                    '__auction_price_choice_modal',
+                    '__auction_price_choice_backdrop',
+                    '__auction_price_amount_modal',
+                    '__auction_price_amount_backdrop'
+                ];
+                ids.forEach(id => {
+                    const el = doc.getElementById(id);
+                    if (el) el.remove();
+                });
             } catch (e) {}
         });
+    }
+
+    function removeAuctionUI() {
+        removeCustomModals();
     }
 
 
@@ -4757,6 +4771,24 @@ ${xmlRows.join('')}
 
     const GUIDE_COLORS = {
 
+        '📐 규격입력': {
+            bg: 'rgba(6,182,212,.12)',
+            border: 'rgba(6,182,212,.38)',
+            text: '#38bdf8',
+            hoverBg: 'rgba(6,182,212,.24)',
+            hoverBorder: 'rgba(6,182,212,.60)',
+            hoverText: '#bae6fd'
+        },
+
+        '💰 가격입력': {
+            bg: 'rgba(234,179,8,.12)',
+            border: 'rgba(234,179,8,.38)',
+            text: '#facc15',
+            hoverBg: 'rgba(234,179,8,.24)',
+            hoverBorder: 'rgba(234,179,8,.60)',
+            hoverText: '#fef08a'
+        },
+
         '👤 회원등록': {
             bg: 'rgba(80,140,220,.10)',
             border: 'rgba(80,140,220,.28)',
@@ -4767,6 +4799,15 @@ ${xmlRows.join('')}
         },
 
         '💰 호가': {
+            bg: 'rgba(220,170,50,.10)',
+            border: 'rgba(220,170,50,.28)',
+            text: '#e8c56d',
+            hoverBg: 'rgba(220,170,50,.20)',
+            hoverBorder: 'rgba(220,170,50,.45)',
+            hoverText: '#f5dc94'
+        },
+
+        '💰 호가 안내': {
             bg: 'rgba(220,170,50,.10)',
             border: 'rgba(220,170,50,.28)',
             text: '#e8c56d',
@@ -4827,17 +4868,794 @@ ${xmlRows.join('')}
             hoverBg: 'rgba(220,80,130,.20)',
             hoverBorder: 'rgba(220,80,130,.45)',
             hoverText: '#fbb3d0'
+        },
+
+        '📁 기타 안내 ▼': {
+            bg: 'rgba(255,255,255,.06)',
+            border: 'rgba(255,255,255,.16)',
+            text: 'rgba(255,255,255,.75)',
+            hoverBg: 'rgba(255,255,255,.12)',
+            hoverBorder: 'rgba(255,255,255,.28)',
+            hoverText: '#fff'
+        },
+
+        '📁 기타 닫기 ▲': {
+            bg: 'rgba(255,255,255,.09)',
+            border: 'rgba(255,255,255,.22)',
+            text: 'rgba(255,255,255,.9)',
+            hoverBg: 'rgba(255,255,255,.16)',
+            hoverBorder: 'rgba(255,255,255,.35)',
+            hoverText: '#fff'
         }
     };
 
 
     // =========================================================
-    // 안내 버튼 스타일
+    // 📐 규격 입력 모달
+    // =========================================================
+
+    function openSpecModal() {
+        removeCustomModals();
+
+        let targetDoc = document;
+        try {
+            if (window.top && window.top.document && window.top.document.body) {
+                targetDoc = window.top.document;
+            }
+        } catch (e) {
+            targetDoc = document;
+        }
+
+        const backdrop = createElement('div', {
+            id: '__auction_spec_backdrop',
+            style: `
+                position:fixed !important;
+                inset:0 !important;
+                width:100vw !important;
+                height:100vh !important;
+                background:rgba(0,0,0,.62) !important;
+                backdrop-filter:blur(5px) !important;
+                -webkit-backdrop-filter:blur(5px) !important;
+                z-index:2147483646 !important;
+                opacity:1 !important;
+                visibility:visible !important;
+                pointer-events:auto !important;
+            `
+        });
+
+        backdrop.addEventListener('click', (e) => {
+            if (e.target === backdrop) {
+                removeCustomModals();
+            }
+        });
+
+        const modal = createElement('div', {
+            id: '__auction_spec_modal',
+            style: `
+                position:fixed !important;
+                left:50% !important;
+                top:50% !important;
+                transform:translate(-50%,-50%) !important;
+                width:300px !important;
+                max-width:calc(100vw - 24px) !important;
+                box-sizing:border-box !important;
+                padding:16px 18px !important;
+                background:linear-gradient(145deg, rgba(30,32,38,.98), rgba(18,20,24,.99)) !important;
+                color:#fff !important;
+                border:1px solid rgba(56,189,248,.32) !important;
+                border-radius:16px !important;
+                box-shadow:0 25px 80px rgba(0,0,0,.8), 0 0 20px rgba(56,189,248,.12) !important;
+                z-index:2147483647 !important;
+                display:flex !important;
+                flex-direction:column !important;
+                gap:12px !important;
+                font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+            `
+        });
+
+        // Header
+        const header = createElement('div', {
+            style: `
+                display:flex !important;
+                align-items:center !important;
+                justify-content:space-between !important;
+                padding-bottom:10px !important;
+                border-bottom:1px solid rgba(255,255,255,.1) !important;
+            `
+        });
+
+        const title = createElement('div', {
+            text: '📐 규격 입력',
+            style: `
+                font-size:15px !important;
+                font-weight:800 !important;
+                color:#7dd3fc !important;
+                letter-spacing:-0.3px !important;
+            `
+        });
+
+        const closeBtn = createElement('button', {
+            type: 'button',
+            text: '✕',
+            style: `
+                background:transparent !important;
+                border:none !important;
+                color:rgba(255,255,255,.6) !important;
+                font-size:16px !important;
+                cursor:pointer !important;
+                padding:2px 6px !important;
+                border-radius:6px !important;
+                line-height:1 !important;
+                transition:all .15s ease !important;
+            `
+        });
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.color = '#fff';
+            closeBtn.style.background = 'rgba(255,255,255,.1)';
+        });
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.color = 'rgba(255,255,255,.6)';
+            closeBtn.style.background = 'transparent';
+        });
+        closeBtn.addEventListener('click', () => removeCustomModals());
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        modal.appendChild(header);
+
+        // Fields Container
+        const formContainer = createElement('div', {
+            style: `
+                display:flex !important;
+                flex-direction:column !important;
+                gap:8px !important;
+            `
+        });
+
+        const specFields = [
+            { key: '수고', placeholder: '수고 (예: 50)' },
+            { key: '폭',   placeholder: '폭 (예: 30)' },
+            { key: '높이', placeholder: '높이 (예: 20)' },
+            { key: '목대', placeholder: '목대 (예: 15)' },
+            { key: '근장', placeholder: '근장 (예: 8)' }
+        ];
+
+        const inputs = [];
+
+        // 전송 / 주입 핸들러
+        const submitSpec = () => {
+            const values = inputs.map(item => ({
+                key: item.key,
+                val: item.input.value.trim()
+            }));
+
+            const combined = values
+                .filter(item => item.val !== '')
+                .map(item => `${item.key}${item.val}`)
+                .join(' ');
+
+            if (combined) {
+                const chatInput = findChatInput();
+                if (chatInput) {
+                    setChatInput(chatInput, combined);
+                    chatInput.focus();
+                    showAuctionToast(`📐 규격 입력 완료: ${combined}`, 'guide');
+                } else {
+                    console.warn(PREFIX, '채팅 입력창을 찾지 못했습니다.');
+                }
+            }
+            removeCustomModals();
+        };
+
+        specFields.forEach((field) => {
+            const row = createElement('div', {
+                style: `
+                    display:flex !important;
+                    align-items:center !important;
+                    justify-content:space-between !important;
+                    gap:10px !important;
+                `
+            });
+
+            const label = createElement('span', {
+                text: field.key,
+                style: `
+                    width:42px !important;
+                    font-size:13px !important;
+                    font-weight:700 !important;
+                    color:#e2e8f0 !important;
+                `
+            });
+
+            const inputEl = createElement('input', {
+                type: 'text',
+                inputmode: 'decimal',
+                placeholder: field.placeholder,
+                style: `
+                    flex:1 !important;
+                    height:34px !important;
+                    box-sizing:border-box !important;
+                    padding:0 10px !important;
+                    background:rgba(255,255,255,.07) !important;
+                    border:1px solid rgba(255,255,255,.16) !important;
+                    border-radius:8px !important;
+                    color:#fff !important;
+                    font-size:13.5px !important;
+                    font-weight:600 !important;
+                    outline:none !important;
+                    transition:border-color .15s ease, background .15s ease !important;
+                `
+            });
+
+            inputEl.addEventListener('focus', () => {
+                inputEl.style.borderColor = '#38bdf8';
+                inputEl.style.background = 'rgba(56,189,248,.12)';
+            });
+
+            inputEl.addEventListener('blur', () => {
+                inputEl.style.borderColor = 'rgba(255,255,255,.16)';
+                inputEl.style.background = 'rgba(255,255,255,.07)';
+            });
+
+            inputEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitSpec();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    removeCustomModals();
+                }
+            });
+
+            row.appendChild(label);
+            row.appendChild(inputEl);
+            formContainer.appendChild(row);
+
+            inputs.push({ key: field.key, input: inputEl });
+        });
+
+        modal.appendChild(formContainer);
+
+        // Submit Button
+        const submitBtn = createElement('button', {
+            type: 'button',
+            text: '📤 규격 전송',
+            style: `
+                width:100% !important;
+                height:38px !important;
+                margin-top:4px !important;
+                background:linear-gradient(135deg, rgba(6,182,212,.3), rgba(14,165,233,.4)) !important;
+                border:1px solid rgba(56,189,248,.45) !important;
+                border-radius:10px !important;
+                color:#e0f2fe !important;
+                font-size:13px !important;
+                font-weight:750 !important;
+                cursor:pointer !important;
+                transition:all .15s ease !important;
+                letter-spacing:-0.2px !important;
+            `
+        });
+
+        submitBtn.addEventListener('mouseenter', () => {
+            submitBtn.style.background = 'linear-gradient(135deg, rgba(6,182,212,.45), rgba(14,165,233,.6))';
+            submitBtn.style.borderColor = '#38bdf8';
+            submitBtn.style.color = '#fff';
+            submitBtn.style.transform = 'translateY(-1px)';
+        });
+        submitBtn.addEventListener('mouseleave', () => {
+            submitBtn.style.background = 'linear-gradient(135deg, rgba(6,182,212,.3), rgba(14,165,233,.4))';
+            submitBtn.style.borderColor = 'rgba(56,189,248,.45)';
+            submitBtn.style.color = '#e0f2fe';
+            submitBtn.style.transform = 'translateY(0)';
+        });
+        submitBtn.addEventListener('mousedown', () => {
+            submitBtn.style.transform = 'scale(.98)';
+        });
+        submitBtn.addEventListener('mouseup', () => {
+            submitBtn.style.transform = 'scale(1)';
+        });
+        submitBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            submitSpec();
+        });
+
+        modal.appendChild(submitBtn);
+
+        const mountTarget = targetDoc.body || targetDoc.documentElement;
+        mountTarget.appendChild(backdrop);
+        mountTarget.appendChild(modal);
+
+        // 첫 번째 입력칸(수고) 자동 포커스
+        setTimeout(() => {
+            if (inputs[0] && inputs[0].input) {
+                inputs[0].input.focus();
+            }
+        }, 40);
+    }
+
+
+    // =========================================================
+    // 💰 가격 입력 선택 모달 (최고가 / 이상 / 일반)
+    // =========================================================
+
+    function openPriceChoiceModal() {
+        removeCustomModals();
+
+        let targetDoc = document;
+        try {
+            if (window.top && window.top.document && window.top.document.body) {
+                targetDoc = window.top.document;
+            }
+        } catch (e) {
+            targetDoc = document;
+        }
+
+        const backdrop = createElement('div', {
+            id: '__auction_price_choice_backdrop',
+            style: `
+                position:fixed !important;
+                inset:0 !important;
+                width:100vw !important;
+                height:100vh !important;
+                background:rgba(0,0,0,.62) !important;
+                backdrop-filter:blur(5px) !important;
+                -webkit-backdrop-filter:blur(5px) !important;
+                z-index:2147483646 !important;
+                opacity:1 !important;
+                visibility:visible !important;
+                pointer-events:auto !important;
+            `
+        });
+
+        backdrop.addEventListener('click', (e) => {
+            if (e.target === backdrop) {
+                removeCustomModals();
+            }
+        });
+
+        const modal = createElement('div', {
+            id: '__auction_price_choice_modal',
+            style: `
+                position:fixed !important;
+                left:50% !important;
+                top:50% !important;
+                transform:translate(-50%,-50%) !important;
+                width:280px !important;
+                max-width:calc(100vw - 24px) !important;
+                box-sizing:border-box !important;
+                padding:16px 18px !important;
+                background:linear-gradient(145deg, rgba(30,32,38,.98), rgba(18,20,24,.99)) !important;
+                color:#fff !important;
+                border:1px solid rgba(234,179,8,.32) !important;
+                border-radius:16px !important;
+                box-shadow:0 25px 80px rgba(0,0,0,.8), 0 0 20px rgba(234,179,8,.12) !important;
+                z-index:2147483647 !important;
+                display:flex !important;
+                flex-direction:column !important;
+                gap:12px !important;
+                font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+            `
+        });
+
+        // Header
+        const header = createElement('div', {
+            style: `
+                display:flex !important;
+                align-items:center !important;
+                justify-content:space-between !important;
+                padding-bottom:10px !important;
+                border-bottom:1px solid rgba(255,255,255,.1) !important;
+            `
+        });
+
+        const title = createElement('div', {
+            text: '💰 가격 입력 선택',
+            style: `
+                font-size:15px !important;
+                font-weight:800 !important;
+                color:#fde047 !important;
+                letter-spacing:-0.3px !important;
+            `
+        });
+
+        const closeBtn = createElement('button', {
+            type: 'button',
+            text: '✕',
+            style: `
+                background:transparent !important;
+                border:none !important;
+                color:rgba(255,255,255,.6) !important;
+                font-size:16px !important;
+                cursor:pointer !important;
+                padding:2px 6px !important;
+                border-radius:6px !important;
+                line-height:1 !important;
+                transition:all .15s ease !important;
+            `
+        });
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.color = '#fff';
+            closeBtn.style.background = 'rgba(255,255,255,.1)';
+        });
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.color = 'rgba(255,255,255,.6)';
+            closeBtn.style.background = 'transparent';
+        });
+        closeBtn.addEventListener('click', () => removeCustomModals());
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        modal.appendChild(header);
+
+        // Choice Buttons List
+        const btnList = createElement('div', {
+            style: `
+                display:flex !important;
+                flex-direction:column !important;
+                gap:8px !important;
+            `
+        });
+
+        const createChoiceBtn = (label, desc, colors, onClick) => {
+            const btn = createElement('button', {
+                type: 'button',
+                style: `
+                    width:100% !important;
+                    height:44px !important;
+                    padding:0 14px !important;
+                    box-sizing:border-box !important;
+                    display:flex !important;
+                    align-items:center !important;
+                    justify-content:space-between !important;
+                    background:${colors.bg} !important;
+                    border:1px solid ${colors.border} !important;
+                    border-radius:10px !important;
+                    color:${colors.text} !important;
+                    cursor:pointer !important;
+                    transition:all .15s ease !important;
+                `
+            });
+
+            const lblSpan = createElement('span', {
+                text: label,
+                style: `
+                    font-size:14px !important;
+                    font-weight:750 !important;
+                `
+            });
+
+            const descSpan = createElement('span', {
+                text: desc,
+                style: `
+                    font-size:11.5px !important;
+                    font-weight:500 !important;
+                    color:rgba(255,255,255,.5) !important;
+                `
+            });
+
+            btn.appendChild(lblSpan);
+            btn.appendChild(descSpan);
+
+            btn.addEventListener('mouseenter', () => {
+                btn.style.background = colors.hoverBg;
+                btn.style.borderColor = colors.hoverBorder;
+                btn.style.transform = 'translateY(-1px)';
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.background = colors.bg;
+                btn.style.borderColor = colors.border;
+                btn.style.transform = 'translateY(0)';
+            });
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                onClick();
+            });
+
+            return btn;
+        };
+
+        // 1. 👑 최고가 (즉시 입력창 주입)
+        btnList.appendChild(
+            createChoiceBtn(
+                '👑 최고가',
+                '즉시 "최고가" 입력',
+                {
+                    bg: 'rgba(234,179,8,.12)',
+                    border: 'rgba(234,179,8,.35)',
+                    text: '#fde047',
+                    hoverBg: 'rgba(234,179,8,.25)',
+                    hoverBorder: 'rgba(234,179,8,.6)'
+                },
+                () => {
+                    const chatInput = findChatInput();
+                    if (chatInput) {
+                        setChatInput(chatInput, '최고가');
+                        chatInput.focus();
+                        showAuctionToast("👑 '최고가' 입력 완료", 'guide');
+                    }
+                    removeCustomModals();
+                }
+            )
+        );
+
+        // 2. ⬆️ 이상 (숫자 입력 모달)
+        btnList.appendChild(
+            createChoiceBtn(
+                '⬆️ 이상',
+                '숫자 입력 → "OO만이상"',
+                {
+                    bg: 'rgba(6,182,212,.12)',
+                    border: 'rgba(6,182,212,.35)',
+                    text: '#67e8f9',
+                    hoverBg: 'rgba(6,182,212,.25)',
+                    hoverBorder: 'rgba(6,182,212,.6)'
+                },
+                () => {
+                    openPriceAmountModal('이상');
+                }
+            )
+        );
+
+        // 3. 📋 일반 (숫자 입력 모달)
+        btnList.appendChild(
+            createChoiceBtn(
+                '📋 일반',
+                '숫자 입력 → "OO만"',
+                {
+                    bg: 'rgba(34,197,94,.12)',
+                    border: 'rgba(34,197,94,.35)',
+                    text: '#86efac',
+                    hoverBg: 'rgba(34,197,94,.25)',
+                    hoverBorder: 'rgba(34,197,94,.6)'
+                },
+                () => {
+                    openPriceAmountModal('일반');
+                }
+            )
+        );
+
+        modal.appendChild(btnList);
+
+        const mountTarget = targetDoc.body || targetDoc.documentElement;
+        mountTarget.appendChild(backdrop);
+        mountTarget.appendChild(modal);
+    }
+
+
+    // =========================================================
+    // 💰 가격 숫자 입력 모달 (이상 / 일반)
+    // =========================================================
+
+    function openPriceAmountModal(type) {
+        removeCustomModals();
+
+        let targetDoc = document;
+        try {
+            if (window.top && window.top.document && window.top.document.body) {
+                targetDoc = window.top.document;
+            }
+        } catch (e) {
+            targetDoc = document;
+        }
+
+        const isSang = type === '이상';
+        const titleText = isSang ? '⬆️ 가격 입력 (이상)' : '📋 가격 입력 (일반)';
+        const accentColor = isSang ? '#67e8f9' : '#86efac';
+        const guideSuffix = isSang ? '만이상' : '만';
+
+        const backdrop = createElement('div', {
+            id: '__auction_price_amount_backdrop',
+            style: `
+                position:fixed !important;
+                inset:0 !important;
+                width:100vw !important;
+                height:100vh !important;
+                background:rgba(0,0,0,.62) !important;
+                backdrop-filter:blur(5px) !important;
+                -webkit-backdrop-filter:blur(5px) !important;
+                z-index:2147483646 !important;
+                opacity:1 !important;
+                visibility:visible !important;
+                pointer-events:auto !important;
+            `
+        });
+
+        backdrop.addEventListener('click', (e) => {
+            if (e.target === backdrop) {
+                removeCustomModals();
+            }
+        });
+
+        const modal = createElement('div', {
+            id: '__auction_price_amount_modal',
+            style: `
+                position:fixed !important;
+                left:50% !important;
+                top:50% !important;
+                transform:translate(-50%,-50%) !important;
+                width:290px !important;
+                max-width:calc(100vw - 24px) !important;
+                box-sizing:border-box !important;
+                padding:16px 18px !important;
+                background:linear-gradient(145deg, rgba(30,32,38,.98), rgba(18,20,24,.99)) !important;
+                color:#fff !important;
+                border:1px solid ${isSang ? 'rgba(6,182,212,.35)' : 'rgba(34,197,94,.35)'} !important;
+                border-radius:16px !important;
+                box-shadow:0 25px 80px rgba(0,0,0,.8) !important;
+                z-index:2147483647 !important;
+                display:flex !important;
+                flex-direction:column !important;
+                gap:12px !important;
+                font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+            `
+        });
+
+        // Header
+        const header = createElement('div', {
+            style: `
+                display:flex !important;
+                align-items:center !important;
+                justify-content:space-between !important;
+                padding-bottom:10px !important;
+                border-bottom:1px solid rgba(255,255,255,.1) !important;
+            `
+        });
+
+        const title = createElement('div', {
+            text: titleText,
+            style: `
+                font-size:15px !important;
+                font-weight:800 !important;
+                color:${accentColor} !important;
+                letter-spacing:-0.3px !important;
+            `
+        });
+
+        const closeBtn = createElement('button', {
+            type: 'button',
+            text: '✕',
+            style: `
+                background:transparent !important;
+                border:none !important;
+                color:rgba(255,255,255,.6) !important;
+                font-size:16px !important;
+                cursor:pointer !important;
+                padding:2px 6px !important;
+                border-radius:6px !important;
+                line-height:1 !important;
+                transition:all .15s ease !important;
+            `
+        });
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.color = '#fff';
+            closeBtn.style.background = 'rgba(255,255,255,.1)';
+        });
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.color = 'rgba(255,255,255,.6)';
+            closeBtn.style.background = 'transparent';
+        });
+        closeBtn.addEventListener('click', () => removeCustomModals());
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        modal.appendChild(header);
+
+        // Guide text
+        const guideText = createElement('div', {
+            text: `숫자 입력 시 자동으로 "${guideSuffix}"이 붙습니다. (단위: 만원)`,
+            style: `
+                font-size:11.5px !important;
+                color:rgba(255,255,255,.6) !important;
+                line-height:1.4 !important;
+            `
+        });
+        modal.appendChild(guideText);
+
+        // Input & Submit
+        const inputWrap = createElement('div', {
+            style: `
+                display:flex !important;
+                align-items:center !important;
+                gap:8px !important;
+            `
+        });
+
+        const inputEl = createElement('input', {
+            type: 'text',
+            inputmode: 'decimal',
+            placeholder: '예: 15, 25.5, 34',
+            style: `
+                flex:1 !important;
+                height:38px !important;
+                box-sizing:border-box !important;
+                padding:0 12px !important;
+                background:rgba(255,255,255,.08) !important;
+                border:1px solid rgba(255,255,255,.18) !important;
+                border-radius:8px !important;
+                color:#fff !important;
+                font-size:15px !important;
+                font-weight:700 !important;
+                outline:none !important;
+                transition:border-color .15s ease !important;
+            `
+        });
+
+        const submitPrice = () => {
+            const val = inputEl.value.trim();
+            if (val) {
+                const resultText = `${val}${guideSuffix}`;
+                const chatInput = findChatInput();
+                if (chatInput) {
+                    setChatInput(chatInput, resultText);
+                    chatInput.focus();
+                    showAuctionToast(`💰 '${resultText}' 입력 완료`, 'guide');
+                } else {
+                    console.warn(PREFIX, '채팅 입력창을 찾지 못했습니다.');
+                }
+            }
+            removeCustomModals();
+        };
+
+        inputEl.addEventListener('focus', () => {
+            inputEl.style.borderColor = accentColor;
+        });
+        inputEl.addEventListener('blur', () => {
+            inputEl.style.borderColor = 'rgba(255,255,255,.18)';
+        });
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitPrice();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                removeCustomModals();
+            }
+        });
+
+        const confirmBtn = createElement('button', {
+            type: 'button',
+            text: '확인',
+            style: `
+                width:64px !important;
+                height:38px !important;
+                background:${isSang ? 'rgba(6,182,212,.3)' : 'rgba(34,197,94,.3)'} !important;
+                border:1px solid ${isSang ? 'rgba(6,182,212,.5)' : 'rgba(34,197,94,.5)'} !important;
+                border-radius:8px !important;
+                color:#fff !important;
+                font-size:13px !important;
+                font-weight:750 !important;
+                cursor:pointer !important;
+                transition:all .15s ease !important;
+            `
+        });
+
+        confirmBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            submitPrice();
+        });
+
+        inputWrap.appendChild(inputEl);
+        inputWrap.appendChild(confirmBtn);
+        modal.appendChild(inputWrap);
+
+        const mountTarget = targetDoc.body || targetDoc.documentElement;
+        mountTarget.appendChild(backdrop);
+        mountTarget.appendChild(modal);
+
+        setTimeout(() => {
+            inputEl.focus();
+        }, 40);
+    }
+
+
+    // =========================================================
+    // 안내 버튼 스타일 생성
     // =========================================================
 
     function createGuideButton(
         label,
-        message
+        message,
+        onClick = null
     ) {
 
         const colors =
@@ -4854,7 +5672,6 @@ ${xmlRows.join('')}
             createElement(
                 'button',
                 {
-
                     type:
                         'button',
 
@@ -4862,14 +5679,14 @@ ${xmlRows.join('')}
                         label,
 
                     style: `
-                        flex:1 1 calc(25% - 6px) !important;
+                        flex:1 1 0 !important;
 
                         min-width:0 !important;
 
                         height:32px !important;
 
                         padding:
-                            0 8px !important;
+                            0 4px !important;
 
                         box-sizing:
                             border-box !important;
@@ -4910,6 +5727,9 @@ ${xmlRows.join('')}
 
                         line-height:
                             32px !important;
+
+                        letter-spacing:
+                            -0.2px !important;
 
                         white-space:
                             nowrap !important;
@@ -4994,10 +5814,13 @@ ${xmlRows.join('')}
 
                 event.stopPropagation();
 
+                if (typeof onClick === 'function') {
+                    onClick(event);
+                    return;
+                }
 
                 const input =
                     findChatInput();
-
 
                 if (!input) {
 
@@ -5008,7 +5831,6 @@ ${xmlRows.join('')}
 
                     return;
                 }
-
 
                 setChatInput(
                     input,
@@ -5031,8 +5853,10 @@ ${xmlRows.join('')}
 
 
     // =========================================================
-    // 안내 버튼 영역 생성
+    // 안내 버튼 영역 생성 (메인 버튼 + 접기/펼치기 기타 영역)
     // =========================================================
+
+    let _isMorePanelOpen = false;
 
     function createGuidePanel() {
 
@@ -5120,7 +5944,7 @@ ${xmlRows.join('')}
 
                         display:flex !important;
 
-                        flex-wrap:wrap !important;
+                        flex-direction:column !important;
 
                         gap:5px !important;
 
@@ -5141,13 +5965,14 @@ ${xmlRows.join('')}
 
 
         // =====================================================
-        // 버튼 (경매 흐름 및 연관성 순서)
+        // 버튼 구성:
         // 0행: 낙찰 내역 관리 버튼 (full-width)
-        // 1행: 경매 참여 & 입찰 규칙 (회원등록 -> 입찰 안내 -> 호가 -> 낙찰 취소)
-        // 2행: 사후 처리 & 방송 안내 (택배 -> 경매장 -> 채팅 안내 -> 응원문구)
+        // 1행: 메인 핵심 버튼 (📐 규격입력, 💰 가격입력, 👤 회원등록, 🚫 낙찰 취소)
+        // 2행: 메인 보조 버튼 (🔨 입찰 안내, 📦 택배, 📁 기타 안내 ▼)
+        // 3행 (펼침 영역): (🏠 경매장, 💬 채팅 안내, ❤️ 응원문구, 💰 호가 안내)
         // =====================================================
 
-        // 낙찰 내역 버튼 (full-width)
+        // 0행: 낙찰 내역 버튼 (full-width)
         const bidListBtn = createElement(
             'button',
             {
@@ -5203,64 +6028,105 @@ ${xmlRows.join('')}
         };
 
         bidListBtn.addEventListener('click', handleBidListBtnClick);
-
         panel.appendChild(bidListBtn);
 
-        panel.appendChild(
-            createGuideButton(
-                '👤 회원등록',
-                GUIDE_MESSAGES.member
-            )
+
+        // 1행: 메인 핵심 버튼 4개 (📐 규격입력, 💰 가격입력, 👤 회원등록, 🚫 낙찰 취소)
+        const row1 = createElement('div', {
+            style: `
+                width:100% !important;
+                display:flex !important;
+                gap:5px !important;
+            `
+        });
+
+        row1.appendChild(
+            createGuideButton('📐 규격입력', null, () => openSpecModal())
         );
 
-        panel.appendChild(
-            createGuideButton(
-                '🔨 입찰 안내',
-                GUIDE_MESSAGES.bid
-            )
+        row1.appendChild(
+            createGuideButton('💰 가격입력', null, () => openPriceChoiceModal())
         );
 
-        panel.appendChild(
-            createGuideButton(
-                '💰 호가',
-                GUIDE_MESSAGES.price
-            )
+        row1.appendChild(
+            createGuideButton('👤 회원등록', GUIDE_MESSAGES.member)
         );
 
-        panel.appendChild(
-            createGuideButton(
-                '🚫 낙찰 취소',
-                GUIDE_MESSAGES.cancel
-            )
+        row1.appendChild(
+            createGuideButton('🚫 낙찰 취소', GUIDE_MESSAGES.cancel)
         );
 
-        panel.appendChild(
-            createGuideButton(
-                '📦 택배',
-                GUIDE_MESSAGES.delivery
-            )
+        panel.appendChild(row1);
+
+
+        // 2행: 메인 보조 버튼 & 기타 안내 토글 (🔨 입찰 안내, 📦 택배, 📁 기타 안내 ▼)
+        const row2 = createElement('div', {
+            style: `
+                width:100% !important;
+                display:flex !important;
+                gap:5px !important;
+            `
+        });
+
+        row2.appendChild(
+            createGuideButton('🔨 입찰 안내', GUIDE_MESSAGES.bid)
         );
 
-        panel.appendChild(
-            createGuideButton(
-                '🏠 경매장',
-                GUIDE_MESSAGES.place
-            )
+        row2.appendChild(
+            createGuideButton('📦 택배', GUIDE_MESSAGES.delivery)
         );
 
-        panel.appendChild(
-            createGuideButton(
-                '💬 채팅 안내',
-                GUIDE_MESSAGES.chat
-            )
+        // 기타 안내 접기/펼치기 컨테이너 사전 생성
+        const moreContainer = createElement('div', {
+            id: '__auction_more_container',
+            style: `
+                width:100% !important;
+                display:${_isMorePanelOpen ? 'flex' : 'none'} !important;
+                flex-wrap:wrap !important;
+                gap:5px !important;
+                padding-top:1px !important;
+            `
+        });
+
+        moreContainer.appendChild(
+            createGuideButton('🏠 경매장', GUIDE_MESSAGES.place)
         );
 
-        panel.appendChild(
-            createGuideButton(
-                '❤️ 응원문구',
-                GUIDE_MESSAGES.support
-            )
+        moreContainer.appendChild(
+            createGuideButton('💬 채팅 안내', GUIDE_MESSAGES.chat)
         );
+
+        moreContainer.appendChild(
+            createGuideButton('❤️ 응원문구', GUIDE_MESSAGES.support)
+        );
+
+        moreContainer.appendChild(
+            createGuideButton('💰 호가 안내', GUIDE_MESSAGES.price)
+        );
+
+        const moreBtn = createGuideButton(
+            _isMorePanelOpen ? '📁 기타 닫기 ▲' : '📁 기타 안내 ▼',
+            null,
+            () => {
+                _isMorePanelOpen = !_isMorePanelOpen;
+                if (moreContainer) {
+                    moreContainer.style.display = _isMorePanelOpen ? 'flex' : 'none';
+                }
+                const labelText = _isMorePanelOpen ? '📁 기타 닫기 ▲' : '📁 기타 안내 ▼';
+                moreBtn.textContent = labelText;
+                const colors = GUIDE_COLORS[labelText];
+                if (colors) {
+                    moreBtn.style.background = colors.bg;
+                    moreBtn.style.borderColor = colors.border;
+                    moreBtn.style.color = colors.text;
+                }
+            }
+        );
+        moreBtn.id = '__auction_more_toggle_btn';
+
+        row2.appendChild(moreBtn);
+        panel.appendChild(row2);
+        panel.appendChild(moreContainer);
 
 
         // =====================================================
