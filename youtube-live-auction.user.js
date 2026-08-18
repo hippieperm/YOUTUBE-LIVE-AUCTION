@@ -2176,6 +2176,10 @@
                 options.autocomplete;
         }
 
+        if (options.checked !== undefined) {
+            element.checked = !!options.checked;
+        }
+
         if (options.style) {
             element.setAttribute(
                 'style',
@@ -2718,11 +2722,14 @@
                 return btn;
             }
 
-            // 정렬 상태 관리
+            // 정렬 및 그룹화 상태 관리
             const SORT_STORAGE_KEY = '__auction_bid_sort';
+            const GROUP_BIDDER_STORAGE_KEY = '__auction_group_bidder_option';
             let currentSort = 'newest';
+            let groupBidderOption = false;
             try {
                 currentSort = localStorage.getItem(SORT_STORAGE_KEY) || 'newest';
+                groupBidderOption = localStorage.getItem(GROUP_BIDDER_STORAGE_KEY) === 'true';
             } catch (e) {}
 
             function sortBidRecords(list, sortType) {
@@ -3251,17 +3258,26 @@
             }
 
             /** 경매양식 엑셀(.xls) 생성 및 다운로드 실행 함수 */
-            async function downloadAuctionTemplateExcel(rawRecords) {
+            async function downloadAuctionTemplateExcel(rawRecords, sortType, isGrouped) {
                 if (!rawRecords || rawRecords.length === 0) {
                     showAuctionToast('내보낼 낙찰 내역이 없습니다.', 'auction');
                     return;
                 }
 
+                const activeSort = sortType || currentSort || 'newest';
+                const groupOption = (typeof isGrouped === 'boolean') ? isGrouped : groupBidderOption;
+
                 try {
                     showAuctionToast('⏳ 양식 엑셀 파일 생성 중...', 'auction');
                     
-                    // 1) 1번 물품부터 순서대로 정렬 (등록 시간순)
-                    const sortedRecords = sortBidRecords(rawRecords, 'oldest');
+                    // 1) 정렬 및 낙찰자 묶기 옵션 반영
+                    let sortedRecords;
+                    if (groupOption) {
+                        sortedRecords = groupBidRecordsByNickname(rawRecords, activeSort);
+                    } else {
+                        sortedRecords = sortBidRecords(rawRecords, activeSort);
+                    }
+
                     const bidList = sortedRecords.map(r => {
                         const cleanNick = (r && r.nickname) ? String(r.nickname).replace(/^@/, '').trim() : '익명';
                         const p = parseFloat(r && r.price);
@@ -3275,7 +3291,7 @@
                     // 2) 템플릿 압축 해제
                     const templateBytes = await decompressGzipBase64(AUCTION_TEMPLATE_GZIP_B64);
 
-                    // 3) 6G 낙찰가, 6H 낙찰자 열만 주입 (존재하는 수식은 수정없이 그대로 유지)
+                    // 3) 6D(수량 1), 6G(낙찰가), 6H(낙찰자) 주입 (존재하는 수식은 수정없이 그대로 유지)
                     const newXlsBytes = fillAuctionTemplateXls(templateBytes, bidList);
 
                     // 4) 파일 다운로드 트리거
@@ -3289,7 +3305,15 @@
                     a.remove();
                     URL.revokeObjectURL(url);
 
-                    showAuctionToast('📋 경매양식(.xls) 내보내기 완료!', 'success');
+                    const sortNames = {
+                        newest: '최신순',
+                        oldest: '오래된순',
+                        price_desc: '높은가격순',
+                        price_asc: '낮은가격순'
+                    };
+                    const sortName = sortNames[activeSort] || activeSort;
+                    const groupInfo = groupOption ? ' (낙찰자별 묶기)' : '';
+                    showAuctionToast(`📋 경매양식 내보내기 완료! [${sortName}${groupInfo}]`, 'success');
                 } catch (err) {
                     console.error(PREFIX, '경매양식 내보내기 오류:', err);
                     showAuctionToast(`❌ 양식 내보내기 실패: ${err.message}`, 'separator');
@@ -3623,13 +3647,195 @@ ${xmlRows.join('')}
                 }
             ));
 
+            // 경매양식 내보내기 옵션 팝업 다이얼로그
+            function openAuctionExportDialog(rawRecords) {
+                if (!rawRecords || rawRecords.length === 0) {
+                    showAuctionToast('내보낼 낙찰 내역이 없습니다.', 'auction');
+                    return;
+                }
+
+                const existingDialog = document.getElementById('__auction_export_dialog_backdrop');
+                if (existingDialog) existingDialog.remove();
+
+                const dialogBackdrop = createElement('div', {
+                    id: '__auction_export_dialog_backdrop',
+                    style: `
+                        position: fixed !important;
+                        inset: 0 !important;
+                        z-index: 2147483647 !important;
+                        background: rgba(0,0,0,.68) !important;
+                        backdrop-filter: blur(4px) !important;
+                        -webkit-backdrop-filter: blur(4px) !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                    `
+                });
+
+                const dialog = createElement('div', {
+                    style: `
+                        width: 270px !important;
+                        background: #1e1e26 !important;
+                        border: 1px solid rgba(255,204,0,.35) !important;
+                        border-radius: 14px !important;
+                        box-shadow: 0 12px 36px rgba(0,0,0,.85), 0 0 16px rgba(255,204,0,.15) !important;
+                        padding: 16px !important;
+                        color: #fff !important;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        gap: 12px !important;
+                        box-sizing: border-box !important;
+                    `
+                });
+
+                // 상단 타이틀
+                const titleRow = createElement('div', {
+                    style: `
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: space-between !important;
+                    `
+                });
+                const titleText = createElement('div', {
+                    text: '📑 경매양식 내보내기',
+                    style: 'font-size: 13.5px !important; font-weight: 800 !important; color: #ffcc00 !important;'
+                });
+                const closeBtn = createElement('button', {
+                    type: 'button',
+                    text: '×',
+                    style: `
+                        width: 22px !important;
+                        height: 22px !important;
+                        border: 0 !important;
+                        border-radius: 6px !important;
+                        background: rgba(255,255,255,.08) !important;
+                        color: rgba(255,255,255,.7) !important;
+                        font-size: 16px !important;
+                        line-height: 20px !important;
+                        cursor: pointer !important;
+                    `
+                });
+                closeBtn.addEventListener('click', () => dialogBackdrop.remove());
+                titleRow.appendChild(titleText);
+                titleRow.appendChild(closeBtn);
+                dialog.appendChild(titleRow);
+
+                // 같은 낙찰자끼리 묶기 체크박스 옵션
+                let isGroupChecked = groupBidderOption;
+                const optionWrap = createElement('label', {
+                    style: `
+                        display: flex !important;
+                        align-items: center !important;
+                        gap: 9px !important;
+                        padding: 10px 12px !important;
+                        border-radius: 9px !important;
+                        background: rgba(255,255,255,.05) !important;
+                        border: 1px solid rgba(255,255,255,.1) !important;
+                        cursor: pointer !important;
+                        user-select: none !important;
+                    `
+                });
+
+                const cb = createElement('input', {
+                    type: 'checkbox',
+                    id: '__auction_export_group_cb',
+                    checked: isGroupChecked,
+                    style: `
+                        accent-color: #ffcc00 !important;
+                        width: 16px !important;
+                        height: 16px !important;
+                        margin: 0 !important;
+                        cursor: pointer !important;
+                    `
+                });
+                cb.checked = isGroupChecked;
+
+                const cbText = createElement('span', {
+                    text: '👥 같은 낙찰자끼리 묶기',
+                    style: `
+                        font-size: 12px !important;
+                        font-weight: 700 !important;
+                        color: ${isGroupChecked ? '#ffcc00' : 'rgba(255,255,255,.85)'} !important;
+                        transition: color .15s !important;
+                    `
+                });
+
+                cb.addEventListener('change', (e) => {
+                    isGroupChecked = e.target.checked;
+                    groupBidderOption = isGroupChecked;
+                    try {
+                        localStorage.setItem(GROUP_BIDDER_STORAGE_KEY, String(groupBidderOption));
+                    } catch (err) {}
+                    cbText.style.color = isGroupChecked ? '#ffcc00' : 'rgba(255,255,255,.85)';
+                });
+
+                optionWrap.appendChild(cb);
+                optionWrap.appendChild(cbText);
+                dialog.appendChild(optionWrap);
+
+                // 버튼 영역 (취소 / 내보내기 실행)
+                const btnRow = createElement('div', {
+                    style: 'display: flex !important; gap: 6px !important; margin-top: 2px !important;'
+                });
+
+                const cancelBtn = createElement('button', {
+                    type: 'button',
+                    text: '취소',
+                    style: `
+                        flex: 1 !important;
+                        height: 32px !important;
+                        border: 1px solid rgba(255,255,255,.15) !important;
+                        border-radius: 8px !important;
+                        background: rgba(255,255,255,.06) !important;
+                        color: rgba(255,255,255,.7) !important;
+                        font-size: 11.5px !important;
+                        font-weight: 700 !important;
+                        cursor: pointer !important;
+                    `
+                });
+                cancelBtn.addEventListener('click', () => dialogBackdrop.remove());
+
+                const submitBtn = createElement('button', {
+                    type: 'button',
+                    text: '📑 엑셀 내보내기',
+                    style: `
+                        flex: 2 !important;
+                        height: 32px !important;
+                        border: 1px solid rgba(59,130,246,.5) !important;
+                        border-radius: 8px !important;
+                        background: linear-gradient(135deg, rgba(59,130,246,.35), rgba(37,99,235,.45)) !important;
+                        color: #fff !important;
+                        font-size: 11.5px !important;
+                        font-weight: 800 !important;
+                        cursor: pointer !important;
+                        box-shadow: 0 2px 8px rgba(59,130,246,.3) !important;
+                    `
+                });
+                submitBtn.addEventListener('click', () => {
+                    dialogBackdrop.remove();
+                    downloadAuctionTemplateExcel(rawRecords, currentSort, isGroupChecked);
+                });
+
+                btnRow.appendChild(cancelBtn);
+                btnRow.appendChild(submitBtn);
+                dialog.appendChild(btnRow);
+
+                dialogBackdrop.appendChild(dialog);
+                dialogBackdrop.addEventListener('click', (e) => {
+                    if (e.target === dialogBackdrop) dialogBackdrop.remove();
+                });
+
+                document.body.appendChild(dialogBackdrop);
+            }
+
             // 경매양식 내보내기 (.xls)
             actionRow.appendChild(makeActionBtn(
                 '📑', '양식 내보내기',
                 'rgba(59,130,246,.15)', 'rgba(59,130,246,.4)', '#60a5fa',
                 () => {
                     const rawRecords = getTodayBidRecords();
-                    downloadAuctionTemplateExcel(rawRecords);
+                    openAuctionExportDialog(rawRecords);
                 }
             ));
 
