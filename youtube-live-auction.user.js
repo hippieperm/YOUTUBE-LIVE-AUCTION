@@ -244,15 +244,17 @@
 
 
     /**
-     * 낙찰 1건 기록 추가
+     * 낙찰 1건 기록 추가 또는 동일 경매 블록 내 기존 기록 1건으로 갱신(대체)
      * @param {string} nickname - 낙찰자 닉네임
      * @param {string} price    - 낙찰가 (만원 단위 문자열, 예: "15", "1.5")
      * @param {string} [originalChat] - 원문 채팅 (자동감지 시)
      * @param {string} message  - 전송된 낙찰 메시지
+     * @param {string} [blockKey] - 경매 블록 키 (예: "round_1", "round_2")
      */
-    function addBidRecord(nickname, price, originalChat, message) {
+    function addBidRecord(nickname, price, originalChat, message, blockKey = null) {
 
         const records = loadBidRecords();
+        const currentVideoId = getCurrentVideoId();
 
         const now = new Date();
         const realTimeStr =
@@ -261,23 +263,45 @@
             String(now.getSeconds()).padStart(2, '0');
         const videoTimeStr = getCurrentVideoTime();
 
-        records.push({
+        const newRecord = {
             id:          Date.now(),
+            blockKey:    blockKey || null,
             date:        getTodayString(),
             time:        videoTimeStr || realTimeStr,
             videoTime:   videoTimeStr || realTimeStr,
             realTime:    realTimeStr,
-            videoId:     getCurrentVideoId(),
+            videoId:     currentVideoId,
             nickname:    nickname,
             price:       price,
             originalChat: originalChat || '',
             message:     message
-        });
+        };
+
+        // 🛑 동일 경매 블록(동일 회차 blockKey)의 기존 기록이 있는지 확인하여 교체(덮어쓰기)
+        let replaced = false;
+        if (blockKey) {
+            for (let i = records.length - 1; i >= 0; i--) {
+                const r = records[i];
+                if (r && r.blockKey === blockKey && (r.videoId === currentVideoId || r.date === getTodayString())) {
+                    records[i] = {
+                        ...r,
+                        ...newRecord,
+                        id: r.id // 고유 ID 유지
+                    };
+                    replaced = true;
+                    console.log(PREFIX, `🔁 [경매 ${blockKey}] 낙찰 기록 교체 완료:`, nickname, price + '만');
+                    break;
+                }
+            }
+        }
+
+        if (!replaced) {
+            records.push(newRecord);
+            console.log(PREFIX, `✅ [경매 ${blockKey || '신규'}] 낙찰 기록 저장:`, nickname, price + '만 (영상시간: ' + (videoTimeStr || realTimeStr) + ')');
+        }
 
         saveBidRecords(records);
         updateBidBadge();
-
-        console.log(PREFIX, '낙찰 기록 저장:', nickname, price + '만 (영상시간: ' + (videoTimeStr || realTimeStr) + ')');
     }
 
 
@@ -1238,6 +1262,44 @@
     }
 
     /**
+     * 특정 채팅 요소가 속한 경매 회차(블록 키)를 계산 (예: "round_1", "round_2")
+     * @param {Element|null} element - 기준 채팅 요소
+     * @param {Document} doc - 대상 document
+     * @returns {string} 경매 회차 고유 키
+     */
+    function getAuctionBlockKey(element, doc = document) {
+        const chatItems = Array.from(
+            doc.querySelectorAll(
+                'yt-live-chat-text-message-renderer, ' +
+                'yt-live-chat-paid-message-renderer, ' +
+                'yt-live-chat-membership-item-renderer'
+            )
+        );
+
+        if (!chatItems.length) {
+            return 'round_1';
+        }
+
+        let targetIndex = element ? chatItems.indexOf(element) : -1;
+        if (targetIndex === -1) {
+            targetIndex = chatItems.length - 1;
+        }
+
+        // targetIndex 이전(위쪽)에 등장한 밑줄의 개수 카운트
+        let separatorCount = 0;
+        for (let i = 0; i < targetIndex; i++) {
+            const item = chatItems[i];
+            const msgEl = item.querySelector('#message');
+            const text = msgEl ? msgEl.textContent.trim() : '';
+            if (isSeparatorMessage(text) || /^={3,}$/.test(text) || item.classList.contains('separator-msg')) {
+                separatorCount++;
+            }
+        }
+
+        return `round_${separatorCount + 1}`;
+    }
+
+    /**
      * 특정 채팅 요소가 속한 경매 블록(밑줄과 밑줄 사이 구간) 내의 메시지 요소 목록을 반환
      * @param {Element} element - 기준 채팅 메시지 요소
      * @param {Document} doc - 대상 document
@@ -1436,12 +1498,14 @@
             setChatInput(input, message);
             input.focus();
 
-            // 낙찰 내역 기록
+            // 낙찰 내역 기록 (동일 경매 블록 내 1건만 유지)
+            const blockKey = getAuctionBlockKey(winner.element || separatorEl, targetDoc || (separatorEl && separatorEl.ownerDocument) || document);
             addBidRecord(
                 winner.nickname,
                 winner.priceStr,
                 winner.originalChat || '',
-                message
+                message,
+                blockKey
             );
 
             // 🏆 채팅창에서 최고가 낙찰자 하이라이트 적용
@@ -4292,12 +4356,14 @@ ${xmlRows.join('')}
             chatInput.focus();
 
 
-            // ✅ 낙찰 내역 기록 (수동 입력)
+            // ✅ 낙찰 내역 기록 (수동 입력 - 동일 경매 블록 내 1건만 유지)
+            const blockKey = getAuctionBlockKey(targetChatItem, document);
             addBidRecord(
                 nickname,
                 price,
                 lastChatMessage || '',
-                message
+                message,
+                blockKey
             );
 
             // 🏆 채팅창에서 낙찰자 하이라이트 적용 (단 1명만 표시)
@@ -4950,16 +5016,19 @@ ${xmlRows.join('')}
 
                 input.focus();
 
-                // ✅ 낙찰 내역 기록 (자동 감지)
+                const chatItem = findChatMessageItem(event.target);
+                const blockKey = getAuctionBlockKey(chatItem, event.target.ownerDocument || document);
+
+                // ✅ 낙찰 내역 기록 (자동 감지 - 동일 경매 블록 내 1건만 유지)
                 addBidRecord(
                     nickname,
                     parsedPrice,
                     lastChatMessage || '',
-                    message
+                    message,
+                    blockKey
                 );
 
                 // 🏆 채팅창에서 낙찰자 하이라이트 적용
-                const chatItem = findChatMessageItem(event.target);
                 highlightWinnerChatMessage(chatItem, {
                     nickname: nickname,
                     priceStr: parsedPrice,
