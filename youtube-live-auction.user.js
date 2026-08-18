@@ -1360,10 +1360,11 @@
 
     // =========================================================
     // 밑줄(구분선) 메시지 감지
-    // - 실시간 라이브 & 다시보기: 등호 3개 이상(===...) 또는 정확한 밑줄(===================) 모두 100% 감지
+    // - 실시간 라이브: [밑줄] 버튼을 통해 입력되는 정확히 등호 19개("===================") 일 때만 엄격 감지
+    // - 다시보기(Replay): 등호 19개 또는 등호 3개 이상(===...) 모두 지원
     // =========================================================
 
-    const EXACT_AUCTION_SEPARATOR = '===================';
+    const EXACT_AUCTION_SEPARATOR = '==================='; // 등호 19개
 
     function isSeparatorMessage(text, checkLenient = false) {
         if (!text || typeof text !== 'string') {
@@ -1371,19 +1372,15 @@
         }
 
         const clean = text.trim();
-        // 1) 정확히 등호 19개 일치
+
+        // 1) 정확히 등호 19개 일치 (실시간 라이브 & 다시보기 공통 표준 밑줄)
         if (clean === EXACT_AUCTION_SEPARATOR) {
             return true;
         }
 
-        // 2) 실시간 라이브 및 다시보기 공통: 등호 3개 이상(===...) 모두 밑줄로 인정
-        if (/^={3,}$/.test(clean)) {
-            return true;
-        }
-
-        // 3) 유연 모드(checkLenient)인 경우 하이픈/물결 구분선도 밑줄로 인정
+        // 2) 다시보기 환경이거나 유연 모드(checkLenient)인 경우에만 등호 3개 이상(===...) 인정
         if (checkLenient || isReplayMode()) {
-            return /^-{3,}$/.test(clean) || /^~{3,}$/.test(clean);
+            return /^={3,}$/.test(clean) || /^-{3,}$/.test(clean) || /^~{3,}$/.test(clean);
         }
 
         return false;
