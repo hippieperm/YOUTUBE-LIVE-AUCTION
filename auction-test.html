@@ -868,6 +868,10 @@
                 window.__AuctionAutomation.openBidModal();
                 return;
             }
+            if (typeof window.__openAuctionBidListModal === 'function') {
+                window.__openAuctionBidListModal();
+                return;
+            }
             const modalBtn = document.getElementById('__auction_bid_list_btn');
             if (modalBtn) {
                 modalBtn.click();
@@ -876,12 +880,21 @@
             }
         }
 
+        /** 오늘 날짜 YYYY-MM-DD */
+        function getTodayString() {
+            const d = new Date();
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
         /** 더미 낙찰 데이터 생성 및 추가 */
         function addDummyBidRecords(count = 5) {
             // 유저스크립트 내장 함수가 있으면 최우선 호출
             if (window.__AuctionAutomation && typeof window.__AuctionAutomation.addDummyBidRecords === 'function') {
-                window.__AuctionAutomation.addDummyBidRecords(count);
-                const all = (window.__AuctionAutomation.loadBidRecords && window.__AuctionAutomation.loadBidRecords()) || [];
+                const added = window.__AuctionAutomation.addDummyBidRecords(count);
+                const all = (window.__AuctionAutomation.loadBidRecords && window.__AuctionAutomation.loadBidRecords()) || added || [];
                 addChatMessage('해담분재경매장', `📥 [시뮬레이터] 더미 낙찰 내역 ${count}건이 추가되었습니다. (현재 총 ${all.length}건) 하단 [📋 낙찰 내역] 버튼을 확인해보세요!`, true);
                 return;
             }
@@ -912,7 +925,7 @@
                 { nick: '초록정원', price: '5.5', chat: '.55', item: '석곡 착생목' }
             ];
 
-            const today = new Date().toISOString().slice(0, 10);
+            const today = getTodayString();
             const baseTs = Date.now() - (num * 90000);
 
             for (let i = 0; i < num; i++) {
@@ -947,8 +960,7 @@
             } else {
                 const btn = document.getElementById('__auction_bid_list_btn');
                 if (btn) {
-                    const badge = btn.querySelector('.__auction_badge');
-                    if (badge) badge.textContent = String(records.length);
+                    btn.textContent = `📋 낙찰 내역 (${records.length}건)`;
                 }
             }
 
@@ -968,7 +980,7 @@
                 localStorage.removeItem('__auction_bid_records');
                 const btn = document.getElementById('__auction_bid_list_btn');
                 if (btn) {
-                    btn.innerHTML = `<span>📋 낙찰 내역</span><span class="__auction_badge" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5.5px;box-sizing:border-box;background:linear-gradient(180deg,#ff453a,#ff3b30);color:#fff;border-radius:9999px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;font-size:11px;font-weight:800;line-height:1;letter-spacing:-0.2px;box-shadow:0 1.5px 3px rgba(0,0,0,0.35);margin-left:2px;">0</span>`;
+                    btn.textContent = '📋 낙찰 내역 (0건)';
                 }
                 try {
                     window.dispatchEvent(new Event('storage'));

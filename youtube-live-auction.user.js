@@ -143,7 +143,7 @@
 
             // 6) watch 또는 live URL의 pathname 마지막 부분
             const pop = url.pathname.split('/').filter(Boolean).pop();
-            if (pop && pop !== 'live_chat' && pop !== 'live_chat_replay' && pop !== 'watch') {
+            if (pop && pop !== 'live_chat' && pop !== 'live_chat_replay' && pop !== 'watch' && !pop.includes('.')) {
                 try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, pop); } catch (e) {}
                 return pop;
             }
@@ -151,7 +151,7 @@
             // 7) 🛑 iframe 내부에서 부모 창이 저장해 둔 활성 Video ID 동기화 (다시보기 완벽 연동)
             try {
                 const cachedVid = localStorage.getItem(ACTIVE_VIDEO_ID_KEY);
-                if (cachedVid && cachedVid !== 'unknown' && cachedVid !== 'live_chat' && cachedVid !== 'live_chat_replay') {
+                if (cachedVid && cachedVid !== 'unknown' && cachedVid !== 'live_chat' && cachedVid !== 'live_chat_replay' && !cachedVid.includes('.')) {
                     return cachedVid;
                 }
             } catch (e) {}
@@ -160,7 +160,7 @@
         } catch (e) {
             try {
                 const fallbackVid = localStorage.getItem(ACTIVE_VIDEO_ID_KEY);
-                if (fallbackVid && fallbackVid !== 'unknown') return fallbackVid;
+                if (fallbackVid && fallbackVid !== 'unknown' && !fallbackVid.includes('.')) return fallbackVid;
             } catch (err) {}
             return 'unknown';
         }
@@ -4223,10 +4223,87 @@ ${xmlRows.join('')}
         }
     }
 
-    // 외부 디버깅용 전역 바인딩
+    // 더미 낙찰 데이터 추가 (테스트/시뮬레이터용 내장 지원)
+    function addDummyBidRecords(count = 5) {
+        const num = Math.max(1, parseInt(count, 10) || 5);
+        const records = loadBidRecords();
+        const curVideoId = getCurrentVideoId();
+        const today = getTodayString();
+        const baseTs = Date.now() - (num * 90000);
+
+        const DUMMY_SAMPLES = [
+            { nick: '솔향기', price: '8.5', chat: '8.5만', item: '해송 소품 분재' },
+            { nick: '소나무장인', price: '25', chat: '25', item: '진백 명품 사간형' },
+            { nick: '도예가', price: '4.5', chat: '4,5', item: '소품 왜철쭉' },
+            { nick: '황금송', price: '12', chat: '12만', item: '자연 문양 수석' },
+            { nick: '산그늘-y2y', price: '35', chat: '350,000원', item: '제주 팽나무 특선' },
+            { nick: '솔향기', price: '18.5', chat: '18.5만', item: '주목 고목 분재' },
+            { nick: '사랑아-g7d', price: '7', chat: '7만', item: '느릅나무 근상' },
+            { nick: '소나무장인', price: '15', chat: '15', item: '단풍나무 쌍간' },
+            { nick: '비키비키-k', price: '10.5', chat: '10만 5천', item: '소품 흑송' },
+            { nick: '청송매니아', price: '22', chat: '22만', item: '문인목 소나무' },
+            { nick: '도예가', price: '3', chat: '3', item: '야생화 화분 세트' },
+            { nick: '대박농원', price: '45', chat: '45만', item: '단풍나무 특대작' },
+            { nick: '솔향기', price: '6.5', chat: '65', item: '소품 진백' },
+            { nick: '괴목사랑', price: '16', chat: '16만', item: '명품 남수석' },
+            { nick: '초록정원', price: '5.5', chat: '.55', item: '석곡 착생목' }
+        ];
+
+        for (let i = 0; i < num; i++) {
+            const sample = DUMMY_SAMPLES[i % DUMMY_SAMPLES.length];
+            const ts = baseTs + (i * 90000);
+            const d = new Date(ts);
+            const timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+            const vMin = String(Math.floor((i * 2 + 1))).padStart(2, '0');
+            const vSec = String((i * 17) % 60).padStart(2, '0');
+            const videoTime = `00:${vMin}:${vSec}`;
+            const itemText = sample.item ? `[${sample.item}] ` : '';
+
+            records.push({
+                id: ts,
+                blockKey: `dummy_sim_${ts}_${i + 1}`,
+                date: today,
+                time: videoTime,
+                videoTime: videoTime,
+                realTime: timeStr,
+                videoId: curVideoId,
+                nickname: sample.nick,
+                price: sample.price,
+                qty: 1,
+                originalChat: sample.chat,
+                message: `👉 @${sample.nick} ${sample.price}만 ${itemText}낙찰입니다. 축하드립니다!😄`
+            });
+        }
+
+        saveBidRecords(records);
+        updateBidBadge();
+        return records;
+    }
+
+    function clearBidRecords() {
+        saveBidRecords([]);
+        updateBidBadge();
+    }
+
+    // 외부 디버깅 및 시뮬레이터 연동용 전역 바인딩
+    const AuctionAutomationAPI = {
+        loadBidRecords,
+        saveBidRecords,
+        addBidRecord,
+        removeBidRecord,
+        getTodayBidRecords,
+        updateBidBadge,
+        openBidModal: openBidListModal,
+        openBidListModal,
+        addDummyBidRecords,
+        clearBidRecords
+    };
+
+    window.__AuctionAutomation = AuctionAutomationAPI;
     window.__openAuctionBidListModal = openBidListModal;
     try {
         if (window.top && window.top !== window) {
+            window.top.__AuctionAutomation = AuctionAutomationAPI;
             window.top.__openAuctionBidListModal = openBidListModal;
         }
     } catch (e) {}
