@@ -1105,6 +1105,27 @@
         let clean =
             text.trim();
 
+        // 0-0-1. 입찰이 아닌 감탄사, 탄식, 탈락 후기, 축하 대화 필터링 ("25 빠르다", "25 아깝네", "25 ㄲ비", "25 ㄷㄷ" 등)
+        if (/\d+\s*(?:빠르다|빠르네|빠름|아깝|아깝다|아깝네|아까비|ㄲㅂ|ㄲ비|까비|ㄷㄷ|ㅊㅋ|ㅊㅊ|축하|나이스)/i.test(clean)) {
+            return null;
+        }
+
+        // 0-0-2. 서술형 접두사 제거 ("저 25", "나 30", "전 15" 등 -> "25", "30", "15")
+        clean = clean.replace(/^(?:저|나|전|제|me|i)\s+(\d)/i, '$1');
+
+        // 0-0-3. 서술형 입찰 멘트 접미사 정리 ("25요", "25 탑승", "25 손", "25 갑니다", "25 가져갈게요" 등 -> "25")
+        clean = clean.replace(/(\d+(?:\.\d+)?)\s*(?:요|이요|에\s*가져갈게요|가져갈게요|가져감|탑승|손|갑니다|갈게요|가요|찍음|찍습니다|픽|픽이요|입니당|입니다|부릅니다|콜|콜이요|go|ㄱㄱ)$/i, '$1');
+
+        // 0-0-4. 한글 자음 및 영문 단위 축약어 변환
+        // - "2.5ㅁ", "3ㅁ", "15ㅁ" -> "2.5만", "3만", "15만"
+        // - "5ㅊ", "3ㅊ" -> "5천", "3천"
+        // - "25k", "30k", "3.5k" -> "25천", "30천", "3.5천"
+        // - "150000w", "15000w" -> "150000원", "15000원"
+        clean = clean.replace(/(\d+(?:\.\d+)?)\s*ㅁ(?![가-힣a-zA-Z0-9])/g, '$1만');
+        clean = clean.replace(/(\d+(?:\.\d+)?)\s*ㅊ(?![가-힣a-zA-Z0-9])/g, '$1천');
+        clean = clean.replace(/(\d+(?:\.\d+)?)\s*[kK](?![가-힣a-zA-Z0-9])/g, '$1천');
+        clean = clean.replace(/(\d+(?:\.\d+)?)\s*[wW₩](?![가-힣a-zA-Z0-9])/g, '$1원');
+
         let isPointNumber = false;
 
         // 0-1. ",5", ",3", ",5만" 등 쉼표로 바로 시작하는 소수점 형태 -> 0.5, 0.3 (0.5만원 = 5천원)
@@ -1137,6 +1158,24 @@
 
         if (/\d+\.\d+/.test(clean)) {
             isPointNumber = true;
+        }
+
+        // 0-6. "1억", "2억 5천", "1억 5000만" 등 억 단위
+        const okMatch = clean.match(/(\d+(?:\.\d+)?)\s*억(?:\s*(\d+(?:\.\d+)?)\s*만)?/);
+        if (okMatch) {
+            const ok = parseFloat(okMatch[1]) * 10000;
+            const man = okMatch[2] ? parseFloat(okMatch[2]) : 0;
+            const total = ok + man;
+            const pStr = normalizePrice(total);
+            return pStr ? {
+                priceStr: pStr,
+                priceNum: parseFloat(pStr),
+                rawNum: total,
+                hasExplicitUnit: true,
+                isRawInteger: false,
+                isPointNumber: isPointNumber || String(total).includes('.'),
+                isChonUnit: false
+            } : null;
         }
 
         // 1. "15만 5천", "15만5000", "15만 3천원", "15만 5", "15만 5백" 등 만+천/백 복합 단위
@@ -1733,16 +1772,36 @@
             };
         });
 
-        // 4단계: 최고가 탐색 및 동일가 선착순 우선 선별
+        // 4단계: 비정상 장난/트롤 입찰(Outlier) 필터링
+        // 기준 호가(baselineAvg)가 형성되어 있고 복수의 입찰이 존재하는 상황에서,
+        // 기준 호가 대비 25배 이상 비현실적으로 높은 장난 입찰(예: 3만 경매에 1억, 9999만 등)은 이상치로 제외
+        let candidateBids = resolvedBids;
+        if (resolvedBids.length >= 2 && baselineAvg && baselineAvg > 0) {
+            const filtered = resolvedBids.filter(b => {
+                if (b.price >= 500 && b.price >= baselineAvg * 25) {
+                    console.warn(
+                        PREFIX,
+                        `⚠️ [장난/트롤 입찰 감지 및 제외] "${b.originalChat}" (${b.price}만) - 기준 호가(${Math.round(baselineAvg)}만) 대비 25배 이상 급등 이상치로 제외 (작성자: ${b.nickname})`
+                    );
+                    return false;
+                }
+                return true;
+            });
+            if (filtered.length > 0) {
+                candidateBids = filtered;
+            }
+        }
+
+        // 5단계: 최고가 탐색 및 동일가 선착순 우선 선별
         let maxPrice = -Infinity;
-        resolvedBids.forEach(b => {
+        candidateBids.forEach(b => {
             if (b.price > maxPrice) {
                 maxPrice = b.price;
             }
         });
 
         // 최고가 입찰자들 필터링
-        const topBids = resolvedBids.filter(b => b.price === maxPrice);
+        const topBids = candidateBids.filter(b => b.price === maxPrice);
 
         // 동일 가격일 경우 가장 먼저 올라온 채팅(index가 가장 작은 것) 우선
         const winner = topBids[0];
