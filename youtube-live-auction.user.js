@@ -5649,13 +5649,44 @@ ${xmlRows.join('')}
 
 
     // =========================================================
+    // 기타 안내 패널 닫기 헬퍼
+    // =========================================================
+
+    function closeMorePanel() {
+        _isMorePanelOpen = false;
+        const docs = getTargetDocs();
+        docs.forEach(doc => {
+            try {
+                if (!doc) return;
+                const container = doc.getElementById('__auction_more_container');
+                if (container) {
+                    container.style.display = 'none';
+                }
+                const btn = doc.getElementById('__auction_more_toggle_btn');
+                if (btn) {
+                    const labelText = '📁 기타 안내 ▼';
+                    btn.textContent = labelText;
+                    const colors = GUIDE_COLORS[labelText];
+                    if (colors) {
+                        btn.style.background = colors.bg;
+                        btn.style.borderColor = colors.border;
+                        btn.style.color = colors.text;
+                    }
+                }
+            } catch (e) {}
+        });
+    }
+
+
+    // =========================================================
     // 안내 버튼 스타일 생성
     // =========================================================
 
     function createGuideButton(
         label,
         message,
-        onClick = null
+        onClick = null,
+        autoCloseMore = false
     ) {
 
         const colors =
@@ -5816,6 +5847,9 @@ ${xmlRows.join('')}
 
                 if (typeof onClick === 'function') {
                     onClick(event);
+                    if (autoCloseMore) {
+                        closeMorePanel();
+                    }
                     return;
                 }
 
@@ -5844,6 +5878,10 @@ ${xmlRows.join('')}
                     '안내문구 입력:',
                     label
                 );
+
+                if (autoCloseMore) {
+                    closeMorePanel();
+                }
             }
         );
 
@@ -5853,7 +5891,7 @@ ${xmlRows.join('')}
 
 
     // =========================================================
-    // 안내 버튼 영역 생성 (메인 버튼 + 접기/펼치기 기타 영역)
+    // 안내 버튼 영역 생성 (메인: 규격/가격/기타토글 + 펼침: 기타 8종)
     // =========================================================
 
     let _isMorePanelOpen = false;
@@ -5966,13 +6004,12 @@ ${xmlRows.join('')}
 
         // =====================================================
         // 버튼 구성:
-        // 0행: 낙찰 내역 관리 버튼 (full-width)
-        // 1행: 메인 핵심 버튼 (📐 규격입력, 💰 가격입력, 👤 회원등록, 🚫 낙찰 취소)
-        // 2행: 메인 보조 버튼 (🔨 입찰 안내, 📦 택배, 📁 기타 안내 ▼)
-        // 3행 (펼침 영역): (🏠 경매장, 💬 채팅 안내, ❤️ 응원문구, 💰 호가 안내)
+        // 0행: 낙찰 내역 관리 버튼 (full-width, 고정)
+        // 1행: 메인 상시 노출 3개 (📐 규격입력, 💰 가격입력, 📁 기타 안내 ▼)
+        // 펼침 영역: 8종 안내 버튼 (클릭 시 자동 닫힘)
         // =====================================================
 
-        // 0행: 낙찰 내역 버튼 (full-width)
+        // 0행: 낙찰 내역 버튼 (full-width, 고정)
         const bidListBtn = createElement(
             'button',
             {
@@ -6031,7 +6068,7 @@ ${xmlRows.join('')}
         panel.appendChild(bidListBtn);
 
 
-        // 1행: 메인 핵심 버튼 4개 (📐 규격입력, 💰 가격입력, 👤 회원등록, 🚫 낙찰 취소)
+        // 1행: 메인 상시 노출 3개 버튼 (📐 규격입력, 💰 가격입력, 📁 기타 안내 ▼)
         const row1 = createElement('div', {
             style: `
                 width:100% !important;
@@ -6048,34 +6085,6 @@ ${xmlRows.join('')}
             createGuideButton('💰 가격입력', null, () => openPriceChoiceModal())
         );
 
-        row1.appendChild(
-            createGuideButton('👤 회원등록', GUIDE_MESSAGES.member)
-        );
-
-        row1.appendChild(
-            createGuideButton('🚫 낙찰 취소', GUIDE_MESSAGES.cancel)
-        );
-
-        panel.appendChild(row1);
-
-
-        // 2행: 메인 보조 버튼 & 기타 안내 토글 (🔨 입찰 안내, 📦 택배, 📁 기타 안내 ▼)
-        const row2 = createElement('div', {
-            style: `
-                width:100% !important;
-                display:flex !important;
-                gap:5px !important;
-            `
-        });
-
-        row2.appendChild(
-            createGuideButton('🔨 입찰 안내', GUIDE_MESSAGES.bid)
-        );
-
-        row2.appendChild(
-            createGuideButton('📦 택배', GUIDE_MESSAGES.delivery)
-        );
-
         // 기타 안내 접기/펼치기 컨테이너 사전 생성
         const moreContainer = createElement('div', {
             id: '__auction_more_container',
@@ -6084,25 +6093,27 @@ ${xmlRows.join('')}
                 display:${_isMorePanelOpen ? 'flex' : 'none'} !important;
                 flex-wrap:wrap !important;
                 gap:5px !important;
-                padding-top:1px !important;
+                padding-top:2px !important;
             `
         });
 
-        moreContainer.appendChild(
-            createGuideButton('🏠 경매장', GUIDE_MESSAGES.place)
-        );
+        // 기타 영역 내 8종 안내 버튼 (클릭 시 메시지 주입 + 자동으로 기타 닫힘)
+        const moreButtons = [
+            { label: '👤 회원등록', msg: GUIDE_MESSAGES.member },
+            { label: '🚫 낙찰 취소', msg: GUIDE_MESSAGES.cancel },
+            { label: '🔨 입찰 안내', msg: GUIDE_MESSAGES.bid },
+            { label: '📦 택배', msg: GUIDE_MESSAGES.delivery },
+            { label: '🏠 경매장', msg: GUIDE_MESSAGES.place },
+            { label: '💬 채팅 안내', msg: GUIDE_MESSAGES.chat },
+            { label: '❤️ 응원문구', msg: GUIDE_MESSAGES.support },
+            { label: '💰 호가 안내', msg: GUIDE_MESSAGES.price }
+        ];
 
-        moreContainer.appendChild(
-            createGuideButton('💬 채팅 안내', GUIDE_MESSAGES.chat)
-        );
-
-        moreContainer.appendChild(
-            createGuideButton('❤️ 응원문구', GUIDE_MESSAGES.support)
-        );
-
-        moreContainer.appendChild(
-            createGuideButton('💰 호가 안내', GUIDE_MESSAGES.price)
-        );
+        moreButtons.forEach(b => {
+            const btn = createGuideButton(b.label, b.msg, null, true);
+            btn.style.flex = '1 1 calc(25% - 4px)';
+            moreContainer.appendChild(btn);
+        });
 
         const moreBtn = createGuideButton(
             _isMorePanelOpen ? '📁 기타 닫기 ▲' : '📁 기타 안내 ▼',
@@ -6124,8 +6135,8 @@ ${xmlRows.join('')}
         );
         moreBtn.id = '__auction_more_toggle_btn';
 
-        row2.appendChild(moreBtn);
-        panel.appendChild(row2);
+        row1.appendChild(moreBtn);
+        panel.appendChild(row1);
         panel.appendChild(moreContainer);
 
 
