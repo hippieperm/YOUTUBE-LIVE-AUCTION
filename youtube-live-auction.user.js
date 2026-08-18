@@ -1835,6 +1835,63 @@
     }
 
     /**
+     * 특정 경매 블록(해당 밑줄 구간) 내에 이미 존재하는 기존 낙찰자 정보 조회
+     * @param {Element|null} targetEl - 기준 채팅 요소
+     * @param {Document|null} targetDoc - 대상 document
+     * @returns {Object|null} 기존 낙찰자 정보 { element, nickname, price } 또는 null
+     */
+    function getExistingWinnerInBlock(targetEl, targetDoc = null) {
+        if (!targetEl) return null;
+
+        const doc = targetDoc || targetEl.ownerDocument || document;
+        const blockItems = getAuctionBlockItems(targetEl, doc);
+
+        // 1) DOM에서 하이라이트/뱃지를 가진 메시지 요소 탐색
+        for (const item of blockItems) {
+            if (!item) continue;
+            if (item.classList.contains('auction-winner-highlight') || item.querySelector('.auction-winner-badge')) {
+                const authorEl = findAuthor(item) || item.querySelector('#author-name');
+                const nick = authorEl ? getNickname(authorEl) : '';
+                const badgeEl = item.querySelector('.auction-winner-badge');
+                let badgeText = badgeEl ? badgeEl.textContent : '';
+                let price = '';
+                const pMatch = badgeText.match(/(\d+(?:\.\d+)?)\s*만?/);
+                if (pMatch) price = pMatch[1];
+
+                return {
+                    element: item,
+                    nickname: nick,
+                    price: price
+                };
+            }
+        }
+
+        // 2) DOM에 없더라도 blockKey 기준으로 저장된 낙찰 기록이 있는지 확인
+        const blockKey = getAuctionBlockKey(targetEl, doc);
+        const curVideoId = getCurrentVideoId();
+        const today = getTodayString();
+        const records = loadBidRecords();
+
+        for (let i = records.length - 1; i >= 0; i--) {
+            const r = records[i];
+            if (!r) continue;
+            const isCurrentVid = (curVideoId && curVideoId !== 'unknown' && curVideoId !== 'live_chat' && curVideoId !== 'live_chat_replay')
+                ? (r.videoId === curVideoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false))
+                : (r.date === today || !r.videoId || r.videoId === 'unknown');
+
+            if (isCurrentVid && r.blockKey === blockKey) {
+                return {
+                    element: null,
+                    nickname: r.nickname || '',
+                    price: r.price || ''
+                };
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * 특정 경매 블록(해당 밑줄 구간) 내에 이미 존재하는 낙찰자 하이라이트 및 뱃지만 제거
      * -> 이전 경매 및 다른 경매 블록의 낙찰자 하이라이트는 그대로 유지!
      * @param {Element|null} targetEl - 현재 낙찰 대상 채팅 요소 (속한 블록만 클리어)
@@ -4810,6 +4867,16 @@ ${xmlRows.join('')}
                 return;
             }
 
+            // 🛑 [같은 블록 내 낙찰자 변경 확인 (가상 키패드 제출)]
+            const existingWinner = getExistingWinnerInBlock(targetChatItem, document);
+            if (existingWinner && (existingWinner.element !== targetChatItem || (nickname && existingWinner.nickname && existingWinner.nickname.trim() !== nickname.trim()))) {
+                const prevLabel = existingWinner.nickname ? `@${existingWinner.nickname}님${existingWinner.price ? ` (${existingWinner.price}만)` : ''}` : '기존 낙찰자';
+                const newLabel = nickname ? `@${nickname}님 (${price}만)` : `${price}만`;
+                const confirmChange = `[낙찰자 변경 확인]\n현재 경매 회차에 이미 낙찰자가 선정되어 있습니다.\n\n- 기존 낙찰자: ${prevLabel}\n- 변경할 낙찰자: ${newLabel}\n\n정말 낙찰자를 변경하시겠습니까?`;
+                if (!confirm(confirmChange)) {
+                    return;
+                }
+            }
 
             const message =
                 createMessage(
@@ -5585,6 +5652,19 @@ ${xmlRows.join('')}
         const chatItem = findChatMessageItem(event.target);
         const parsedPrice =
             parseBidPriceWithContext(lastChatMessage, chatItem);
+
+        // 🛑 [같은 블록 내 낙찰자 변경 확인 알림창]
+        const existingWinner = getExistingWinnerInBlock(chatItem, event.target.ownerDocument || document);
+        if (existingWinner && (existingWinner.element !== chatItem || (nickname && existingWinner.nickname && existingWinner.nickname.trim() !== nickname.trim()))) {
+            const prevLabel = existingWinner.nickname ? `@${existingWinner.nickname}님${existingWinner.price ? ` (${existingWinner.price}만)` : ''}` : '기존 낙찰자';
+            const newLabel = parsedPrice
+                ? (nickname ? `@${nickname}님 (${parsedPrice}만)` : `${parsedPrice}만`)
+                : (nickname ? `@${nickname}님` : '해당 입찰자');
+            const confirmChange = `[낙찰자 변경 확인]\n현재 경매 회차에 이미 낙찰자가 선정되어 있습니다.\n\n- 기존 낙찰자: ${prevLabel}\n- 변경 대상: ${newLabel}\n\n정말 낙찰자를 변경하시겠습니까?`;
+            if (!confirm(confirmChange)) {
+                return;
+            }
+        }
 
         if (parsedPrice) {
 
