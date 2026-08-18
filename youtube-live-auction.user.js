@@ -170,7 +170,13 @@
     /** 다시보기 (YouTube Live Replay / VOD) 환경 여부 판별 */
     function isReplayMode() {
         try {
-            // 1) 현재 창 URL 확인
+            // 0) 실시간 채팅 입력창이 존재하면 100% 실시간 라이브 환경 (다시보기 아님!)
+            const chatInput = findChatInput();
+            if (chatInput) {
+                return false;
+            }
+
+            // 1) 현재 창 URL 확인 (live_chat_replay 명시된 경우)
             const url = new URL(window.location.href);
             if (url.pathname.includes('live_chat_replay') || url.href.includes('live_chat_replay')) {
                 return true;
@@ -211,13 +217,11 @@
                 if (window.top && checkIframe(window.top.document)) return true;
             } catch (e) {}
 
-            // 5) 다시보기 전용 DOM 요소 확인
+            // 5) 다시보기 전용 DOM 요소 확인 (실시간 채팅에는 없는 명확한 다시보기 전용 요소)
             const checkDom = (doc) => {
                 try {
                     if (doc.querySelector('yt-live-chat-replay-header-renderer')) return true;
-                    if (doc.querySelector('yt-live-chat-renderer[replay]')) return true;
                     if (doc.querySelector('ytd-live-chat-frame[is-replay]')) return true;
-                    if (doc.querySelector('#chat[replay]')) return true;
                 } catch (e) {}
                 return false;
             };
@@ -226,22 +230,6 @@
                 if (window.top && checkDom(window.top.document)) return true;
             } catch (e) {}
 
-            // 6) YouTube 플레이어(movie_player) API를 통한 라이브 여부 확인
-            const getPlayer = (w) => {
-                try { return w.document.getElementById('movie_player'); } catch (e) { return null; }
-            };
-            const player = getPlayer(window) ||
-                (window.top && window.top !== window && getPlayer(window.top)) ||
-                (window.parent && window.parent !== window && getPlayer(window.parent));
-            if (player && typeof player.getVideoData === 'function') {
-                const data = player.getVideoData();
-                if (data && typeof data.isLive === 'boolean' && data.isLive === false) {
-                    const host = window.location.hostname || '';
-                    if (host.includes('youtube.com')) {
-                        return true;
-                    }
-                }
-            }
         } catch (e) {}
 
         return false;
@@ -279,6 +267,19 @@
         } catch (e) {
             console.error(PREFIX, 'localStorage 저장 실패', e);
         }
+
+        // 부모 창, iframe, 팝아웃 창 전체에 실시간 동기화 브로드캐스트
+        try {
+            const payload = { type: '__AUCTION_BID_UPDATED', timestamp: Date.now() };
+            window.postMessage(payload, '*');
+            if (window.top && window.top !== window) window.top.postMessage(payload, '*');
+            if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
+            if (window.opener) window.opener.postMessage(payload, '*');
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(f => {
+                try { if (f.contentWindow) f.contentWindow.postMessage(payload, '*'); } catch (err) {}
+            });
+        } catch (e) {}
     }
 
 
@@ -374,20 +375,14 @@
 
 
     /**
-     * 낙찰 1건 기록 추가 또는 동일 경매 블록 내 기존 기록 1건으로 갱신(대체)
+     * 낙찰 1건 기록 추가 (밑줄 자동 감지 / 수동 클릭 / 키패드 공통 100% 신규 추가)
      * @param {string} nickname - 낙찰자 닉네임
      * @param {string} price    - 낙찰가 (만원 단위 문자열, 예: "15", "1.5")
      * @param {string} [originalChat] - 원문 채팅 (자동감지 시)
      * @param {string} message  - 전송된 낙찰 메시지
-     * @param {string} [blockKey] - 경매 블록 키 (예: "round_1", "round_2")
+     * @param {string} [blockKey] - 경매 블록 키
      */
     function addBidRecord(nickname, price, originalChat, message, blockKey = null) {
-
-        // 🛑 다시보기 환경: 낙찰자 추가 및 수정 완전 차단
-        if (isReplayMode()) {
-            console.log(PREFIX, '🛑 다시보기 환경: 낙찰자 추가/수정이 차단되었습니다.');
-            return;
-        }
 
         const records = loadBidRecords();
         const currentVideoId = getCurrentVideoId();
@@ -400,8 +395,8 @@
         const videoTimeStr = getCurrentVideoTime();
 
         const newRecord = {
-            id:          Date.now(),
-            blockKey:    blockKey || null,
+            id:          Date.now() + Math.floor(Math.random() * 1000),
+            blockKey:    blockKey || `bid_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
             date:        getTodayString(),
             time:        videoTimeStr || realTimeStr,
             videoTime:   videoTimeStr || realTimeStr,
@@ -413,28 +408,22 @@
             message:     message
         };
 
-        // 🛑 동일 경매 블록(동일 회차 blockKey)의 기존 기록이 있는지 확인하여 교체(덮어쓰기)
-        let replaced = false;
-        if (blockKey) {
-            for (let i = records.length - 1; i >= 0; i--) {
-                const r = records[i];
-                if (r && r.blockKey === blockKey && (r.videoId === currentVideoId || r.date === getTodayString())) {
-                    records[i] = {
-                        ...r,
-                        ...newRecord,
-                        id: r.id // 고유 ID 유지
-                    };
-                    replaced = true;
-                    console.log(PREFIX, `🔁 [경매 ${blockKey}] 낙찰 기록 교체 완료:`, nickname, price + '만');
-                    break;
-                }
-            }
+        // 🛑 1초 이내 동일 닉네임 & 동일 금액 & 동일 원문채팅의 완전 중복 이벤트만 방어
+        const isDuplicate = records.some(r => {
+            if (!r) return false;
+            return r.nickname === nickname &&
+                   r.price === price &&
+                   r.originalChat === (originalChat || '') &&
+                   Math.abs(Number(r.id) - Number(newRecord.id)) < 1500;
+        });
+
+        if (isDuplicate) {
+            console.log(PREFIX, '⚠️ 1.5초 이내 중복 낙찰 이벤트 무시:', nickname, price + '만');
+            return;
         }
 
-        if (!replaced) {
-            records.push(newRecord);
-            console.log(PREFIX, `✅ [경매 ${blockKey || '신규'}] 낙찰 기록 저장:`, nickname, price + '만 (영상시간: ' + (videoTimeStr || realTimeStr) + ')');
-        }
+        records.push(newRecord);
+        console.log(PREFIX, `✅ [낙찰 기록 추가 완료 #${records.length}]`, nickname, price + '만 (시간: ' + (videoTimeStr || realTimeStr) + ')');
 
         saveBidRecords(records);
         updateBidBadge();
@@ -449,11 +438,6 @@
      */
     function removeBidRecord(blockKey = null, nickname = null) {
 
-        // 🛑 다시보기 환경: 낙찰자 수정/삭제 방지
-        if (isReplayMode()) {
-            return false;
-        }
-
         const curVideoId = getCurrentVideoId();
         const today = getTodayString();
         const allRecords = loadBidRecords();
@@ -463,7 +447,7 @@
             const r = allRecords[i];
             if (!r) continue;
             const isCurrentVid = (curVideoId && curVideoId !== 'unknown' && curVideoId !== 'live_chat' && curVideoId !== 'live_chat_replay')
-                ? (r.videoId === curVideoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false))
+                ? (r.videoId === curVideoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false) || r.date === today)
                 : (r.date === today || !r.videoId || r.videoId === 'unknown');
 
             if (isCurrentVid) {
@@ -486,7 +470,7 @@
                 const matchBlock = blockKey && r.blockKey === blockKey;
                 const matchNick = nickname && r.nickname === nickname;
                 const isCurrent = (curVideoId && curVideoId !== 'unknown' && curVideoId !== 'live_chat' && curVideoId !== 'live_chat_replay')
-                    ? (r.videoId === curVideoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false))
+                    ? (r.videoId === curVideoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false) || r.date === today)
                     : (r.date === today || !r.videoId || r.videoId === 'unknown');
                 return !(isCurrent && (matchBlock || matchNick));
             });
@@ -507,14 +491,18 @@
         const records = loadBidRecords();
         const today = getTodayString();
 
-        return records.filter(r => {
+        if (!Array.isArray(records) || records.length === 0) {
+            return [];
+        }
+
+        const filtered = records.filter(r => {
             if (!r) return false;
             // 1) 현재 방송/다시보기의 videoId가 명확히 확인된 경우
             if (
                 videoId && videoId !== 'unknown' && videoId !== 'live_chat' && videoId !== 'live_chat_replay'
             ) {
-                // 해당 영상의 videoId와 일치하거나, 당일 기록 중 videoId가 누락/unknown인 레코드도 유연하게 허용
-                return r.videoId === videoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false);
+                // 해당 영상의 videoId와 일치하거나, 당일 기록(videoId 미스매치 완화)도 유연하게 포함
+                return r.videoId === videoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false) || r.date === today;
             }
             // 2) videoId를 특정하기 어려운 환경(로컬 테스트 파일, 시뮬레이터 등)인 경우:
             // 당일(오늘) 날짜의 기록 반환
@@ -524,6 +512,16 @@
             // 3) Fallback: unknown/live_chat 계열 기록 반환
             return !r.videoId || r.videoId === 'unknown' || r.videoId === 'live_chat' || r.videoId === 'live_chat_replay';
         });
+
+        // 🛑 당일/videoId 필터 결과가 0건이지만 전체 기록이 존재하는 경우 (자정 넘김 방송 등 대응):
+        // 최근 24시간 이내의 기록 또는 전체 기록을 반환하여 내역 누락 방지
+        if (filtered.length === 0 && records.length > 0) {
+            const now = Date.now();
+            const recent = records.filter(r => r && (now - Number(r.id) < 86400000 || r.date === today));
+            return recent.length > 0 ? recent : records;
+        }
+
+        return filtered;
     }
 
 
@@ -790,20 +788,20 @@
             if (isHostNickname(rawNick)) return true;
         }
 
-        // 1) author-type 속성 확인 (YouTube 표준: "owner", "moderator")
+        // 1) author-type 속성 확인 (채널 소유자 owner만 제외, moderator는 닉네임이 방장일 때만 제외)
         const authorType = (el.getAttribute('author-type') || '').toLowerCase();
-        if (authorType === 'owner' || authorType === 'moderator') return true;
+        if (authorType === 'owner') return true;
 
         // 2) message renderer 내부 author-chip 확인
         const authorChip = el.closest('yt-live-chat-author-chip') || el.querySelector('yt-live-chat-author-chip');
         if (authorChip) {
             const chipType = (authorChip.getAttribute('type') || '').toLowerCase();
-            if (chipType === 'owner' || chipType === 'moderator') return true;
-            if (authorChip.querySelector('[type="owner"], [type="moderator"], .host-badge')) return true;
+            if (chipType === 'owner') return true;
+            if (authorChip.querySelector('[type="owner"], .host-badge')) return true;
         }
 
-        // 3) 배지 렌더러 확인 (YouTube 표준 뱃지)
-        if (el.querySelector('yt-live-chat-author-badge-renderer[type="owner"], yt-live-chat-author-badge-renderer[type="moderator"], .host-badge')) {
+        // 3) 배지 렌더러 확인 (YouTube 표준 소유자 뱃지)
+        if (el.querySelector('yt-live-chat-author-badge-renderer[type="owner"], .host-badge')) {
             return true;
         }
 
@@ -1460,14 +1458,14 @@
 
         const clean = text.trim();
 
-        // 1) 정확히 등호 19개 일치 (실시간 라이브 & 다시보기 공통 표준 밑줄)
+        // 1) 정확히 등호 19개 일치 (표준 밑줄 버튼)
         if (clean === EXACT_AUCTION_SEPARATOR) {
             return true;
         }
 
-        // 2) 다시보기 환경이거나 유연 모드(checkLenient)인 경우에만 등호 3개 이상(===...) 인정
-        if (checkLenient || isReplayMode()) {
-            return /^={3,}$/.test(clean) || /^-{3,}$/.test(clean) || /^~{3,}$/.test(clean);
+        // 2) 등호, 하이픈, 물결, 언더바 3개 이상 연속된 구분선 (실시간 라이브 & 다시보기 공통 지원)
+        if (/^={3,}$/.test(clean) || /^-{3,}$/.test(clean) || /^~{3,}$/.test(clean) || /^__{3,}$/.test(clean)) {
+            return true;
         }
 
         return false;
@@ -1479,16 +1477,26 @@
     // =========================================================
 
     function findTopBidAboveSeparator(separatorEl = null, targetDoc = null) {
-        const doc = targetDoc || (separatorEl && separatorEl.ownerDocument) || document;
+        const actualDoc = (separatorEl && separatorEl.ownerDocument) || targetDoc || document;
 
         // 채팅 메시지 엘리먼트 목록 수집
-        const chatItems = Array.from(
-            doc.querySelectorAll(
+        let chatItems = Array.from(
+            actualDoc.querySelectorAll(
                 'yt-live-chat-text-message-renderer, ' +
                 'yt-live-chat-paid-message-renderer, ' +
                 'yt-live-chat-membership-item-renderer'
             )
         );
+
+        if (!chatItems.length && actualDoc !== document) {
+            chatItems = Array.from(
+                document.querySelectorAll(
+                    'yt-live-chat-text-message-renderer, ' +
+                    'yt-live-chat-paid-message-renderer, ' +
+                    'yt-live-chat-membership-item-renderer'
+                )
+            );
+        }
 
         if (!chatItems.length) {
             return null;
@@ -1497,25 +1505,53 @@
         let targetItems = [];
 
         if (separatorEl) {
-            const sepIndex = chatItems.indexOf(separatorEl);
-            if (sepIndex <= 0) {
-                return null;
-            }
+            let sepIndex = chatItems.indexOf(separatorEl);
 
-            // separatorEl 이전(위쪽) 메시지들 탐색
-            // 이전 밑줄(직전 경매의 밑줄)이 있는지 확인하여 직전 밑줄 이후부터만 슬라이스
-            let startIndex = 0;
-            for (let i = sepIndex - 1; i >= 0; i--) {
-                const item = chatItems[i];
-                const msgEl = item.querySelector('#message');
-                const text = msgEl ? msgEl.textContent.trim() : '';
-                if (isSeparatorMessage(text)) {
-                    startIndex = i + 1;
-                    break;
+            // 🛑 DOM에서 separatorEl 인덱스를 직접 찾지 못했거나 맨 앞(0)인 경우:
+            // 형제 노드(previousElementSibling) 역추적 fallback
+            if (sepIndex < 0) {
+                const prevSiblingItems = [];
+                let sibling = separatorEl.previousElementSibling;
+                while (sibling) {
+                    if (
+                        typeof sibling.matches === 'function' &&
+                        sibling.matches(
+                            'yt-live-chat-text-message-renderer, ' +
+                            'yt-live-chat-paid-message-renderer, ' +
+                            'yt-live-chat-membership-item-renderer'
+                        )
+                    ) {
+                        const msgEl = sibling.querySelector('#message');
+                        const text = msgEl ? msgEl.textContent.trim() : '';
+                        if (isSeparatorMessage(text)) {
+                            break; // 직전 밑줄 도달
+                        }
+                        prevSiblingItems.unshift(sibling);
+                    }
+                    sibling = sibling.previousElementSibling;
+                }
+                if (prevSiblingItems.length > 0) {
+                    targetItems = prevSiblingItems;
+                } else {
+                    // fallback: chatItems 전체에서 마지막 밑줄 이전 탐색
+                    sepIndex = chatItems.length - 1;
                 }
             }
 
-            targetItems = chatItems.slice(startIndex, sepIndex);
+            if (targetItems.length === 0 && sepIndex > 0) {
+                // separatorEl 이전(위쪽) 메시지들 탐색
+                let startIndex = 0;
+                for (let i = sepIndex - 1; i >= 0; i--) {
+                    const item = chatItems[i];
+                    const msgEl = item.querySelector('#message');
+                    const text = msgEl ? msgEl.textContent.trim() : '';
+                    if (isSeparatorMessage(text)) {
+                        startIndex = i + 1;
+                        break;
+                    }
+                }
+                targetItems = chatItems.slice(startIndex, sepIndex);
+            }
         } else {
             // separatorEl이 직접 지정되지 않은 경우(예: 밑줄 버튼 클릭 시):
             // 마지막 밑줄 이후(또는 최근 60개)의 메시지들을 대상
@@ -1530,6 +1566,18 @@
                 }
             }
             targetItems = chatItems.slice(startIndex);
+        }
+
+        if (!targetItems.length) {
+            // 최후 fallback: separatorEl 직전 최근 30개 메시지 탐색
+            if (separatorEl && chatItems.length > 0) {
+                const idx = chatItems.indexOf(separatorEl);
+                if (idx > 0) {
+                    targetItems = chatItems.slice(Math.max(0, idx - 30), idx);
+                } else {
+                    targetItems = chatItems.slice(-30);
+                }
+            }
         }
 
         if (!targetItems.length) {
@@ -2051,8 +2099,8 @@
             console.log(PREFIX, '채팅 입력창 없음 (입력창 숨김): 낙찰 기록 및 하이라이트 진행');
         }
 
-        // 낙찰 내역 기록
-        const blockKey = getAuctionBlockKey(winner.element || separatorEl, targetDoc || (separatorEl && separatorEl.ownerDocument) || document);
+        // 낙찰 내역 기록 (밑줄 자동 감지 고유 키 부여)
+        const blockKey = `auto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
         addBidRecord(
             winner.nickname,
             winner.priceStr,
@@ -2995,12 +3043,19 @@
                     const rdata = rec.data;
                     const rview = new DataView(rdata.buffer, rdata.byteOffset, rdata.byteLength);
 
-                    // 7번 행 (1번 물품 낙찰가/낙찰자)
+                    // 7번 행 (1번 물품 수량/낙찰가/낙찰자)
                     if ((rtype === 0x027E || rtype === 0x0203) && rdata.length >= 6) {
                         const row = rview.getUint16(0, true);
                         const col = rview.getUint16(2, true);
                         const xf = rview.getUint16(4, true);
-                        if (row === 7 && col === 6) {
+                        if (row === 7 && col === 3) {
+                            if (sampleBids.length >= 1) {
+                                const qtyVal = Number(sampleBids[0].qty) || 1;
+                                const recBytes = createNumberRecord(7, 3, xf, qtyVal);
+                                newRecords.push({ raw: recBytes });
+                                continue;
+                            }
+                        } else if (row === 7 && col === 6) {
                             if (sampleBids.length >= 1) {
                                 const recBytes = createNumberRecord(7, 6, xf, sampleBids[0].price);
                                 newRecords.push({ raw: recBytes });
@@ -3020,7 +3075,7 @@
                         }
                     }
 
-                    // 8번 행 이후 (2번~992번 물품 MULBLANK 분할 및 낙찰가/낙찰자 주입)
+                    // 8번 행 이후 (2번~992번 물품 MULBLANK 분할: 수량(열 3) = 기본 1, 낙찰가(열 6), 낙찰자(열 7))
                     if (rtype === 0x00BE && rdata.length >= 6) {
                         const row = rview.getUint16(0, true);
                         const fc = rview.getUint16(2, true);
@@ -3033,25 +3088,40 @@
                             for (let k = 0; k < count; k++) {
                                 xfs.push(rview.getUint16(4 + k * 2, true));
                             }
-                            const mb1 = createMulblankRecord(row, 2, 5, xfs.slice(0, 4));
+                            // col 2: 품명 (BLANK)
+                            const b2 = createBlankRecord(row, 2, xfs[0]);
+                            // col 3: 수량 (NUMBER = 기본 1)
+                            const qtyRec = createNumberRecord(row, 3, xfs[1], Number(bid.qty) || 1);
+                            // col 4..5: 출품자, 비회원만 (MULBLANK)
+                            const mb4_5 = createMulblankRecord(row, 4, 5, [xfs[2], xfs[3]]);
+                            // col 6: 낙찰가 (NUMBER)
                             const priceRec = createNumberRecord(row, 6, xfs[4], bid.price);
+                            // col 7: 낙찰자 (LABEL)
                             const bidderRec = createLabelRecord(row, 7, xfs[5], bid.bidder);
 
                             let combined;
                             if (lc === 8) {
                                 const b8 = createBlankRecord(row, 8, xfs[6]);
-                                combined = new Uint8Array(mb1.length + priceRec.length + bidderRec.length + b8.length);
-                                combined.set(mb1, 0);
-                                combined.set(priceRec, mb1.length);
-                                combined.set(bidderRec, mb1.length + priceRec.length);
-                                combined.set(b8, mb1.length + priceRec.length + bidderRec.length);
+                                const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + b8.length;
+                                combined = new Uint8Array(totalL);
+                                let offset = 0;
+                                combined.set(b2, offset); offset += b2.length;
+                                combined.set(qtyRec, offset); offset += qtyRec.length;
+                                combined.set(mb4_5, offset); offset += mb4_5.length;
+                                combined.set(priceRec, offset); offset += priceRec.length;
+                                combined.set(bidderRec, offset); offset += bidderRec.length;
+                                combined.set(b8, offset);
                             } else {
-                                const mb2 = createMulblankRecord(row, 8, 9, xfs.slice(6, 8));
-                                combined = new Uint8Array(mb1.length + priceRec.length + bidderRec.length + mb2.length);
-                                combined.set(mb1, 0);
-                                combined.set(priceRec, mb1.length);
-                                combined.set(bidderRec, mb1.length + priceRec.length);
-                                combined.set(mb2, mb1.length + priceRec.length + bidderRec.length);
+                                const mb8_9 = createMulblankRecord(row, 8, 9, [xfs[6], xfs[7]]);
+                                const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + mb8_9.length;
+                                combined = new Uint8Array(totalL);
+                                let offset = 0;
+                                combined.set(b2, offset); offset += b2.length;
+                                combined.set(qtyRec, offset); offset += qtyRec.length;
+                                combined.set(mb4_5, offset); offset += mb4_5.length;
+                                combined.set(priceRec, offset); offset += priceRec.length;
+                                combined.set(bidderRec, offset); offset += bidderRec.length;
+                                combined.set(mb8_9, offset);
                             }
                             newRecords.push({ raw: combined });
                             continue;
@@ -3133,9 +3203,11 @@
                         const cleanNick = (r && r.nickname) ? String(r.nickname).replace(/^@/, '').trim() : '익명';
                         const p = parseFloat(r && r.price);
                         const wonPrice = !isNaN(p) ? Math.round(p * 10000) : 0;
+                        const qty = (r && r.qty) ? (parseInt(r.qty, 10) || 1) : 1;
                         return {
                             price: wonPrice,
-                            bidder: cleanNick
+                            bidder: cleanNick,
+                            qty: qty
                         };
                     });
 
@@ -5356,8 +5428,8 @@ ${xmlRows.join('')}
             }
 
 
-            // ✅ 낙찰 내역 기록 (실시간/다시보기 무관하게 항상 100% 저장)
-            const blockKey = getAuctionBlockKey(targetChatItem, document);
+            // ✅ 낙찰 내역 기록 (수동 키패드 입력은 항상 독립 신규 낙찰로 100% 저장)
+            const blockKey = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
             addBidRecord(
                 nickname,
                 price,
@@ -5944,11 +6016,6 @@ ${xmlRows.join('')}
         event
     ) {
 
-        // 🛑 다시보기 환경: 채팅 클릭을 통한 낙찰자 추가/수정 완전 차단
-        if (isReplayMode()) {
-            return;
-        }
-
         // 🛑 좌클릭(button === 0)만 허용 (우클릭/휠클릭 무시)
         if (
             event.button !== undefined &&
@@ -6146,9 +6213,8 @@ ${xmlRows.join('')}
                 );
             }
 
-            const blockKey = getAuctionBlockKey(chatItem, event.target.ownerDocument || document);
-
-            // ✅ 낙찰 내역 기록 (실시간/다시보기 무관하게 항상 100% 저장)
+            // ✅ 낙찰 내역 기록 (수동 채팅 클릭은 항상 독립 신규 낙찰로 100% 저장)
+            const blockKey = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
             addBidRecord(
                 nickname,
                 parsedPrice,
