@@ -1272,9 +1272,10 @@
                 options.placeholder;
         }
 
-        if (options.inputMode) {
+        const inputModeVal = options.inputMode || options.inputmode;
+        if (inputModeVal) {
             element.inputMode =
-                options.inputMode;
+                inputModeVal;
         }
 
         if (options.autocomplete) {
@@ -1290,6 +1291,21 @@
         }
 
         return element;
+    }
+
+
+    // =========================================================
+    // 숫자/소수점 입력값 정제 헬퍼 (숫자 및 단일 소수점만 허용, 쉼표 자동 변환)
+    // =========================================================
+
+    function sanitizeDecimalInput(value) {
+        if (typeof value !== 'string') return '';
+        let clean = value.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+        const parts = clean.split('.');
+        if (parts.length > 2) {
+            clean = parts[0] + '.' + parts.slice(1).join('');
+        }
+        return clean;
     }
 
 
@@ -5065,6 +5081,13 @@ ${xmlRows.join('')}
                 `
             });
 
+            inputEl.addEventListener('input', () => {
+                const cleaned = sanitizeDecimalInput(inputEl.value);
+                if (inputEl.value !== cleaned) {
+                    inputEl.value = cleaned;
+                }
+            });
+
             inputEl.addEventListener('focus', () => {
                 inputEl.style.borderColor = '#38bdf8';
                 inputEl.style.background = 'rgba(56,189,248,.12)';
@@ -5593,6 +5616,13 @@ ${xmlRows.join('')}
             }
             removeCustomModals();
         };
+
+        inputEl.addEventListener('input', () => {
+            const cleaned = sanitizeDecimalInput(inputEl.value);
+            if (inputEl.value !== cleaned) {
+                inputEl.value = cleaned;
+            }
+        });
 
         inputEl.addEventListener('focus', () => {
             inputEl.style.borderColor = accentColor;
