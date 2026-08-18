@@ -1317,8 +1317,8 @@
         // DOM 요소가 전달된 경우 해당 경매 블록 내 다른 채팅들의 호가 문맥 분석
         if (element) {
             const blockItems = getAuctionBlockItems(element, element.ownerDocument || document);
-            const lowScaleAnchors = [];
-            let hasExplicitTenPlus = false;
+            const underTenBids = [];
+            const tenPlusBids = [];
 
             blockItems.forEach(item => {
                 if (isHostOrSystemElement(item) || item === element) return;
@@ -1327,30 +1327,37 @@
                 if (!chatText || isSystemOrNoticeMessage(chatText)) return;
                 const d = parseBidPriceDetail(chatText);
                 if (d && d.priceNum > 0) {
-                    if (d.isPointNumber || d.priceNum < 10 || /출발/i.test(chatText)) {
-                        if (d.priceNum < 20) lowScaleAnchors.push(d.priceNum);
-                    }
-                    if (d.hasExplicitUnit && d.priceNum >= 10) {
-                        hasExplicitTenPlus = true;
+                    const num = d.priceNum;
+                    if (d.isPointNumber && num < 10) {
+                        underTenBids.push(num);
+                    } else if (num < 10 && !d.isRawInteger) {
+                        underTenBids.push(num);
+                    } else if (num < 10) {
+                        underTenBids.push(num);
+                    } else {
+                        tenPlusBids.push(num);
                     }
                 }
             });
 
-            const isLowScale = lowScaleAnchors.length > 0 && (!hasExplicitTenPlus || lowScaleAnchors.length >= 2);
-            const anchorAvg = lowScaleAnchors.length > 0
-                ? (lowScaleAnchors.reduce((sum, v) => sum + v, 0) / lowScaleAnchors.length)
+            const isLowScale = underTenBids.length > 0 && (underTenBids.length > tenPlusBids.length || (underTenBids.length >= 3 && tenPlusBids.length <= 1));
+            const underTenAvg = underTenBids.length > 0
+                ? (underTenBids.reduce((sum, v) => sum + v, 0) / underTenBids.length)
                 : null;
 
             const isEndsWithFive = (raw >= 25 && raw <= 195 && raw % 10 === 5);
-            const candidate = raw / 10;
-            const isBetterFit = isLowScale && anchorAvg !== null && (Math.abs(candidate - anchorAvg) < Math.abs(raw - anchorAvg));
 
-            if (isEndsWithFive && isBetterFit) {
-                console.log(
-                    PREFIX,
-                    `💡 [문맥 보정 파싱] "${text}" (${raw}) ➔ ${normalizePrice(candidate)}만 으로 보정됨`
-                );
-                return normalizePrice(candidate);
+            if (isEndsWithFive && isLowScale) {
+                const candidate = raw / 10;
+                const isBetterFit = underTenAvg !== null && (Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg));
+
+                if (isBetterFit) {
+                    console.log(
+                        PREFIX,
+                        `💡 [문맥 보정 파싱] "${text}" (${raw}) ➔ ${normalizePrice(candidate)}만 으로 보정됨`
+                    );
+                    return normalizePrice(candidate);
+                }
             }
         }
 
@@ -1489,25 +1496,29 @@
         }
 
         // 2단계: 경매 블록 내 호가 문맥 분석 (Context Scale Analysis)
-        // 신뢰도 높은 앵커 가격(Anchor Bids: 소수점 포함, 한 자릿수 정수, 10 미만 단위 입찰 등) 수집
-        const lowScaleAnchors = [];
-        let hasExplicitTenPlus = false;
+        // 10 미만 명확한 입찰가 (1 ~ 9.9만, 예: 5, 6, 6.5, 7, .5, 3.5 등) 및 10 이상 입찰가 수집
+        const underTenBids = [];
+        const tenPlusBids = [];
 
         rawBids.forEach(b => {
-            if (b.detail.isPointNumber || b.detail.priceNum < 10 || /출발/i.test(b.originalChat)) {
-                if (b.detail.priceNum < 20) {
-                    lowScaleAnchors.push(b.detail.priceNum);
-                }
-            }
-            if (b.detail.hasExplicitUnit && b.detail.priceNum >= 10) {
-                hasExplicitTenPlus = true;
+            const num = b.detail.priceNum;
+            if (b.detail.isPointNumber && num < 10) {
+                underTenBids.push(num);
+            } else if (num < 10 && !b.detail.isRawInteger) {
+                underTenBids.push(num);
+            } else if (num < 10) {
+                underTenBids.push(num);
+            } else {
+                tenPlusBids.push(num);
             }
         });
 
-        // 10만원 미만 경매인지 판정 (앵커 가격들이 10 미만 위주인 경우)
-        const isLowScaleAuction = lowScaleAnchors.length > 0 && (!hasExplicitTenPlus || lowScaleAnchors.length >= 2);
-        const anchorAvg = lowScaleAnchors.length > 0
-            ? (lowScaleAnchors.reduce((sum, v) => sum + v, 0) / lowScaleAnchors.length)
+        // 10만원 미만 단위 경매인지 정확히 판정:
+        // - 10 미만 입찰가(5, 6, 7 등)가 존재하고, 10 미만 입찰가가 10 이상 입찰가보다 더 많을 때만 (예: 5, 5, 6, 6, 6.5, 7 vs 65)
+        // ※ 10, 12, 15, 16, 17, 20, 21, 22, 25처럼 10 이상 입찰가가 주를 이루는 경매는 isLowScaleAuction = false!
+        const isLowScaleAuction = underTenBids.length > 0 && (underTenBids.length > tenPlusBids.length || (underTenBids.length >= 3 && tenPlusBids.length <= 1));
+        const underTenAvg = underTenBids.length > 0
+            ? (underTenBids.reduce((sum, v) => sum + v, 0) / underTenBids.length)
             : null;
 
         // 3단계: 스마트 문맥 보정 (65 ➔ 6.5만, 55 ➔ 5.5만 등 소수점 생략 입력 보정)
@@ -1519,19 +1530,20 @@
             // 1) '만', '원' 등의 명시적 단위가 없고,
             // 2) 소수점이 없는 순수 정수이며,
             // 3) 끝자리가 5인 정수 (25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125 등 - 소수점 .5 생략형)
-            // ※ 20, 30, 40, 15 등 일반 정수는 무조건 원본 금액(20만, 30만 등) 유지!
+            // 4) ★ 반드시 현재 경매가 "10만원 미만 경매(isLowScaleAuction)"일 때만!
+            //    (10~30만원대 경매인 12, 15, 20, 22, 25 에서는 25만을 100% 정상 유지!)
             if (!b.detail.hasExplicitUnit && b.detail.isRawInteger) {
                 const raw = b.detail.rawNum;
 
                 // 끝자리가 5인 2~3자리 정수 (25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125 등)
                 const isEndsWithFive = (raw >= 25 && raw <= 195 && raw % 10 === 5);
 
-                if (isEndsWithFive) {
+                if (isEndsWithFive && isLowScaleAuction) {
                     const candidate = raw / 10; // 예: 65 ➔ 6.5, 55 ➔ 5.5
 
                     // 문맥 호가대와 비교:
-                    // candidate(6.5)가 현재 경매의 기준 호가대(anchorAvg, 예: 5~7만)와 더 가까운 경우에만 보정
-                    const isBetterFit = isLowScaleAuction && anchorAvg !== null && (Math.abs(candidate - anchorAvg) < Math.abs(raw - anchorAvg));
+                    // candidate(6.5)가 현재 경매의 10미만 기준 호가대(underTenAvg, 예: 5~7만)와 더 가까운 경우에만 보정
+                    const isBetterFit = underTenAvg !== null && (Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg));
 
                     if (isBetterFit) {
                         finalPrice = candidate;
