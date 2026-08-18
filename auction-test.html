@@ -547,7 +547,19 @@
                         <span>⏱️ 3. 동일 금액 선착순 우선 테스트</span>
                     </button>
                     <button class="sim-btn gold" onclick="runContextAwareScenario()">
-                        <span>💡 4. 소수점 생략(65=6.5만 vs 7만) 스마트 문맥 보정 테스트</span>
+                        <span>💡 4. 한자리 단위 소수점 생략 (65=6.5만 vs 7만)</span>
+                    </button>
+                    <button class="sim-btn gold" onclick="runHighValueScaleScenario()">
+                        <span>📈 5. 10만원 이상 소수점 생략 (255=25.5만 vs 26만 vs 20만)</span>
+                    </button>
+                    <button class="sim-btn primary" onclick="runSequentialRoundsScenario()">
+                        <span>🔄 6. 연속 경매 회차 & 단일 낙찰자 교체/유지 테스트</span>
+                    </button>
+                    <button class="sim-btn red" onclick="runStrictUnderlineScenario()">
+                        <span>🛑 7. 실시간 밑줄 등호 19개(= 19개) 엄격 판별 테스트</span>
+                    </button>
+                    <button class="sim-btn primary" onclick="runReplayFullCycleScenario()">
+                        <span>🎬 8. 다시보기(Replay) 환경 낙찰자 표시 & 가드 테스트</span>
                     </button>
                 </div>
             </div>
@@ -582,6 +594,7 @@
                         <span class="quick-tag" onclick="quickFill('.5')">.5</span>
                         <span class="quick-tag" onclick="quickFill('3,5')">3,5</span>
                         <span class="quick-tag" onclick="quickFill('15만 5천')">15만 5천</span>
+                        <span class="quick-tag" onclick="quickFill('255')">255 (25.5만)</span>
                         <span class="quick-tag" onclick="quickFill('150000원')">150,000원</span>
                         <span class="quick-tag" onclick="quickFill('저요')">저요 (텍스트)</span>
                     </div>
@@ -611,12 +624,13 @@
 
             <!-- 사용 방법 팁 -->
             <div class="guide-tip">
-                💡 <strong>테스트 방법</strong><br>
-                1. <strong>📐 규격입력</strong>: 수고·폭·높이·목대·근장 입력 후 📤 전송 클릭 (가운뎃점 조합 텍스트 입력창 자동 주입, 예: 폭12 · 높이12 · 근장12)<br>
-                2. <strong>💰 가격입력</strong>: 👑 최고가 / ⬆️ 이상(15만이상) / 📋 일반(34만) 선택 테스트<br>
-                3. <strong>📁 기타 안내 ▼</strong>: 접기/펼치기 토글로 추가 공지문구 버튼 확인<br>
-                4. <strong>👑 낙찰자 하이라이터</strong>: 밑줄 전송 시 최고가 낙찰자 채팅에 골드 하이라이트 & 👑 낙찰 뱃지 자동 부착 및 포커스<br>
-                5. <strong>실시간 낙찰 자동화</strong>: 채팅창 메시지 클릭 시 스마트 감지 / 가상 키패드 팝업
+                💡 <strong>주요 기능 테스트 포인트</strong><br>
+                1. <strong>⚡ 원클릭 시나리오 8종</strong>: 소수점 생략(255=25.5만), 20/30만원 오보정 방지, 동일가 선착순, 회차별 단일 낙찰자 하이라이트 유지, 등호 19개 엄격 판별, 다시보기 가드 등 완벽 검증<br>
+                2. <strong>📐 규격입력</strong>: 수고·폭·높이·목대·근장 입력 후 📤 전송 클릭 (가운뎃점 조합 텍스트 입력창 자동 주입, 예: 폭12 · 높이12 · 근장12)<br>
+                3. <strong>💰 가격입력</strong>: 👑 최고가 / ⬆️ 이상(15만이상) / 📋 일반(34만) 선택 테스트<br>
+                4. <strong>📁 기타 안내 ▼</strong>: 접기/펼치기 토글로 추가 공지문구 버튼 확인<br>
+                5. <strong>👑 낙찰자 하이라이터</strong>: 밑줄 전송 시 최고가 낙찰자 채팅에 골드 하이라이트 & 👑 낙찰 뱃지 자동 부착 및 포커스<br>
+                6. <strong>실시간 낙찰 자동화</strong>: 채팅창 메시지 클릭 시 스마트 감지 / 가상 키패드 팝업
             </div>
         </div>
     </aside>
@@ -903,7 +917,7 @@
 
         /** 4. 소수점 생략(65=6.5만 vs 7만) 스마트 문맥 보정 테스트 시나리오 */
         function runContextAwareScenario() {
-            addChatMessage('해담분재경매장', '📢 [스마트 문맥 보정] 5만~7만 경매에서 소수점(.)을 생략한 "65"는 6.5만으로 자동 보정되어 "7만" 입찰자가 낙찰되어야 합니다.', true);
+            addChatMessage('해담분재경매장', '📢 [스마트 문맥 보정: 한자리대] 5만~7만 경매에서 "65"는 6.5만으로 자동 보정되어 "7만" 입찰자가 최종 낙찰되어야 합니다.', true);
 
             const steps = [
                 { nick: '산그늘-y2y', msg: '출발5', delay: 600 },
@@ -914,6 +928,95 @@
                 { nick: '비키비키-k', msg: '65', delay: 3700 }, // 65 -> 6.5만으로 스마트 보정!
                 { nick: '아리까리-w4y', msg: '7', delay: 4500 }, // 최종 최고가: 7만!
                 { nick: '해담분재경매장', msg: '===================', delay: 5400, isHost: true }
+            ];
+
+            steps.forEach(step => {
+                setTimeout(() => {
+                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                }, step.delay);
+            });
+        }
+
+        /** 5. 10만원 이상 고가 경매 소수점 생략(255=25.5만 vs 26만 vs 20만 오보정 방지) 테스트 시나리오 */
+        function runHighValueScaleScenario() {
+            addChatMessage('해담분재경매장', '📢 [고가 경매 스케일 & 3자리 소수점 검증] 20만(20만 유지) -> 25만 -> 255(25.5만 보정) -> 26만(최종 낙찰) 흐름을 검증합니다.', true);
+
+            const steps = [
+                { nick: '대물분재', msg: '출발 20만', delay: 600 },
+                { nick: '소나무장인', msg: '20', delay: 1200 },       // 20 -> 2.0만이 아닌 20만원 정상 유지
+                { nick: '명품수집가', msg: '22', delay: 1800 },
+                { nick: '청송매니아', msg: '25만', delay: 2500 },
+                { nick: '신속입찰', msg: '255', delay: 3300 },       // 255 -> 25.5만으로 스마트 보정! (255만원 X)
+                { nick: '낙찰희망자', msg: '26만', delay: 4100 },     // 26만 -> 25.5만보다 높으므로 최종 최고가!
+                { nick: '해담분재경매장', msg: '===================', delay: 5000, isHost: true }
+            ];
+
+            steps.forEach(step => {
+                setTimeout(() => {
+                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                }, step.delay);
+            });
+        }
+
+        /** 6. 연속 경매 회차 & 단일 낙찰자 교체/유지 테스트 시나리오 */
+        function runSequentialRoundsScenario() {
+            addChatMessage('해담분재경매장', '📢 [연속 회차 테스트] 1회차 경매와 2회차 경매를 연속 진행합니다. 각 회차마다 낙찰자가 1명씩 깔끔하게 하이라이트 유지되어야 합니다.', true);
+
+            const steps = [
+                // 1회차 경매
+                { nick: '해담분재경매장', msg: '🌸 [1회차] 소품 분재 경매 시작 (시작가 5만)', delay: 500, isHost: true },
+                { nick: '회원A', msg: '5만', delay: 1100 },
+                { nick: '회원B', msg: '7.5만', delay: 1700 }, // 1회차 낙찰 후보
+                { nick: '해담분재경매장', msg: '===================', delay: 2400, isHost: true },
+
+                // 2회차 경매
+                { nick: '해담분재경매장', msg: '🌲 [2회차] 중품 진백 경매 시작 (시작가 15만)', delay: 3600, isHost: true },
+                { nick: '회원C', msg: '15만', delay: 4200 },
+                { nick: '회원D', msg: '18만', delay: 4800 },
+                { nick: '회원E', msg: '18.5', delay: 5400 }, // 2회차 낙찰 후보
+                { nick: '해담분재경매장', msg: '===================', delay: 6200, isHost: true }
+            ];
+
+            steps.forEach(step => {
+                setTimeout(() => {
+                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                }, step.delay);
+            });
+        }
+
+        /** 7. 실시간 밑줄 등호 19개(= 19개) 엄격 판별 테스트 시나리오 */
+        function runStrictUnderlineScenario() {
+            addChatMessage('해담분재경매장', '📢 [밑줄 엄격 판별 검증] 실시간 환경에서는 일반 등호(예: === 3개 등)에는 마감되지 않고 오직 정확한 19개(===================)에만 자동 마감/낙찰되어야 합니다.', true);
+
+            const steps = [
+                { nick: '일반회원', msg: '10만', delay: 500 },
+                { nick: '참여자', msg: '12만', delay: 1100 },
+                { nick: '해담분재경매장', msg: '==== 안내사항 ====', delay: 1800, isHost: true }, // 19개 미만 -> 무시되어야 함
+                { nick: '뒤늦은입찰', msg: '15만', delay: 2500 },
+                { nick: '해담분재경매장', msg: '===================', delay: 3300, isHost: true }  // 정확히 19개 -> 정상 마감 및 15만 낙찰!
+            ];
+
+            steps.forEach(step => {
+                setTimeout(() => {
+                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                }, step.delay);
+            });
+        }
+
+        /** 8. 다시보기(Replay) 환경 낙찰자 표시 & 가드 테스트 시나리오 */
+        function runReplayFullCycleScenario() {
+            // 다시보기 모드로 강제 활성화
+            const renderer = document.querySelector('yt-live-chat-renderer');
+            if (renderer && !renderer.hasAttribute('replay')) {
+                toggleReplayMode();
+            }
+
+            addChatMessage('해담분재경매장', '📢 [다시보기 환경 시뮬레이션] 다시보기에서는 채팅 입력창이 없고, 밑줄(등호 3개 이상 포함) 감지 시 골드 하이라이트가 표시되며, 수동 낙찰 추가/수정은 가드로 보호됩니다.', true);
+
+            const steps = [
+                { nick: '다시보기시청자A', msg: '25만', delay: 600 },
+                { nick: '다시보기시청자B', msg: '30만', delay: 1300 },
+                { nick: '해담분재경매장', msg: '===================', delay: 2100, isHost: true }
             ];
 
             steps.forEach(step => {
