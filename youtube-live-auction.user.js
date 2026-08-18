@@ -2863,20 +2863,22 @@
                 return buf;
             }
 
-            /** BIFF8 FORMULA 레코드(0x0006, 공유 수식 참조) 생성 */
+            /** BIFF8 FORMULA 레코드(0x0006, 공유 수식 참조 ptgExp 5바이트) 생성 */
             function createSharedFormulaRecord(row, col, xf, baseRow, baseCol) {
                 const buf = new Uint8Array(31);
                 const view = new DataView(buf.buffer);
                 view.setUint16(0, 0x0006, true);
-                view.setUint16(2, 27, true);
-                view.setUint16(4, row, true);
-                view.setUint16(6, col, true);
-                view.setUint16(8, xf, true);
+                view.setUint16(2, 27, true);      // 레코드 길이 27바이트
+                view.setUint16(4, row, true);     // 행
+                view.setUint16(6, col, true);     // 열
+                view.setUint16(8, xf, true);      // 스타일 XF
+                // 결과(8바이트): 0
                 view.setUint16(18, 0x0008, true); // 로드 시 재계산 플래그
+                // chn(4바이트): 0
                 view.setUint16(24, 5, true);      // cce 수식 길이 5바이트
                 buf[26] = 0x01;                   // ptgExp (공유 수식 참조)
-                view.setUint16(27, baseRow, true);
-                view.setUint16(29, baseCol, true);
+                view.setUint16(27, baseRow, true);// 기준 행
+                view.setUint16(29, baseCol, true);// 기준 열
                 return buf;
             }
 
@@ -3018,7 +3020,7 @@
                 return outBuf;
             }
 
-            /** 경매양식원본.xls 원본에 낙찰가(열 6)와 낙찰자(열 7)를 주입하고 새 바이너리 생성 */
+            /** 경매양식원본.xls 원본에 6G(낙찰가)와 6H(낙찰자)만 주입하고 기존 수식을 100% 보존하여 새 바이너리 생성 */
             function fillAuctionTemplateXls(origXlsBytes, bidList) {
                 const origBytes = new Uint8Array(origXlsBytes);
                 const headerView = new DataView(origBytes.buffer, origBytes.byteOffset, origBytes.byteLength);
@@ -3074,30 +3076,29 @@
                     const rdata = rec.data;
                     const rview = new DataView(rdata.buffer, rdata.byteOffset, rdata.byteLength);
 
-                    // 7번 행 (1번 물품 수량/낙찰가/낙찰자)
+                    // 1) 7번 행 (1번 물품: 6D 수량=1, 6G 낙찰가, 6H 낙찰자 주입)
                     if ((rtype === 0x027E || rtype === 0x0203) && rdata.length >= 6) {
                         const row = rview.getUint16(0, true);
                         const col = rview.getUint16(2, true);
                         const xf = rview.getUint16(4, true);
-                        if (row === 7 && col === 3) {
+                        if (row === 7 && col === 3) { // 6D 수량 열 (항목 존재 시 무조건 1)
                             if (sampleBids.length >= 1) {
-                                const qtyVal = Number(sampleBids[0].qty) || 1;
-                                const recBytes = createNumberRecord(7, 3, xf, qtyVal);
+                                const recBytes = createNumberRecord(7, 3, xf, 1);
                                 newRecords.push({ raw: recBytes });
                                 continue;
                             }
-                        } else if (row === 7 && col === 6) {
+                        } else if (row === 7 && col === 6) { // 6G 낙찰가 열
                             if (sampleBids.length >= 1) {
                                 const recBytes = createNumberRecord(7, 6, xf, sampleBids[0].price);
                                 newRecords.push({ raw: recBytes });
                                 continue;
                             }
                         }
-                    } else if (rtype === 0x00FD && rdata.length >= 6) {
+                    } else if ((rtype === 0x00FD || rtype === 0x0204) && rdata.length >= 6) {
                         const row = rview.getUint16(0, true);
                         const col = rview.getUint16(2, true);
                         const xf = rview.getUint16(4, true);
-                        if (row === 7 && col === 7) {
+                        if (row === 7 && col === 7) { // 6H 낙찰자 열
                             if (sampleBids.length >= 1) {
                                 const recBytes = createLabelRecord(7, 7, xf, sampleBids[0].bidder);
                                 newRecords.push({ raw: recBytes });
@@ -3106,35 +3107,61 @@
                         }
                     }
 
-                    // 8번 행 이후 (2번~992번 물품 MULBLANK 분할: 수량(열 3) = 기본 1, 낙찰가(열 6), 낙찰자(열 7))
+                    // 2) Row 13의 원본 템플릿 손상 수식 레코드(26바이트) 표준 27바이트 수식으로 완벽 자동 복원
+                    if (rtype === 0x0006 && rdata.length === 26) {
+                        const row = rview.getUint16(0, true);
+                        const col = rview.getUint16(2, true);
+                        const xf = rview.getUint16(4, true);
+                        if (row === 13 && col >= 10 && col <= 16) {
+                            const fixedFormula = createSharedFormulaRecord(13, col, xf, 10, col);
+                            newRecords.push({ raw: fixedFormula });
+                            continue;
+                        }
+                    }
+
+                    // 3) 8번 행 이후 (2번~992번 물품: MULBLANK에서 D열(수량=1), G열(낙찰가), H열(낙찰자) 주입 및 J열 수식 보존)
                     if (rtype === 0x00BE && rdata.length >= 6) {
                         const row = rview.getUint16(0, true);
                         const fc = rview.getUint16(2, true);
                         const lc = rview.getUint16(rdata.length - 2, true);
                         const itemIdx = row - 7;
-                        if (itemIdx >= 1 && itemIdx < sampleBids.length && fc === 2 && lc >= 8) {
+                        const count = lc - fc + 1;
+                        const xfs = [];
+                        for (let k = 0; k < count; k++) {
+                            xfs.push(rview.getUint16(4 + k * 2, true));
+                        }
+
+                        if (itemIdx >= 1 && itemIdx < sampleBids.length && fc === 2 && lc >= 7) {
                             const bid = sampleBids[itemIdx];
-                            const count = lc - fc + 1;
-                            const xfs = [];
-                            for (let k = 0; k < count; k++) {
-                                xfs.push(rview.getUint16(4 + k * 2, true));
-                            }
-                            // col 2: 품명 (BLANK) - 13번 행의 경우 표준 본문 스타일(222) 사용
-                            const xf2 = (row === 13) ? 222 : xfs[0];
-                            const b2 = createBlankRecord(row, 2, xf2);
-                            // col 3: 수량 (NUMBER = 기본 1) - 13번 행의 경우 표준 본문 스타일(223) 사용
-                            const xf3 = (row === 13) ? 223 : xfs[1];
-                            const qtyRec = createNumberRecord(row, 3, xf3, Number(bid.qty) || 1);
-                            // col 4..5: 출품자, 비회원만 (MULBLANK)
+
+                            // col 2: 품명 (BLANK)
+                            const b2 = createBlankRecord(row, 2, xfs[0]);
+                            // col 3: 수량 (NUMBER = 무조건 1)
+                            const qtyRec = createNumberRecord(row, 3, xfs[1], 1);
+                            // col 4..5: 출품자, 비회원 (MULBLANK)
                             const mb4_5 = createMulblankRecord(row, 4, 5, [xfs[2], xfs[3]]);
-                            // col 6: 낙찰가 (NUMBER)
+                            // col 6: 6G 낙찰가 (NUMBER)
                             const priceRec = createNumberRecord(row, 6, xfs[4], bid.price);
-                            // col 7: 낙찰자 (LABEL)
+                            // col 7: 6H 낙찰자 (LABEL)
                             const bidderRec = createLabelRecord(row, 7, xfs[5], bid.bidder);
+                            // col 8: 비회원 (BLANK)
+                            const b8 = createBlankRecord(row, 8, xfs[6]);
 
                             let combined;
-                            if (lc === 8) {
-                                const b8 = createBlankRecord(row, 8, xfs[6]);
+                            if (lc === 9) {
+                                // Row 9~18: 원본에서 누락되었던 J열(유찰여부) 수식 완벽 복원
+                                const f9 = createSharedFormulaRecord(row, 9, xfs[7] || 66, 7, 9);
+                                const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + b8.length + f9.length;
+                                combined = new Uint8Array(totalL);
+                                let offset = 0;
+                                combined.set(b2, offset); offset += b2.length;
+                                combined.set(qtyRec, offset); offset += qtyRec.length;
+                                combined.set(mb4_5, offset); offset += mb4_5.length;
+                                combined.set(priceRec, offset); offset += priceRec.length;
+                                combined.set(bidderRec, offset); offset += bidderRec.length;
+                                combined.set(b8, offset); offset += b8.length;
+                                combined.set(f9, offset);
+                            } else {
                                 const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + b8.length;
                                 combined = new Uint8Array(totalL);
                                 let offset = 0;
@@ -3144,52 +3171,26 @@
                                 combined.set(priceRec, offset); offset += priceRec.length;
                                 combined.set(bidderRec, offset); offset += bidderRec.length;
                                 combined.set(b8, offset);
-                            } else if (lc === 9) {
-                                const mb8_9 = createMulblankRecord(row, 8, 9, [xfs[6], xfs[7]]);
-                                const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + mb8_9.length;
-                                combined = new Uint8Array(totalL);
-                                let offset = 0;
-                                combined.set(b2, offset); offset += b2.length;
-                                combined.set(qtyRec, offset); offset += qtyRec.length;
-                                combined.set(mb4_5, offset); offset += mb4_5.length;
-                                combined.set(priceRec, offset); offset += priceRec.length;
-                                combined.set(bidderRec, offset); offset += bidderRec.length;
-                                combined.set(mb8_9, offset);
-                            } else {
-                                // lc >= 10 (13번 행: 원본 템플릿에서 10~16열 수식이 비어있던 행 완벽 복원)
-                                const mb8_9 = createMulblankRecord(row, 8, 9, [xfs[6] || 118, xfs[7] || 66]);
-                                const f10 = createSharedFormulaRecord(row, 10, 65, 10, 10);
-                                const f11 = createSharedFormulaRecord(row, 11, 91, 10, 11);
-                                const f12 = createSharedFormulaRecord(row, 12, 100, 10, 12);
-                                const f13 = createSharedFormulaRecord(row, 13, 65, 10, 13);
-                                const f14 = createSharedFormulaRecord(row, 14, 65, 10, 14);
-                                const f15 = createSharedFormulaRecord(row, 15, 65, 10, 15);
-                                const f16 = createSharedFormulaRecord(row, 16, 65, 10, 16);
-                                const b17 = createBlankRecord(row, 17, 67);
-                                const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + mb8_9.length +
-                                    f10.length + f11.length + f12.length + f13.length + f14.length + f15.length + f16.length + b17.length;
-                                combined = new Uint8Array(totalL);
-                                let offset = 0;
-                                combined.set(b2, offset); offset += b2.length;
-                                combined.set(qtyRec, offset); offset += qtyRec.length;
-                                combined.set(mb4_5, offset); offset += mb4_5.length;
-                                combined.set(priceRec, offset); offset += priceRec.length;
-                                combined.set(bidderRec, offset); offset += bidderRec.length;
-                                combined.set(mb8_9, offset); offset += mb8_9.length;
-                                combined.set(f10, offset); offset += f10.length;
-                                combined.set(f11, offset); offset += f11.length;
-                                combined.set(f12, offset); offset += f12.length;
-                                combined.set(f13, offset); offset += f13.length;
-                                combined.set(f14, offset); offset += f14.length;
-                                combined.set(f15, offset); offset += f15.length;
-                                combined.set(f16, offset); offset += f16.length;
-                                combined.set(b17, offset);
                             }
+
+                            if (combined) {
+                                newRecords.push({ raw: combined });
+                                continue;
+                            }
+                        } else if (fc === 2 && lc === 9) {
+                            // 낙찰 데이터가 없는 Row 9~18 행에서도 누락된 J열 수식을 복원하여 서식 단절 방지
+                            const mb2_8 = createMulblankRecord(row, 2, 8, [xfs[0], xfs[1], xfs[2], xfs[3], xfs[4], xfs[5], xfs[6]]);
+                            const f9 = createSharedFormulaRecord(row, 9, xfs[7] || 66, 7, 9);
+                            const totalL = mb2_8.length + f9.length;
+                            const combined = new Uint8Array(totalL);
+                            combined.set(mb2_8, 0);
+                            combined.set(f9, mb2_8.length);
                             newRecords.push({ raw: combined });
                             continue;
                         }
                     }
 
+                    // 수식(0x0006 FORMULA)을 포함한 모든 레코드는 전혀 수정 없이 100% 원본 그대로 유지
                     newRecords.push(rec);
                 }
 
@@ -3265,18 +3266,16 @@
                         const cleanNick = (r && r.nickname) ? String(r.nickname).replace(/^@/, '').trim() : '익명';
                         const p = parseFloat(r && r.price);
                         const wonPrice = !isNaN(p) ? Math.round(p * 10000) : 0;
-                        const qty = (r && r.qty) ? (parseInt(r.qty, 10) || 1) : 1;
                         return {
                             price: wonPrice,
-                            bidder: cleanNick,
-                            qty: qty
+                            bidder: cleanNick
                         };
                     });
 
                     // 2) 템플릿 압축 해제
                     const templateBytes = await decompressGzipBase64(AUCTION_TEMPLATE_GZIP_B64);
 
-                    // 3) 낙찰가, 낙찰자 데이터 주입
+                    // 3) 6G 낙찰가, 6H 낙찰자 열만 주입 (존재하는 수식은 수정없이 그대로 유지)
                     const newXlsBytes = fillAuctionTemplateXls(templateBytes, bidList);
 
                     // 4) 파일 다운로드 트리거
