@@ -4885,22 +4885,16 @@ ${xmlRows.join('')}
     function openSpecModal() {
         removeCustomModals();
 
-        let targetDoc = document;
-        try {
-            if (window.top && window.top.document && window.top.document.body) {
-                targetDoc = window.top.document;
-            }
-        } catch (e) {
-            targetDoc = document;
-        }
+        const mountTarget = getChatMountTarget();
+        if (!mountTarget) return;
 
         const backdrop = createElement('div', {
             id: '__auction_spec_backdrop',
             style: `
                 position:fixed !important;
                 inset:0 !important;
-                width:100vw !important;
-                height:100vh !important;
+                width:100% !important;
+                height:100% !important;
                 background:rgba(0,0,0,.62) !important;
                 backdrop-filter:blur(5px) !important;
                 -webkit-backdrop-filter:blur(5px) !important;
@@ -4908,6 +4902,7 @@ ${xmlRows.join('')}
                 opacity:1 !important;
                 visibility:visible !important;
                 pointer-events:auto !important;
+                overscroll-behavior:contain !important;
             `
         });
 
@@ -4925,7 +4920,8 @@ ${xmlRows.join('')}
                 top:50% !important;
                 transform:translate(-50%,-50%) !important;
                 width:300px !important;
-                max-width:calc(100vw - 24px) !important;
+                max-width:calc(100% - 24px) !important;
+                max-height:calc(100% - 24px) !important;
                 box-sizing:border-box !important;
                 padding:16px 18px !important;
                 background:linear-gradient(145deg, rgba(30,32,38,.98), rgba(18,20,24,.99)) !important;
@@ -4938,6 +4934,8 @@ ${xmlRows.join('')}
                 flex-direction:column !important;
                 gap:12px !important;
                 font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+                overflow:hidden !important;
+                overscroll-behavior:contain !important;
             `
         });
 
@@ -5148,9 +5146,18 @@ ${xmlRows.join('')}
 
         modal.appendChild(submitBtn);
 
-        const mountTarget = targetDoc.body || targetDoc.documentElement;
         mountTarget.appendChild(backdrop);
         mountTarget.appendChild(modal);
+
+        modal.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+
+        backdrop.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
 
         // 첫 번째 입력칸(수고) 자동 포커스
         setTimeout(() => {
@@ -5168,22 +5175,16 @@ ${xmlRows.join('')}
     function openPriceChoiceModal() {
         removeCustomModals();
 
-        let targetDoc = document;
-        try {
-            if (window.top && window.top.document && window.top.document.body) {
-                targetDoc = window.top.document;
-            }
-        } catch (e) {
-            targetDoc = document;
-        }
+        const mountTarget = getChatMountTarget();
+        if (!mountTarget) return;
 
         const backdrop = createElement('div', {
             id: '__auction_price_choice_backdrop',
             style: `
                 position:fixed !important;
                 inset:0 !important;
-                width:100vw !important;
-                height:100vh !important;
+                width:100% !important;
+                height:100% !important;
                 background:rgba(0,0,0,.62) !important;
                 backdrop-filter:blur(5px) !important;
                 -webkit-backdrop-filter:blur(5px) !important;
@@ -5191,6 +5192,7 @@ ${xmlRows.join('')}
                 opacity:1 !important;
                 visibility:visible !important;
                 pointer-events:auto !important;
+                overscroll-behavior:contain !important;
             `
         });
 
@@ -5208,7 +5210,8 @@ ${xmlRows.join('')}
                 top:50% !important;
                 transform:translate(-50%,-50%) !important;
                 width:280px !important;
-                max-width:calc(100vw - 24px) !important;
+                max-width:calc(100% - 24px) !important;
+                max-height:calc(100% - 24px) !important;
                 box-sizing:border-box !important;
                 padding:16px 18px !important;
                 background:linear-gradient(145deg, rgba(30,32,38,.98), rgba(18,20,24,.99)) !important;
@@ -5221,6 +5224,8 @@ ${xmlRows.join('')}
                 flex-direction:column !important;
                 gap:12px !important;
                 font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+                overflow:hidden !important;
+                overscroll-behavior:contain !important;
             `
         });
 
@@ -5402,9 +5407,26 @@ ${xmlRows.join('')}
 
         modal.appendChild(btnList);
 
-        const mountTarget = targetDoc.body || targetDoc.documentElement;
         mountTarget.appendChild(backdrop);
         mountTarget.appendChild(modal);
+
+        modal.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+
+        backdrop.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                removeCustomModals();
+                window.removeEventListener('keydown', escHandler, true);
+            }
+        };
+        window.addEventListener('keydown', escHandler, true);
     }
 
 
@@ -5415,14 +5437,8 @@ ${xmlRows.join('')}
     function openPriceAmountModal(type) {
         removeCustomModals();
 
-        let targetDoc = document;
-        try {
-            if (window.top && window.top.document && window.top.document.body) {
-                targetDoc = window.top.document;
-            }
-        } catch (e) {
-            targetDoc = document;
-        }
+        const mountTarget = getChatMountTarget();
+        if (!mountTarget) return;
 
         const isSang = type === '이상';
         const titleText = isSang ? '⬆️ 가격 입력 (이상)' : '📋 가격 입력 (일반)';
@@ -5434,8 +5450,8 @@ ${xmlRows.join('')}
             style: `
                 position:fixed !important;
                 inset:0 !important;
-                width:100vw !important;
-                height:100vh !important;
+                width:100% !important;
+                height:100% !important;
                 background:rgba(0,0,0,.62) !important;
                 backdrop-filter:blur(5px) !important;
                 -webkit-backdrop-filter:blur(5px) !important;
@@ -5443,6 +5459,7 @@ ${xmlRows.join('')}
                 opacity:1 !important;
                 visibility:visible !important;
                 pointer-events:auto !important;
+                overscroll-behavior:contain !important;
             `
         });
 
@@ -5460,7 +5477,8 @@ ${xmlRows.join('')}
                 top:50% !important;
                 transform:translate(-50%,-50%) !important;
                 width:290px !important;
-                max-width:calc(100vw - 24px) !important;
+                max-width:calc(100% - 24px) !important;
+                max-height:calc(100% - 24px) !important;
                 box-sizing:border-box !important;
                 padding:16px 18px !important;
                 background:linear-gradient(145deg, rgba(30,32,38,.98), rgba(18,20,24,.99)) !important;
@@ -5473,6 +5491,8 @@ ${xmlRows.join('')}
                 flex-direction:column !important;
                 gap:12px !important;
                 font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+                overflow:hidden !important;
+                overscroll-behavior:contain !important;
             `
         });
 
@@ -5623,9 +5643,18 @@ ${xmlRows.join('')}
         inputWrap.appendChild(confirmBtn);
         modal.appendChild(inputWrap);
 
-        const mountTarget = targetDoc.body || targetDoc.documentElement;
         mountTarget.appendChild(backdrop);
         mountTarget.appendChild(modal);
+
+        modal.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+
+        backdrop.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
 
         setTimeout(() => {
             inputEl.focus();
