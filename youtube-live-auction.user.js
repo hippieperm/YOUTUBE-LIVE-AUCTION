@@ -1212,18 +1212,29 @@
 
     // =========================================================
     // 밑줄(구분선) 메시지 감지
-    // - 정확히 "===================" (등호 19개) 일치할 때만 기준 밑줄로 인정
+    // - 실시간 라이브: 정확히 "===================" (등호 19개) 일치할 때만 기준 밑줄로 인정
+    // - 다시보기(Replay): 등호 19개 또는 등호 3개 이상(===...) 모두 밑줄로 인정
     // =========================================================
 
     const EXACT_AUCTION_SEPARATOR = '===================';
 
-    function isSeparatorMessage(text) {
+    function isSeparatorMessage(text, checkLenient = false) {
         if (!text || typeof text !== 'string') {
             return false;
         }
 
         const clean = text.trim();
-        return clean === EXACT_AUCTION_SEPARATOR;
+        // 1) 정확히 등호 19개 일치
+        if (clean === EXACT_AUCTION_SEPARATOR) {
+            return true;
+        }
+
+        // 2) 다시보기 환경이거나 유연 모드(checkLenient)인 경우 등호 3개 이상(===...)도 밑줄로 인정
+        if (checkLenient || isReplayMode()) {
+            return /^={3,}$/.test(clean);
+        }
+
+        return false;
     }
 
 
@@ -1621,11 +1632,6 @@
      * 밑줄 감지 시 자동 낙찰 처리
      */
     function processSeparatorElement(separatorEl, targetDoc = null) {
-        // 🛑 다시보기 환경: 밑줄 감지로 인한 낙찰자 자동 추가/수정 완전 차단
-        if (isReplayMode()) {
-            return;
-        }
-
         if (!separatorEl || separatorEl.dataset.auctionProcessed === 'true') {
             return;
         }
@@ -1648,6 +1654,12 @@
             '(원문:', winner.originalChat + ')'
         );
 
+        // 🛑 다시보기 환경: 인풋창 자동 입력 및 DB 낙찰 기록 추가/수정은 차단하고, 채팅창 하이라이터만 완벽 적용!
+        if (isReplayMode()) {
+            highlightWinnerChatMessage(winner.element, winner, targetDoc);
+            return;
+        }
+
         removeAuctionUI();
 
         const message = createMessage(winner.nickname, winner.priceStr);
@@ -1658,10 +1670,10 @@
             input.focus();
             console.log(PREFIX, '인풋창 자동 입력 완료:', message);
         } else {
-            console.log(PREFIX, '채팅 입력창 없음 (다시보기 환경/입력창 숨김): 낙찰 기록 및 하이라이트 진행');
+            console.log(PREFIX, '채팅 입력창 없음 (입력창 숨김): 낙찰 기록 및 하이라이트 진행');
         }
 
-        // 낙찰 내역 기록 (실시간/다시보기 무관하게 항상 100% 저장)
+        // 낙찰 내역 기록
         const blockKey = getAuctionBlockKey(winner.element || separatorEl, targetDoc || (separatorEl && separatorEl.ownerDocument) || document);
         addBidRecord(
             winner.nickname,
@@ -7090,11 +7102,7 @@ ${xmlRows.join('')}
                                 const text = msgEl ? msgEl.textContent.trim() : '';
 
                                 if (text && isSeparatorMessage(text)) {
-                                    if (isReplayMode()) {
-                                        chatItem.dataset.auctionProcessed = 'true';
-                                        return;
-                                    }
-                                    console.log(PREFIX, '실시간 새 밑줄 감지:', text);
+                                    console.log(PREFIX, isReplayMode() ? '다시보기 밑줄 감지:' : '실시간 새 밑줄 감지:', text);
                                     // DOM이 완전히 업데이트될 시간을 위해 미세 딜레이 후 선별 처리
                                     setTimeout(() => {
                                         processSeparatorElement(chatItem, doc);
@@ -7112,6 +7120,26 @@ ${xmlRows.join('')}
 
                 _activeChatObservers.set(container, observer);
                 console.log(PREFIX, '실시간 채팅 감시 옵저버 부착 완료');
+
+                // 다시보기 환경: 이미 DOM에 렌더링되어 있던 미처리 밑줄 메시지 초기 선별 및 하이라이트
+                if (isReplayMode()) {
+                    try {
+                        const existingItems = container.querySelectorAll(
+                            'yt-live-chat-text-message-renderer, ' +
+                            'yt-live-chat-paid-message-renderer, ' +
+                            'yt-live-chat-membership-item-renderer'
+                        );
+                        existingItems.forEach(item => {
+                            if (item && !item.dataset.auctionProcessed) {
+                                const msgEl = item.querySelector('#message');
+                                const text = msgEl ? msgEl.textContent.trim() : '';
+                                if (text && isSeparatorMessage(text)) {
+                                    processSeparatorElement(item, doc);
+                                }
+                            }
+                        });
+                    } catch (e) {}
+                }
             });
         });
     }
