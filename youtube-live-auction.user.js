@@ -3175,7 +3175,7 @@
                         const fc = rview.getUint16(2, true);
                         const lc = rview.getUint16(rdata.length - 2, true);
                         const itemIdx = row - 7;
-                        if (itemIdx >= 1 && itemIdx < sampleBids.length && fc === 2 && (lc === 8 || lc === 9)) {
+                        if (itemIdx >= 1 && itemIdx < sampleBids.length && fc === 2 && lc >= 8) {
                             const bid = sampleBids[itemIdx];
                             const count = lc - fc + 1;
                             const xfs = [];
@@ -3193,30 +3193,22 @@
                             // col 7: 낙찰자 (LABEL)
                             const bidderRec = createLabelRecord(row, 7, xfs[5], bid.bidder);
 
-                            let combined;
+                            let remRec;
                             if (lc === 8) {
-                                const b8 = createBlankRecord(row, 8, xfs[6]);
-                                const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + b8.length;
-                                combined = new Uint8Array(totalL);
-                                let offset = 0;
-                                combined.set(b2, offset); offset += b2.length;
-                                combined.set(qtyRec, offset); offset += qtyRec.length;
-                                combined.set(mb4_5, offset); offset += mb4_5.length;
-                                combined.set(priceRec, offset); offset += priceRec.length;
-                                combined.set(bidderRec, offset); offset += bidderRec.length;
-                                combined.set(b8, offset);
+                                remRec = createBlankRecord(row, 8, xfs[6]);
                             } else {
-                                const mb8_9 = createMulblankRecord(row, 8, 9, [xfs[6], xfs[7]]);
-                                const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + mb8_9.length;
-                                combined = new Uint8Array(totalL);
-                                let offset = 0;
-                                combined.set(b2, offset); offset += b2.length;
-                                combined.set(qtyRec, offset); offset += qtyRec.length;
-                                combined.set(mb4_5, offset); offset += mb4_5.length;
-                                combined.set(priceRec, offset); offset += priceRec.length;
-                                combined.set(bidderRec, offset); offset += bidderRec.length;
-                                combined.set(mb8_9, offset);
+                                remRec = createMulblankRecord(row, 8, lc, xfs.slice(6));
                             }
+                            const totalL = b2.length + qtyRec.length + mb4_5.length + priceRec.length + bidderRec.length + remRec.length;
+                            const combined = new Uint8Array(totalL);
+                            let offset = 0;
+                            combined.set(b2, offset); offset += b2.length;
+                            combined.set(qtyRec, offset); offset += qtyRec.length;
+                            combined.set(mb4_5, offset); offset += mb4_5.length;
+                            combined.set(priceRec, offset); offset += priceRec.length;
+                            combined.set(bidderRec, offset); offset += bidderRec.length;
+                            combined.set(remRec, offset);
+
                             newRecords.push({ raw: combined });
                             continue;
                         }
