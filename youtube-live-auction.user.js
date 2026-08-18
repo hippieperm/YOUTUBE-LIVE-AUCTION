@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Live 낙찰 자동화
 // @namespace    https://youtube.com/
-// @version      2.3
-// @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별 & 단일 낙찰자 채팅 하이라이터 + 스마트 입찰 금액 추출 + 가상 키패드 + 실시간 토스트 알림 + 안내 패널 + 낙찰 내역 관리 & 엑셀 다운로드
+// @version      2.4
+// @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별 & 단일 낙찰자 채팅 하이라이터 + 스마트 입찰 금액 추출 + 가상 키패드 + 실시간 토스트 알림 + 안내 패널 + 낙찰 내역 관리 & 엑셀 다운로드 (다시보기 환경 낙찰자 추가/수정 방지)
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
 // @match        https://www.youtube.com/live_chat*
@@ -167,6 +167,87 @@
     }
 
 
+    /** 다시보기 (YouTube Live Replay / VOD) 환경 여부 판별 */
+    function isReplayMode() {
+        try {
+            // 1) 현재 창 URL 확인
+            const url = new URL(window.location.href);
+            if (url.pathname.includes('live_chat_replay') || url.href.includes('live_chat_replay')) {
+                return true;
+            }
+
+            // 2) 부모/최상위 창 URL 확인
+            try {
+                if (window.top && window.top !== window && window.top.location.href) {
+                    const topHref = window.top.location.href || '';
+                    if (topHref.includes('live_chat_replay')) return true;
+                }
+            } catch (e) {}
+
+            try {
+                if (window.parent && window.parent !== window && window.parent.location.href) {
+                    const parentHref = window.parent.location.href || '';
+                    if (parentHref.includes('live_chat_replay')) return true;
+                }
+            } catch (e) {}
+
+            // 3) Referrer 확인
+            if (document.referrer && document.referrer.includes('live_chat_replay')) {
+                return true;
+            }
+
+            // 4) iframe#chatframe src 확인
+            const checkIframe = (doc) => {
+                try {
+                    const iframe = doc.querySelector('iframe#chatframe');
+                    if (iframe && iframe.src && iframe.src.includes('live_chat_replay')) {
+                        return true;
+                    }
+                } catch (e) {}
+                return false;
+            };
+            if (checkIframe(document)) return true;
+            try {
+                if (window.top && checkIframe(window.top.document)) return true;
+            } catch (e) {}
+
+            // 5) 다시보기 전용 DOM 요소 확인
+            const checkDom = (doc) => {
+                try {
+                    if (doc.querySelector('yt-live-chat-replay-header-renderer')) return true;
+                    if (doc.querySelector('yt-live-chat-renderer[replay]')) return true;
+                    if (doc.querySelector('ytd-live-chat-frame[is-replay]')) return true;
+                    if (doc.querySelector('#chat[replay]')) return true;
+                } catch (e) {}
+                return false;
+            };
+            if (checkDom(document)) return true;
+            try {
+                if (window.top && checkDom(window.top.document)) return true;
+            } catch (e) {}
+
+            // 6) YouTube 플레이어(movie_player) API를 통한 라이브 여부 확인
+            const getPlayer = (w) => {
+                try { return w.document.getElementById('movie_player'); } catch (e) { return null; }
+            };
+            const player = getPlayer(window) ||
+                (window.top && window.top !== window && getPlayer(window.top)) ||
+                (window.parent && window.parent !== window && getPlayer(window.parent));
+            if (player && typeof player.getVideoData === 'function') {
+                const data = player.getVideoData();
+                if (data && typeof data.isLive === 'boolean' && data.isLive === false) {
+                    const host = window.location.hostname || '';
+                    if (host.includes('youtube.com')) {
+                        return true;
+                    }
+                }
+            }
+        } catch (e) {}
+
+        return false;
+    }
+
+
     /** 오늘 날짜 YYYY-MM-DD */
     function getTodayString() {
 
@@ -301,6 +382,12 @@
      * @param {string} [blockKey] - 경매 블록 키 (예: "round_1", "round_2")
      */
     function addBidRecord(nickname, price, originalChat, message, blockKey = null) {
+
+        // 🛑 다시보기 환경: 낙찰자 추가 및 수정 완전 차단
+        if (isReplayMode()) {
+            console.log(PREFIX, '🛑 다시보기 환경: 낙찰자 추가/수정이 차단되었습니다.');
+            return;
+        }
 
         const records = loadBidRecords();
         const currentVideoId = getCurrentVideoId();
@@ -1534,6 +1621,11 @@
      * 밑줄 감지 시 자동 낙찰 처리
      */
     function processSeparatorElement(separatorEl, targetDoc = null) {
+        // 🛑 다시보기 환경: 밑줄 감지로 인한 낙찰자 자동 추가/수정 완전 차단
+        if (isReplayMode()) {
+            return;
+        }
+
         if (!separatorEl || separatorEl.dataset.auctionProcessed === 'true') {
             return;
         }
@@ -3366,6 +3458,12 @@ ${xmlRows.join('')}
         targetChatItem = null
     ) {
 
+        // 🛑 다시보기 환경: 낙찰 모달 팝업 및 낙찰자 추가/수정 완전 차단
+        if (isReplayMode()) {
+            console.log(PREFIX, '🛑 다시보기 환경에서는 낙찰 모달이 지원되지 않습니다.');
+            return;
+        }
+
         console.log(
             PREFIX,
             'openAuctionModal:',
@@ -4936,6 +5034,11 @@ ${xmlRows.join('')}
     function handleChatMessageClick(
         event
     ) {
+
+        // 🛑 다시보기 환경: 채팅 클릭을 통한 낙찰자 추가/수정 완전 차단
+        if (isReplayMode()) {
+            return;
+        }
 
         // 🛑 좌클릭(button === 0)만 허용 (우클릭/휠클릭 무시)
         if (
@@ -6978,6 +7081,10 @@ ${xmlRows.join('')}
                                 const text = msgEl ? msgEl.textContent.trim() : '';
 
                                 if (text && isSeparatorMessage(text)) {
+                                    if (isReplayMode()) {
+                                        chatItem.dataset.auctionProcessed = 'true';
+                                        return;
+                                    }
                                     console.log(PREFIX, '실시간 새 밑줄 감지:', text);
                                     // DOM이 완전히 업데이트될 시간을 위해 미세 딜레이 후 선별 처리
                                     setTimeout(() => {

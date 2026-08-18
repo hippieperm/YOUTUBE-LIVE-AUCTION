@@ -592,6 +592,9 @@
                     <button class="sim-btn red" onclick="sendSeparatorFromHost()">
                         <span>🔴 진행자 밑줄 즉시 전송 (===================)</span>
                     </button>
+                    <button class="sim-btn" id="btn-toggle-replay" onclick="toggleReplayMode()">
+                        <span>🎬 다시보기 모드 시뮬레이션 (ON/OFF)</span>
+                    </button>
                 </div>
                 <div class="btn-group" style="margin-top: 8px;">
                     <button class="sim-btn" onclick="clearChatMessages()">
@@ -778,6 +781,43 @@
             const btn = document.getElementById('__auction_bid_list_btn');
             if (btn) btn.textContent = '📋 낙찰 내역 (0건)';
             alert('낙찰 내역이 모두 초기화되었습니다.');
+        }
+
+        /** 다시보기 모드 시뮬레이션 토글 */
+        function toggleReplayMode() {
+            const renderer = document.querySelector('yt-live-chat-renderer');
+            const badge = document.querySelector('.yt-live-badge');
+            const inputArea = document.getElementById('input-renderer');
+            const replayBtn = document.getElementById('btn-toggle-replay');
+
+            if (!renderer) return;
+
+            const isReplay = renderer.hasAttribute('replay');
+            if (isReplay) {
+                renderer.removeAttribute('replay');
+                if (badge) {
+                    badge.textContent = '실시간';
+                    badge.style.background = '#cc0000';
+                }
+                if (inputArea) inputArea.style.display = '';
+                if (replayBtn) {
+                    replayBtn.innerHTML = '<span>🎬 다시보기 모드 시뮬레이션 (ON/OFF)</span>';
+                    replayBtn.classList.remove('primary');
+                }
+                addChatMessage('해담분재경매장', '🔴 [모드 전환] 실시간 라이브 모드로 복귀했습니다.', true);
+            } else {
+                renderer.setAttribute('replay', '');
+                if (badge) {
+                    badge.textContent = '다시보기';
+                    badge.style.background = '#555';
+                }
+                if (inputArea) inputArea.style.display = 'none';
+                if (replayBtn) {
+                    replayBtn.innerHTML = '<span>🎬 다시보기 ON (라이브로 복귀)</span>';
+                    replayBtn.classList.add('primary');
+                }
+                addChatMessage('해담분재경매장', '🎬 [모드 전환] 다시보기(Replay) 모드로 전환되었습니다. (낙찰자 추가/수정 비활성화)', true);
+            }
         }
 
         /** 진행자 인풋창 메시지 전송 핸들러 */
