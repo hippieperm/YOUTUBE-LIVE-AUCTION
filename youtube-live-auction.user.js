@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Live 낙찰 자동화
 // @namespace    https://youtube.com/
-// @version      2.2
-// @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별 & 낙찰자 채팅 하이라이터 + 스마트 입찰 금액 추출 + 가상 키패드 + 실시간 토스트 알림 + 안내 패널 + 낙찰 내역 관리 & 엑셀 다운로드
+// @version      2.3
+// @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별 & 단일 낙찰자 채팅 하이라이터 + 스마트 입찰 금액 추출 + 가상 키패드 + 실시간 토스트 알림 + 안내 패널 + 낙찰 내역 관리 & 엑셀 다운로드
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
 // @match        https://www.youtube.com/live_chat*
@@ -1238,7 +1238,90 @@
     }
 
     /**
+     * 특정 채팅 요소가 속한 경매 블록(밑줄과 밑줄 사이 구간) 내의 메시지 요소 목록을 반환
+     * @param {Element} element - 기준 채팅 메시지 요소
+     * @param {Document} doc - 대상 document
+     * @returns {Array<Element>} 해당 경매 블록에 속한 채팅 메시지 요소들
+     */
+    function getAuctionBlockItems(element, doc = document) {
+        if (!element) return [];
+
+        const chatItems = Array.from(
+            doc.querySelectorAll(
+                'yt-live-chat-text-message-renderer, ' +
+                'yt-live-chat-paid-message-renderer, ' +
+                'yt-live-chat-membership-item-renderer'
+            )
+        );
+
+        const targetIndex = chatItems.indexOf(element);
+        if (targetIndex === -1) {
+            return [element];
+        }
+
+        // 1. 위쪽(과거)으로 올라가며 직전 밑줄(경계) 찾기
+        let startIndex = 0;
+        for (let i = targetIndex - 1; i >= 0; i--) {
+            const item = chatItems[i];
+            const msgEl = item.querySelector('#message');
+            const text = msgEl ? msgEl.textContent.trim() : '';
+            if (isSeparatorMessage(text) || /^={3,}$/.test(text) || item.classList.contains('separator-msg')) {
+                startIndex = i + 1; // 밑줄 다음 메시지부터가 현재 블록의 시작
+                break;
+            }
+        }
+
+        // 2. 아래쪽(미래)으로 내려가며 다음 밑줄(경계) 찾기
+        let endIndex = chatItems.length - 1;
+        for (let i = targetIndex; i < chatItems.length; i++) {
+            const item = chatItems[i];
+            const msgEl = item.querySelector('#message');
+            const text = msgEl ? msgEl.textContent.trim() : '';
+            if (isSeparatorMessage(text) || /^={3,}$/.test(text) || item.classList.contains('separator-msg')) {
+                endIndex = i; // 밑줄까지 포함
+                break;
+            }
+        }
+
+        return chatItems.slice(startIndex, endIndex + 1);
+    }
+
+    /**
+     * 특정 경매 블록(해당 밑줄 구간) 내에 이미 존재하는 낙찰자 하이라이트 및 뱃지만 제거
+     * -> 이전 경매 및 다른 경매 블록의 낙찰자 하이라이트는 그대로 유지!
+     * @param {Element|null} targetEl - 현재 낙찰 대상 채팅 요소 (속한 블록만 클리어)
+     * @param {Document|null} targetDoc - 대상 document
+     */
+    function clearWinnerHighlightsInBlock(targetEl, targetDoc = null) {
+        if (!targetEl) return;
+
+        const doc = targetDoc || targetEl.ownerDocument || document;
+        const blockItems = getAuctionBlockItems(targetEl, doc);
+
+        blockItems.forEach(item => {
+            if (!item) return;
+
+            // 1) 하이라이트 클래스 제거
+            if (item.classList.contains('auction-winner-highlight')) {
+                item.classList.remove('auction-winner-highlight');
+            }
+
+            // 2) 낙찰 뱃지 제거
+            const badges = item.querySelectorAll('.auction-winner-badge');
+            badges.forEach(b => {
+                if (b && b.parentNode) {
+                    b.parentNode.removeChild(b);
+                } else if (b && typeof b.remove === 'function') {
+                    b.remove();
+                }
+            });
+        });
+    }
+
+    /**
      * 채팅창 내 낙찰자 메시지 하이라이트 표시
+     * - 해당 경매 블록 내에서는 1명만 하이라이트 유지 (블록 내 기존 하이라이트는 자동 교체)
+     * - 1번째, 2번째, n번째 각 경매별 낙찰자 하이라이트는 각각 1명씩 그대로 보존
      * @param {Element|null} element - 낙찰된 채팅 DOM 요소
      * @param {Object} winnerInfo - { nickname, priceStr, originalChat }
      * @param {Document|null} targetDoc - 대상 document
@@ -1279,6 +1362,9 @@
             return;
         }
 
+        // 🛑 해당 경매 블록(동일 회차/밑줄 구간) 내의 기존 하이라이트만 교체 해제 (이전 경매의 낙찰자 하이라이트 및 기록은 완벽 유지)
+        clearWinnerHighlightsInBlock(targetEl, targetEl.ownerDocument || targetDoc);
+
         // 하이라이트 클래스 적용
         targetEl.classList.add('auction-winner-highlight');
 
@@ -1311,7 +1397,7 @@
             targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         } catch (e) {}
 
-        console.log(PREFIX, '🏆 낙찰자 채팅 하이라이트 적용 완료:', winnerInfo.nickname || '', winnerInfo.priceStr ? winnerInfo.priceStr + '만' : '');
+        console.log(PREFIX, '🏆 [경매 블록별] 낙찰자 채팅 하이라이트 적용 완료:', winnerInfo.nickname || '', winnerInfo.priceStr ? winnerInfo.priceStr + '만' : '');
     }
 
 
@@ -3148,7 +3234,8 @@ ${xmlRows.join('')}
 
     function openAuctionModal(
         nickname,
-        lastChatMessage = null
+        lastChatMessage = null,
+        targetChatItem = null
     ) {
 
         console.log(
@@ -4213,8 +4300,8 @@ ${xmlRows.join('')}
                 message
             );
 
-            // 🏆 채팅창에서 낙찰자 하이라이트 적용
-            highlightWinnerChatMessage(null, {
+            // 🏆 채팅창에서 낙찰자 하이라이트 적용 (단 1명만 표시)
+            highlightWinnerChatMessage(targetChatItem || null, {
                 nickname: nickname,
                 priceStr: price,
                 originalChat: lastChatMessage || ''
@@ -4902,9 +4989,11 @@ ${xmlRows.join('')}
 
         } else {
 
+            const chatItem = findChatMessageItem(event.target);
             openAuctionModal(
                 nickname,
-                lastChatMessage
+                lastChatMessage,
+                chatItem
             );
         }
     }
