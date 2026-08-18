@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Live 낙찰 자동화
 // @namespace    https://youtube.com/
-// @version      2.0
-// @description  YouTube Live 낙찰 자동화 + 스마트 입찰 금액 추출 + 정사각형 가상 키패드 + 실시간 플로팅 토스트 알림 + 안내 버튼 + 밑줄 버튼 + 낙찰 내역 관리 & CSV 다운로드
+// @version      2.1
+// @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별(동일가 선착순 우선) + 스마트 입찰 금액 추출 + 정사각형 가상 키패드 + 실시간 플로팅 토스트 알림 + 안내 버튼 + 밑줄 버튼 + 낙찰 내역 관리 & CSV 다운로드
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
 // @match        https://www.youtube.com/live_chat*
@@ -732,8 +732,8 @@
     // - 첫 번째 등장하는 숫자/단위를 우선 추출하여 자동 낙찰 지원
     // - .5, .3 등 소수점 시작 형태 지원 (.5 ➔ 0.5만원 = 5천원)
     // - 3,5, 15,5, ,5 등 쉼표 소수점 형태 지원 (3,5 ➔ 3.5만원)
-    // - 15만, 15.5만, 15만 5천, 150000, 5000, 20 등 자동 변환
-    // - 문장형 채팅(예: '3천으로', '3개 남았나요')에서도 첫 번째 숫자 추출
+    // - 15만, 15.5만, 15만 5천, 150000, 150,000, 5000, 3천, 3천원, 20 등 자동 변환
+    // - 문장형 채팅(예: '15만 부탁드립니다', '3천으로', '15.5 갑니다') 지원
     // =========================================================
 
     function parseBidPrice(text) {
@@ -763,7 +763,7 @@
             clean
                 .replace(/(\d+)\s*,\s*(\d{1,2})(?!\d)/g, '$1.$2');
 
-        // 0-4. "150,000", "15,000" 등 3자리 단위 구분 쉼표 -> 쉼표 제거 ("150000", "15000")
+        // 0-4. "150,000", "15,000", "1,000,000" 등 3자리 단위 구분 쉼표 -> 쉼표 제거 ("150000", "15000")
         clean =
             clean
                 .replace(/(\d+)\s*,\s*(\d{3})/g, '$1$2');
@@ -773,10 +773,10 @@
             clean
                 .replace(/,/g, '');
 
-        // 1. "15만 5천", "15만5000", "15만 3천원", "15만 5" 등 만+천 복합 단위
+        // 1. "15만 5천", "15만5000", "15만 3천원", "15만 5", "15만 5백" 등 만+천/백 복합 단위
         const manChonMatch =
             clean.match(
-                /(\d+(?:\.\d+)?)\s*만\s*(\d+(?:\.\d+)?)\s*(천|000|원)?/i
+                /(\d+(?:\.\d+)?)\s*만\s*(\d+(?:\.\d+)?)\s*(천|백|000|00|원)?/i
             );
 
         if (manChonMatch) {
@@ -803,6 +803,19 @@
                 }
 
                 return normalizePrice(man + sub);
+            } else if (
+                unit === '백' ||
+                unit === '00'
+            ) {
+                if (sub >= 100) {
+                    sub = sub / 10000;
+                } else if (sub < 10) {
+                    sub = sub / 100;
+                }
+
+                return normalizePrice(man + sub);
+            } else if (sub > 0 && sub < 10000) {
+                return normalizePrice(man + (sub / 10000));
             }
         }
 
@@ -816,7 +829,7 @@
             return normalizePrice(manMatch[1]);
         }
 
-        // 3. "5천", "5천원", "3천", "3천원", "3천으로"
+        // 3. "5천", "5천원", "3천", "3천원", "3천으로", "3.5천"
         const chonMatch =
             clean.match(
                 /(\d+(?:\.\d+)?)\s*천/
@@ -829,10 +842,10 @@
             return normalizePrice(chon / 10);
         }
 
-        // 4. 원 단위 숫자가 명시된 경우 (예: "150000원", "150,000원", "15000원", "5000원")
+        // 4. 원 단위 숫자가 명시된 경우 (예: "150000원", "150,000원", "15000원", "5000원", "3000원")
         const wonMatch =
             clean.match(
-                /(\d{4,9})\s*원/
+                /(\d{3,9})\s*원/
             );
 
         if (wonMatch) {
@@ -842,7 +855,7 @@
             return normalizePrice(num / 10000);
         }
 
-        // 5. 3자리 단위 콤마가 포함되어 있던 원 단위 숫자 (예: "150,000" -> 15, "15,000" -> 1.5)
+        // 5. 3자리 단위 콤마가 포함되어 있던 원 단위 숫자 (예: "150,000" -> 15, "15,000" -> 1.5, "5,000" -> 0.5)
         if (/\d{1,3}(?:,\d{3})+/.test(text)) {
             const commaNumMatch =
                 clean.match(
@@ -857,7 +870,7 @@
             }
         }
 
-        // 6. 단독 큰 숫자 (10,000 이상, 예: 150000, 200000)
+        // 6. 단독 큰 숫자 (10,000 이상, 예: 150000, 200000, 75000)
         const largeNumMatch =
             clean.match(
                 /(?:^|[^\d.])(\d{5,9})(?:[^\d.]|$)/
@@ -870,10 +883,10 @@
             return normalizePrice(num / 10000);
         }
 
-        // 7. 천 단위 4자리 숫자 (예: "5000", "3000" 등 단독으로 쓰인 4자리 천원 단위 -> 0.5, 0.3)
+        // 7. 천 단위 4자리 숫자 (예: "5000", "3000", "3500", "7500" -> 0.5, 0.3, 0.35, 0.75)
         const fourDigitChonMatch =
             clean.match(
-                /(?:^|[^\d.])([1-9]000)(?:[^\d.]|$)/
+                /(?:^|[^\d.])([1-9]\d{3})(?:[^\d.]|$)/
             );
 
         if (fourDigitChonMatch) {
@@ -883,7 +896,7 @@
             return normalizePrice(num / 10000);
         }
 
-        // 8. 일반 숫자 (예: "15", "20", "15.5", "3.5", "0.5", "2", "35", "3개", "2시에")
+        // 8. 일반 숫자 (예: "15", "20", "15.5", "3.5", "0.5", "2", "35", "100")
         const numMatch =
             clean.match(
                 /(\d+(?:\.\d+)?)/
@@ -894,6 +907,193 @@
         }
 
         return null;
+    }
+
+
+    // =========================================================
+    // 밑줄(구분선) 메시지 감지
+    // - 정확히 "===================" (등호 19개) 일치할 때만 기준 밑줄로 인정
+    // =========================================================
+
+    const EXACT_AUCTION_SEPARATOR = '===================';
+
+    function isSeparatorMessage(text) {
+        if (!text || typeof text !== 'string') {
+            return false;
+        }
+
+        const clean = text.trim();
+        return clean === EXACT_AUCTION_SEPARATOR;
+    }
+
+
+    // =========================================================
+    // 밑줄 위 최고가 입찰자 자동 선별 (동일가 선착순 우선)
+    // =========================================================
+
+    function findTopBidAboveSeparator(separatorEl = null, targetDoc = null) {
+        const doc = targetDoc || (separatorEl && separatorEl.ownerDocument) || document;
+
+        // 채팅 메시지 엘리먼트 목록 수집
+        const chatItems = Array.from(
+            doc.querySelectorAll(
+                'yt-live-chat-text-message-renderer, ' +
+                'yt-live-chat-paid-message-renderer, ' +
+                'yt-live-chat-membership-item-renderer'
+            )
+        );
+
+        if (!chatItems.length) {
+            return null;
+        }
+
+        let targetItems = [];
+
+        if (separatorEl) {
+            const sepIndex = chatItems.indexOf(separatorEl);
+            if (sepIndex <= 0) {
+                return null;
+            }
+
+            // separatorEl 이전(위쪽) 메시지들 탐색
+            // 이전 밑줄(직전 경매의 밑줄)이 있는지 확인하여 직전 밑줄 이후부터만 슬라이스
+            let startIndex = 0;
+            for (let i = sepIndex - 1; i >= 0; i--) {
+                const item = chatItems[i];
+                const msgEl = item.querySelector('#message');
+                const text = msgEl ? msgEl.textContent.trim() : '';
+                if (isSeparatorMessage(text)) {
+                    startIndex = i + 1;
+                    break;
+                }
+            }
+
+            targetItems = chatItems.slice(startIndex, sepIndex);
+        } else {
+            // separatorEl이 직접 지정되지 않은 경우(예: 밑줄 버튼 클릭 시):
+            // 마지막 밑줄 이후(또는 최근 60개)의 메시지들을 대상
+            let startIndex = 0;
+            for (let i = chatItems.length - 1; i >= 0; i--) {
+                const item = chatItems[i];
+                const msgEl = item.querySelector('#message');
+                const text = msgEl ? msgEl.textContent.trim() : '';
+                if (isSeparatorMessage(text)) {
+                    startIndex = i + 1;
+                    break;
+                }
+            }
+            targetItems = chatItems.slice(startIndex);
+        }
+
+        if (!targetItems.length) {
+            return null;
+        }
+
+        // 각 메시지에서 작성자와 입찰가 파싱
+        const validBids = [];
+
+        targetItems.forEach((item, index) => {
+            const authorEl = findAuthor(item);
+            const nickname = getNickname(authorEl);
+            if (!nickname) return;
+
+            const msgEl = item.querySelector('#message');
+            const chatText = msgEl ? msgEl.textContent.trim() : '';
+            if (!chatText || isSeparatorMessage(chatText)) return;
+
+            const parsedPrice = parseBidPrice(chatText);
+            if (parsedPrice) {
+                const numPrice = parseFloat(parsedPrice);
+                if (Number.isFinite(numPrice) && numPrice > 0) {
+                    validBids.push({
+                        element: item,
+                        nickname: nickname,
+                        price: numPrice,
+                        priceStr: parsedPrice,
+                        originalChat: chatText,
+                        index: index // DOM 순서 (먼저 올라온 채팅이 낮은 index = 선착순 1위)
+                    });
+                }
+            }
+        });
+
+        if (!validBids.length) {
+            return null;
+        }
+
+        // 최고가 탐색
+        let maxPrice = -Infinity;
+        validBids.forEach(b => {
+            if (b.price > maxPrice) {
+                maxPrice = b.price;
+            }
+        });
+
+        // 최고가 입찰자들 필터링
+        const topBids = validBids.filter(b => b.price === maxPrice);
+
+        // 동일 가격일 경우 가장 먼저 올라온 채팅(index가 가장 작은 것) 우선
+        const winner = topBids[0];
+
+        return winner;
+    }
+
+
+    /**
+     * 밑줄 감지 시 자동 낙찰 처리
+     */
+    function processSeparatorElement(separatorEl, targetDoc = null) {
+        if (!separatorEl || separatorEl.dataset.auctionProcessed === 'true') {
+            return;
+        }
+
+        // 중복 처리 방지 마킹
+        separatorEl.dataset.auctionProcessed = 'true';
+
+        const winner = findTopBidAboveSeparator(separatorEl, targetDoc);
+
+        if (!winner) {
+            console.log(PREFIX, '밑줄 감지: 유효 입찰자 없음');
+            return;
+        }
+
+        console.log(
+            PREFIX,
+            '🎯 밑줄 위 최고가 자동 선별 성공:',
+            winner.nickname,
+            winner.priceStr + '만',
+            '(원문:', winner.originalChat + ')'
+        );
+
+        removeAuctionUI();
+
+        const message = createMessage(winner.nickname, winner.priceStr);
+        const input = findChatInput();
+
+        if (input) {
+            setChatInput(input, message);
+            input.focus();
+
+            // 낙찰 내역 기록
+            addBidRecord(
+                winner.nickname,
+                winner.priceStr,
+                winner.originalChat || '',
+                message
+            );
+
+            // 알림 토스트 표시
+            const actualWon = formatActualPrice(winner.priceStr);
+            showAuctionToast(
+                `🏆 [자동 선별] @${winner.nickname}님 ${winner.priceStr}만 (${actualWon}원) 낙찰!`,
+                'auction',
+                3500
+            );
+
+            console.log(PREFIX, '인풋창 자동 입력 완료:', message);
+        } else {
+            console.warn(PREFIX, '채팅 입력창을 찾지 못했습니다.');
+        }
     }
 
 
@@ -5163,14 +5363,14 @@ ${xmlRows.join('')}
 
                 setChatInput(
                     currentInput,
-                    '==================='
+                    EXACT_AUCTION_SEPARATOR
                 );
 
                 currentInput.focus();
 
                 console.log(
                     PREFIX,
-                    '구분선 입력 완료'
+                    '구분선 입력 완료 (채팅 전송 대기)'
                 );
             }
         );
@@ -5294,12 +5494,90 @@ ${xmlRows.join('')}
 
 
     // =========================================================
+    // 실시간 채팅 감시 (새 밑줄 채팅 자동 감지)
+    // =========================================================
+
+    const _activeChatObservers = new WeakMap();
+
+    function setupChatObserver() {
+        const docs = getTargetDocs();
+
+        docs.forEach(doc => {
+            if (!doc) return;
+
+            // 채팅 아이템 컨테이너 탐색
+            const itemContainers = doc.querySelectorAll(
+                '#items.yt-live-chat-item-list-renderer, ' +
+                'yt-live-chat-item-list-renderer #items, ' +
+                '#chat-messages'
+            );
+
+            itemContainers.forEach(container => {
+                if (!container || _activeChatObservers.has(container)) {
+                    return;
+                }
+
+                const observer = new MutationObserver(mutations => {
+                    mutations.forEach(mutation => {
+                        mutation.addedNodes.forEach(node => {
+                            if (!node || node.nodeType !== Node.ELEMENT_NODE) {
+                                return;
+                            }
+
+                            let chatItem = null;
+                            if (
+                                typeof node.matches === 'function' &&
+                                node.matches(
+                                    'yt-live-chat-text-message-renderer, ' +
+                                    'yt-live-chat-paid-message-renderer, ' +
+                                    'yt-live-chat-membership-item-renderer'
+                                )
+                            ) {
+                                chatItem = node;
+                            } else if (typeof node.querySelector === 'function') {
+                                chatItem = node.querySelector(
+                                    'yt-live-chat-text-message-renderer, ' +
+                                    'yt-live-chat-paid-message-renderer, ' +
+                                    'yt-live-chat-membership-item-renderer'
+                                );
+                            }
+
+                            if (chatItem && !chatItem.dataset.auctionProcessed) {
+                                const msgEl = chatItem.querySelector('#message');
+                                const text = msgEl ? msgEl.textContent.trim() : '';
+
+                                if (text && isSeparatorMessage(text)) {
+                                    console.log(PREFIX, '실시간 새 밑줄 감지:', text);
+                                    // DOM이 완전히 업데이트될 시간을 위해 미세 딜레이 후 선별 처리
+                                    setTimeout(() => {
+                                        processSeparatorElement(chatItem, doc);
+                                    }, 80);
+                                }
+                            }
+                        });
+                    });
+                });
+
+                observer.observe(container, {
+                    childList: true,
+                    subtree: true
+                });
+
+                _activeChatObservers.set(container, observer);
+                console.log(PREFIX, '실시간 채팅 감시 옵저버 부착 완료');
+            });
+        });
+    }
+
+
+    // =========================================================
     // UI 감시 (쓰로틀링/디바운스 적용)
     // =========================================================
 
     function startUIObserver() {
 
         createAllUI();
+        setupChatObserver();
 
         let debounceTimer = null;
 
@@ -5338,6 +5616,7 @@ ${xmlRows.join('')}
                             function () {
 
                                 createAllUI();
+                                setupChatObserver();
 
                                 debounceTimer = null;
 
@@ -5361,6 +5640,8 @@ ${xmlRows.join('')}
                     subtree:true
                 }
             );
+
+            setupChatObserver();
         }
 
 
@@ -5385,6 +5666,7 @@ ${xmlRows.join('')}
             function () {
 
                 createAllUI();
+                setupChatObserver();
 
                 attachChatFrameListener();
 
@@ -5443,6 +5725,8 @@ ${xmlRows.join('')}
                     handleGlobalClick,
                     true
                 );
+
+                setupChatObserver();
             }
 
         } catch (e) {
@@ -5473,19 +5757,22 @@ ${xmlRows.join('')}
         window.addEventListener('yt-navigate-finish', () => {
             createAllUI();
             updateFloatingBidButton();
+            setupChatObserver();
         });
         window.addEventListener('popstate', () => {
             createAllUI();
             updateFloatingBidButton();
+            setupChatObserver();
         });
 
         attachChatFrameListener();
 
         startUIObserver();
+        setupChatObserver();
 
         console.log(
             PREFIX,
-            '준비 완료 (채팅 좌클릭 대기 중)'
+            '준비 완료 (채팅 좌클릭 및 밑줄 자동 선별 대기 중)'
         );
     }
 
