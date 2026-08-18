@@ -1320,6 +1320,8 @@
             const underTenBids = [];
             const tenPlusBids = [];
 
+            const anchorPrices = [];
+
             blockItems.forEach(item => {
                 if (isHostOrSystemElement(item) || item === element) return;
                 const msgEl = item.querySelector('#message');
@@ -1330,12 +1332,18 @@
                     const num = d.priceNum;
                     if (d.isPointNumber && num < 10) {
                         underTenBids.push(num);
+                        anchorPrices.push(num);
                     } else if (num < 10 && !d.isRawInteger) {
                         underTenBids.push(num);
+                        anchorPrices.push(num);
                     } else if (num < 10) {
                         underTenBids.push(num);
+                        anchorPrices.push(num);
                     } else {
                         tenPlusBids.push(num);
+                        if (d.hasExplicitUnit || d.isPointNumber || num < 100) {
+                            anchorPrices.push(num);
+                        }
                     }
                 }
             });
@@ -1345,16 +1353,29 @@
                 ? (underTenBids.reduce((sum, v) => sum + v, 0) / underTenBids.length)
                 : null;
 
-            const isEndsWithFive = (raw >= 25 && raw <= 195 && raw % 10 === 5);
+            const baselineAvg = anchorPrices.length > 0
+                ? (anchorPrices.reduce((sum, v) => sum + v, 0) / anchorPrices.length)
+                : (tenPlusBids.length > 0 ? (tenPlusBids.reduce((sum, v) => sum + v, 0) / tenPlusBids.length) : null);
 
-            if (isEndsWithFive && isLowScale) {
+            // [케이스 1] 2자리 숫자 (55, 65, 75 등)
+            if (raw >= 25 && raw <= 95 && raw % 10 === 5 && isLowScale) {
                 const candidate = raw / 10;
-                const isBetterFit = underTenAvg !== null && (Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg));
-
-                if (isBetterFit) {
+                if (underTenAvg !== null && Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg)) {
                     console.log(
                         PREFIX,
-                        `💡 [문맥 보정 파싱] "${text}" (${raw}) ➔ ${normalizePrice(candidate)}만 으로 보정됨`
+                        `💡 [문맥 보정 파싱 (2자리)] "${text}" (${raw}) ➔ ${normalizePrice(candidate)}만 으로 보정됨`
+                    );
+                    return normalizePrice(candidate);
+                }
+            }
+            // [케이스 2] 3자리 숫자 (105, 125, 155, 205, 255, 355 등)
+            else if (raw >= 105 && raw <= 995 && raw % 10 === 5) {
+                const candidate = raw / 10;
+                const avg = baselineAvg !== null ? baselineAvg : 20;
+                if (Math.abs(candidate - avg) < Math.abs(raw - avg)) {
+                    console.log(
+                        PREFIX,
+                        `💡 [문맥 보정 파싱 (3자리)] "${text}" (${raw}) ➔ ${normalizePrice(candidate)}만 으로 보정됨`
                     );
                     return normalizePrice(candidate);
                 }
@@ -1499,17 +1520,24 @@
         // 10 미만 명확한 입찰가 (1 ~ 9.9만, 예: 5, 6, 6.5, 7, .5, 3.5 등) 및 10 이상 입찰가 수집
         const underTenBids = [];
         const tenPlusBids = [];
+        const anchorPrices = [];
 
         rawBids.forEach(b => {
             const num = b.detail.priceNum;
             if (b.detail.isPointNumber && num < 10) {
                 underTenBids.push(num);
+                anchorPrices.push(num);
             } else if (num < 10 && !b.detail.isRawInteger) {
                 underTenBids.push(num);
+                anchorPrices.push(num);
             } else if (num < 10) {
                 underTenBids.push(num);
+                anchorPrices.push(num);
             } else {
                 tenPlusBids.push(num);
+                if (b.detail.hasExplicitUnit || b.detail.isPointNumber || num < 100) {
+                    anchorPrices.push(num);
+                }
             }
         });
 
@@ -1521,7 +1549,12 @@
             ? (underTenBids.reduce((sum, v) => sum + v, 0) / underTenBids.length)
             : null;
 
-        // 3단계: 스마트 문맥 보정 (65 ➔ 6.5만, 55 ➔ 5.5만 등 소수점 생략 입력 보정)
+        // 전체 기준 호가 평균 (10만원 이상 경매 기준가 산출용)
+        const baselineAvg = anchorPrices.length > 0
+            ? (anchorPrices.reduce((sum, v) => sum + v, 0) / anchorPrices.length)
+            : (tenPlusBids.length > 0 ? (tenPlusBids.reduce((sum, v) => sum + v, 0) / tenPlusBids.length) : null);
+
+        // 3단계: 스마트 문맥 보정 (65 ➔ 6.5만 / 255 ➔ 25.5만 등 소수점 생략 입력 보정)
         const resolvedBids = rawBids.map(b => {
             let finalPrice = b.price;
             let finalPriceStr = b.priceStr;
@@ -1529,28 +1562,35 @@
             // 보정 조건:
             // 1) '만', '원' 등의 명시적 단위가 없고,
             // 2) 소수점이 없는 순수 정수이며,
-            // 3) 끝자리가 5인 정수 (25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125 등 - 소수점 .5 생략형)
-            // 4) ★ 반드시 현재 경매가 "10만원 미만 경매(isLowScaleAuction)"일 때만!
-            //    (10~30만원대 경매인 12, 15, 20, 22, 25 에서는 25만을 100% 정상 유지!)
+            // 3) 끝자리가 5인 정수 (2자리: 55, 65, 75 등 / 3자리: 105, 125, 155, 205, 255, 355 등)
             if (!b.detail.hasExplicitUnit && b.detail.isRawInteger) {
                 const raw = b.detail.rawNum;
 
-                // 끝자리가 5인 2~3자리 정수 (25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125 등)
-                const isEndsWithFive = (raw >= 25 && raw <= 195 && raw % 10 === 5);
-
-                if (isEndsWithFive && isLowScaleAuction) {
-                    const candidate = raw / 10; // 예: 65 ➔ 6.5, 55 ➔ 5.5
-
-                    // 문맥 호가대와 비교:
-                    // candidate(6.5)가 현재 경매의 10미만 기준 호가대(underTenAvg, 예: 5~7만)와 더 가까운 경우에만 보정
-                    const isBetterFit = underTenAvg !== null && (Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg));
-
-                    if (isBetterFit) {
+                // [케이스 1] 2자리 숫자 (55, 65, 75, 85, 95 등): 10미만 경매에서 5.5만, 6.5만 등으로 보정
+                if (raw >= 25 && raw <= 95 && raw % 10 === 5 && isLowScaleAuction) {
+                    const candidate = raw / 10;
+                    if (underTenAvg !== null && Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg)) {
                         finalPrice = candidate;
                         finalPriceStr = normalizePrice(candidate);
                         console.log(
                             PREFIX,
-                            `💡 [스마트 문맥 보정] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
+                            `💡 [스마트 문맥 보정 (2자리)] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
+                        );
+                    }
+                }
+                // [케이스 2] 3자리 숫자 중 끝자리가 5인 숫자 (105, 115, 125, 155, 205, 255, 355 등):
+                // 10~100만원대 경매에서 10.5만, 15.5만, 25.5만 등으로 보정 (255만 -> 25.5만)
+                else if (raw >= 105 && raw <= 995 && raw % 10 === 5) {
+                    const candidate = raw / 10; // 예: 255 -> 25.5
+                    const avg = baselineAvg !== null ? baselineAvg : 20;
+
+                    // candidate(25.5)가 raw(255)보다 기준 호가대(예: 15~30만)와 훨씬 가까운 경우
+                    if (Math.abs(candidate - avg) < Math.abs(raw - avg)) {
+                        finalPrice = candidate;
+                        finalPriceStr = normalizePrice(candidate);
+                        console.log(
+                            PREFIX,
+                            `💡 [스마트 문맥 보정 (3자리)] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
                         );
                     }
                 }
