@@ -3842,7 +3842,7 @@ ${xmlRows.join('')}
                         'button',
 
                     text:
-                        '전송',
+                        '입력',
 
                     style: `
                         flex:1;
@@ -4005,67 +4005,64 @@ ${xmlRows.join('')}
                 );
 
 
-            send.disabled =
-                true;
-
-            cancel.disabled =
-                true;
+            const chatInput =
+                findChatInput();
 
 
-            send.style.opacity =
-                '.55';
+            if (!chatInput) {
 
-            cancel.style.opacity =
-                '.55';
+                status.textContent =
+                    '라이브 채팅 입력창을 찾지 못했습니다.';
+
+                console.warn(
+                    PREFIX,
+                    '라이브 채팅 입력창을 찾지 못했습니다.'
+                );
+
+                return;
+            }
 
 
-            status.textContent =
-                '전송 중...';
-
-
-            try {
-
-                await sendChatMessage(
+            const success =
+                setChatInput(
+                    chatInput,
                     message
                 );
 
-                // ✅ 낙찰 내역 기록 (수동 입력)
-                addBidRecord(
-                    nickname,
-                    price,
-                    lastChatMessage || '',
-                    message
-                );
 
-                removeAuctionUI();
+            if (!success) {
 
-            } catch (error) {
+                status.textContent =
+                    '채팅 입력에 실패했습니다.';
 
                 console.error(
                     PREFIX,
-                    '전송 오류:',
-                    error
+                    '채팅 입력에 실패했습니다.'
                 );
 
-
-                status.textContent =
-                    error.message ||
-                    '전송 실패';
-
-
-                send.disabled =
-                    false;
-
-                cancel.disabled =
-                    false;
-
-
-                send.style.opacity =
-                    '1';
-
-                cancel.style.opacity =
-                    '1';
+                return;
             }
+
+
+            chatInput.focus();
+
+
+            // ✅ 낙찰 내역 기록 (수동 입력)
+            addBidRecord(
+                nickname,
+                price,
+                lastChatMessage || '',
+                message
+            );
+
+            console.log(
+                PREFIX,
+                '가상 키패드 -> 인풋창 입력 완료:',
+                message
+            );
+
+
+            removeAuctionUI();
         }
 
 
@@ -5030,7 +5027,6 @@ ${xmlRows.join('')}
                 if (chatInput) {
                     setChatInput(chatInput, combined);
                     chatInput.focus();
-                    showAuctionToast(`📐 규격 입력 완료: ${combined}`, 'guide');
                 } else {
                     console.warn(PREFIX, '채팅 입력창을 찾지 못했습니다.');
                 }
@@ -5362,7 +5358,6 @@ ${xmlRows.join('')}
                     if (chatInput) {
                         setChatInput(chatInput, '최고가');
                         chatInput.focus();
-                        showAuctionToast("👑 '최고가' 입력 완료", 'guide');
                     }
                     removeCustomModals();
                 }
@@ -5579,7 +5574,6 @@ ${xmlRows.join('')}
                 if (chatInput) {
                     setChatInput(chatInput, resultText);
                     chatInput.focus();
-                    showAuctionToast(`💰 '${resultText}' 입력 완료`, 'guide');
                 } else {
                     console.warn(PREFIX, '채팅 입력창을 찾지 못했습니다.');
                 }
