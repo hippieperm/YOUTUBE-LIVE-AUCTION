@@ -28,27 +28,39 @@
     // =========================================================
 
     const BID_STORAGE_KEY = '__auction_bid_records';
+    const ACTIVE_VIDEO_ID_KEY = '__auction_active_video_id';
 
-    /** 현재 방송의 YouTube Video ID 추출 */
+    /** 현재 방송의 YouTube Video ID 추출 (부모창-iframe 간 동기화 완벽 지원) */
     function getCurrentVideoId() {
 
         try {
             // 1) ytcfg 글로벌 객체 확인 (YouTube 페이지 내부 환경)
             try {
                 if (typeof window.ytcfg !== 'undefined' && typeof window.ytcfg.get === 'function') {
-                    const v = window.ytcfg.get('VIDEO_ID');
-                    if (v && v !== 'live_chat' && v !== 'live_chat_replay' && v !== 'unknown') return v;
+                    const v = window.ytcfg.get('VIDEO_ID') ||
+                              window.ytcfg.get('INNERTUBE_CONTEXT_VIDEO_ID') ||
+                              (window.ytcfg.data_ && window.ytcfg.data_.INNERTUBE_CONTEXT_VIDEO_ID);
+                    if (v && v !== 'live_chat' && v !== 'live_chat_replay' && v !== 'unknown') {
+                        try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, v); } catch (e) {}
+                        return v;
+                    }
                 }
             } catch (e) {}
 
             // 2) 현재 window URL 파라미터 확인
             const url = new URL(window.location.href);
             const v = url.searchParams.get('v');
-            if (v && v !== 'live_chat' && v !== 'live_chat_replay') return v;
+            if (v && v !== 'live_chat' && v !== 'live_chat_replay') {
+                try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, v); } catch (e) {}
+                return v;
+            }
 
             if (url.pathname.startsWith('/live/')) {
                 const parts = url.pathname.split('/').filter(Boolean);
-                if (parts[1] && parts[1] !== 'live_chat') return parts[1];
+                if (parts[1] && parts[1] !== 'live_chat') {
+                    try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, parts[1]); } catch (e) {}
+                    return parts[1];
+                }
             }
 
             // 3) 부모 창(parent/top) URL 확인 (iframe 내부 환경 대응)
@@ -56,10 +68,16 @@
                 if (window.top && window.top !== window && window.top.location.href) {
                     const topUrl = new URL(window.top.location.href);
                     const tv = topUrl.searchParams.get('v');
-                    if (tv) return tv;
+                    if (tv) {
+                        try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, tv); } catch (e) {}
+                        return tv;
+                    }
                     if (topUrl.pathname.startsWith('/live/')) {
                         const tparts = topUrl.pathname.split('/').filter(Boolean);
-                        if (tparts[1] && tparts[1] !== 'live_chat') return tparts[1];
+                        if (tparts[1] && tparts[1] !== 'live_chat') {
+                            try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, tparts[1]); } catch (e) {}
+                            return tparts[1];
+                        }
                     }
                 }
             } catch (e) {}
@@ -68,10 +86,16 @@
                 if (window.parent && window.parent !== window && window.parent.location.href) {
                     const parentUrl = new URL(window.parent.location.href);
                     const pv = parentUrl.searchParams.get('v');
-                    if (pv) return pv;
+                    if (pv) {
+                        try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, pv); } catch (e) {}
+                        return pv;
+                    }
                     if (parentUrl.pathname.startsWith('/live/')) {
                         const pparts = parentUrl.pathname.split('/').filter(Boolean);
-                        if (pparts[1] && pparts[1] !== 'live_chat') return pparts[1];
+                        if (pparts[1] && pparts[1] !== 'live_chat') {
+                            try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, pparts[1]); } catch (e) {}
+                            return pparts[1];
+                        }
                     }
                 }
             } catch (e) {}
@@ -81,10 +105,16 @@
                 try {
                     const refUrl = new URL(document.referrer);
                     const rv = refUrl.searchParams.get('v');
-                    if (rv && rv !== 'live_chat') return rv;
+                    if (rv && rv !== 'live_chat' && rv !== 'live_chat_replay') {
+                        try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, rv); } catch (e) {}
+                        return rv;
+                    }
                     if (refUrl.pathname.startsWith('/live/')) {
                         const rparts = refUrl.pathname.split('/').filter(Boolean);
-                        if (rparts[1] && rparts[1] !== 'live_chat') return rparts[1];
+                        if (rparts[1] && rparts[1] !== 'live_chat' && rparts[1] !== 'live_chat_replay') {
+                            try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, rparts[1]); } catch (e) {}
+                            return rparts[1];
+                        }
                     }
                 } catch (e) {}
             }
@@ -95,24 +125,43 @@
                 try {
                     const cUrl = new URL(canonical.href);
                     const cv = cUrl.searchParams.get('v');
-                    if (cv) return cv;
+                    if (cv) {
+                        try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, cv); } catch (e) {}
+                        return cv;
+                    }
                 } catch (e) {}
             }
 
             const flexy = document.querySelector('ytd-watch-flexy[video-id]');
             if (flexy) {
                 const fv = flexy.getAttribute('video-id');
-                if (fv) return fv;
+                if (fv) {
+                    try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, fv); } catch (e) {}
+                    return fv;
+                }
             }
 
             // 6) watch 또는 live URL의 pathname 마지막 부분
             const pop = url.pathname.split('/').filter(Boolean).pop();
             if (pop && pop !== 'live_chat' && pop !== 'live_chat_replay' && pop !== 'watch') {
+                try { localStorage.setItem(ACTIVE_VIDEO_ID_KEY, pop); } catch (e) {}
                 return pop;
             }
 
+            // 7) 🛑 iframe 내부에서 부모 창이 저장해 둔 활성 Video ID 동기화 (다시보기 완벽 연동)
+            try {
+                const cachedVid = localStorage.getItem(ACTIVE_VIDEO_ID_KEY);
+                if (cachedVid && cachedVid !== 'unknown' && cachedVid !== 'live_chat' && cachedVid !== 'live_chat_replay') {
+                    return cachedVid;
+                }
+            } catch (e) {}
+
             return 'unknown';
         } catch (e) {
+            try {
+                const fallbackVid = localStorage.getItem(ACTIVE_VIDEO_ID_KEY);
+                if (fallbackVid && fallbackVid !== 'unknown') return fallbackVid;
+            } catch (err) {}
             return 'unknown';
         }
     }
@@ -305,7 +354,7 @@
     }
 
 
-    /** 현재 방송 기록 필터링 (현재 방송 videoId 또는 당일 기준 필터링) */
+    /** 현재 방송/영상 기록 필터링 (현재 영상 videoId 또는 당일 기준 필터링) */
     function getTodayBidRecords() {
 
         const videoId = getCurrentVideoId();
@@ -314,36 +363,37 @@
 
         return records.filter(r => {
             if (!r) return false;
-            // 1) 현재 방송의 videoId가 명확히 확인된 경우
+            // 1) 현재 방송/다시보기의 videoId가 명확히 확인된 경우
             if (
                 videoId && videoId !== 'unknown' && videoId !== 'live_chat' && videoId !== 'live_chat_replay'
             ) {
-                return r.videoId === videoId;
+                // 해당 영상의 videoId와 일치하거나, 당일 기록 중 videoId가 누락/unknown인 레코드도 유연하게 허용
+                return r.videoId === videoId || (!r.videoId || r.videoId === 'unknown' ? r.date === today : false);
             }
-            // 2) videoId를 특정하기 어려운 환경(일부 iframe 환경 등)인 경우:
-            // 당일(오늘) 날짜의 기록 중 unknown/live_chat 이거나 videoId가 없는 기록만 반환 (과거 다른 날짜 누적 방지)
+            // 2) videoId를 특정하기 어려운 환경(로컬 테스트 파일, 시뮬레이터 등)인 경우:
+            // 당일(오늘) 날짜의 기록 반환
             if (r.date === today) {
-                return !r.videoId || r.videoId === 'unknown' || r.videoId === 'live_chat' || r.videoId === 'live_chat_replay';
+                return true;
             }
-            return false;
+            // 3) Fallback: unknown/live_chat 계열 기록 반환
+            return !r.videoId || r.videoId === 'unknown' || r.videoId === 'live_chat' || r.videoId === 'live_chat_replay';
         });
     }
 
 
-    /** 낙찰 배지 업데이트 */
+    /** 낙찰 배지 업데이트 (메인창 + iframe + 플로팅 버튼 전역 동기화) */
     function updateBidBadge() {
 
         const count = getTodayBidRecords().length;
-        const totalAll = loadBidRecords().length;
         const text = `📋 낙찰 내역 (${count}건)`;
 
-        // 메인 document에서 탐색
+        // 1) 현재 document에서 탐색
         const btn = document.getElementById('__auction_bid_list_btn');
         if (btn) {
             btn.textContent = text;
         }
 
-        // iframe 내부에서도 탐색
+        // 2) iframe 내부에서도 탐색
         try {
             const iframe = document.querySelector('iframe#chatframe');
             if (iframe && iframe.contentDocument) {
@@ -354,9 +404,26 @@
             }
         } catch (e) {}
 
-        // 플로팅 버튼 업데이트
+        // 3) 부모 창(top/parent)에서도 탐색 (iframe 내부에서 실행 중일 때)
+        try {
+            if (window.top && window.top !== window && window.top.document) {
+                const topBtn = window.top.document.getElementById('__auction_bid_list_btn');
+                if (topBtn) topBtn.textContent = text;
+                const topFloatBtn = window.top.document.getElementById('__auction_floating_bid_btn');
+                if (topFloatBtn) topFloatBtn.textContent = text;
+            }
+        } catch (e) {}
+
+        // 4) 플로팅 버튼 업데이트
         try {
             updateFloatingBidButton();
+        } catch (e) {}
+
+        // 5) postMessage로 다른 프레임에 배지 갱신 브로드캐스트
+        try {
+            if (window.top && window.top !== window) {
+                window.top.postMessage({ type: '__AUCTION_BID_UPDATED', count: count }, '*');
+            }
         } catch (e) {}
     }
 
@@ -1497,26 +1564,23 @@
         if (input) {
             setChatInput(input, message);
             input.focus();
-
-            // 낙찰 내역 기록 (동일 경매 블록 내 1건만 유지)
-            const blockKey = getAuctionBlockKey(winner.element || separatorEl, targetDoc || (separatorEl && separatorEl.ownerDocument) || document);
-            addBidRecord(
-                winner.nickname,
-                winner.priceStr,
-                winner.originalChat || '',
-                message,
-                blockKey
-            );
-
-            // 🏆 채팅창에서 최고가 낙찰자 하이라이트 적용
-            highlightWinnerChatMessage(winner.element, winner, targetDoc);
-
-            console.log(PREFIX, '인풋창 자동 입력 및 채팅 하이라이트 완료:', message);
+            console.log(PREFIX, '인풋창 자동 입력 완료:', message);
         } else {
-            console.warn(PREFIX, '채팅 입력창을 찾지 못했습니다.');
-            // 입력창을 못 찾아도 하이라이트는 적용
-            highlightWinnerChatMessage(winner.element, winner, targetDoc);
+            console.log(PREFIX, '채팅 입력창 없음 (다시보기 환경/입력창 숨김): 낙찰 기록 및 하이라이트 진행');
         }
+
+        // 낙찰 내역 기록 (실시간/다시보기 무관하게 항상 100% 저장)
+        const blockKey = getAuctionBlockKey(winner.element || separatorEl, targetDoc || (separatorEl && separatorEl.ownerDocument) || document);
+        addBidRecord(
+            winner.nickname,
+            winner.priceStr,
+            winner.originalChat || '',
+            message,
+            blockKey
+        );
+
+        // 🏆 채팅창에서 최고가 낙찰자 하이라이트 적용
+        highlightWinnerChatMessage(winner.element, winner, targetDoc);
     }
 
 
@@ -4318,45 +4382,25 @@ ${xmlRows.join('')}
                 findChatInput();
 
 
-            if (!chatInput) {
+            if (chatInput) {
+                const success =
+                    setChatInput(
+                        chatInput,
+                        message
+                    );
 
-                status.textContent =
-                    '라이브 채팅 입력창을 찾지 못했습니다.';
-
-                console.warn(
+                if (success) {
+                    chatInput.focus();
+                }
+            } else {
+                console.log(
                     PREFIX,
-                    '라이브 채팅 입력창을 찾지 못했습니다.'
+                    '가상 키패드 -> 채팅 입력창 없음 (다시보기 환경): 낙찰 기록 및 하이라이트 진행'
                 );
-
-                return;
             }
 
 
-            const success =
-                setChatInput(
-                    chatInput,
-                    message
-                );
-
-
-            if (!success) {
-
-                status.textContent =
-                    '채팅 입력에 실패했습니다.';
-
-                console.error(
-                    PREFIX,
-                    '채팅 입력에 실패했습니다.'
-                );
-
-                return;
-            }
-
-
-            chatInput.focus();
-
-
-            // ✅ 낙찰 내역 기록 (수동 입력 - 동일 경매 블록 내 1건만 유지)
+            // ✅ 낙찰 내역 기록 (실시간/다시보기 무관하게 항상 100% 저장)
             const blockKey = getAuctionBlockKey(targetChatItem, document);
             addBidRecord(
                 nickname,
@@ -4372,6 +4416,15 @@ ${xmlRows.join('')}
                 priceStr: price,
                 originalChat: lastChatMessage || ''
             });
+
+            console.log(
+                PREFIX,
+                '가상 키패드 -> 낙찰 기록 및 하이라이트 완료:',
+                message
+            );
+
+
+            removeAuctionUI();
 
             console.log(
                 PREFIX,
@@ -5008,53 +5061,41 @@ ${xmlRows.join('')}
                 findChatInput();
 
             if (input) {
-
                 setChatInput(
                     input,
                     message
                 );
-
                 input.focus();
-
-                const chatItem = findChatMessageItem(event.target);
-                const blockKey = getAuctionBlockKey(chatItem, event.target.ownerDocument || document);
-
-                // ✅ 낙찰 내역 기록 (자동 감지 - 동일 경매 블록 내 1건만 유지)
-                addBidRecord(
-                    nickname,
-                    parsedPrice,
-                    lastChatMessage || '',
-                    message,
-                    blockKey
-                );
-
-                // 🏆 채팅창에서 낙찰자 하이라이트 적용
-                highlightWinnerChatMessage(chatItem, {
-                    nickname: nickname,
-                    priceStr: parsedPrice,
-                    originalChat: lastChatMessage || ''
-                });
-
                 console.log(
                     PREFIX,
-                    '숫자 감지 -> 인풋창 자동 입력 및 하이라이트 완료:',
+                    '숫자 감지 -> 인풋창 자동 입력 완료:',
                     message
                 );
-
             } else {
-
-                console.warn(
+                console.log(
                     PREFIX,
-                    '채팅 입력창을 찾지 못했습니다.'
+                    '숫자 감지 -> 채팅 입력창 없음 (다시보기 환경/입력창 숨김): 낙찰 기록 및 하이라이트 진행'
                 );
-
-                const chatItem = findChatMessageItem(event.target);
-                highlightWinnerChatMessage(chatItem, {
-                    nickname: nickname,
-                    priceStr: parsedPrice,
-                    originalChat: lastChatMessage || ''
-                });
             }
+
+            const chatItem = findChatMessageItem(event.target);
+            const blockKey = getAuctionBlockKey(chatItem, event.target.ownerDocument || document);
+
+            // ✅ 낙찰 내역 기록 (실시간/다시보기 무관하게 항상 100% 저장)
+            addBidRecord(
+                nickname,
+                parsedPrice,
+                lastChatMessage || '',
+                message,
+                blockKey
+            );
+
+            // 🏆 채팅창에서 낙찰자 하이라이트 적용
+            highlightWinnerChatMessage(chatItem, {
+                nickname: nickname,
+                priceStr: parsedPrice,
+                originalChat: lastChatMessage || ''
+            });
 
         } else {
 
@@ -7143,22 +7184,40 @@ ${xmlRows.join('')}
             true
         );
 
+        // 부모-iframe 간 실시간 동기화 리스너
+        window.addEventListener('storage', (e) => {
+            if (e.key === BID_STORAGE_KEY || e.key === '__auction_active_video_id') {
+                updateBidBadge();
+            }
+        });
+
+        window.addEventListener('message', (e) => {
+            if (e.data && e.data.type === '__AUCTION_BID_UPDATED') {
+                updateBidBadge();
+            }
+        });
+
         // 유튜브 SPA 페이지 이동 이벤트
         window.addEventListener('yt-navigate-finish', () => {
+            getCurrentVideoId();
             createAllUI();
             updateFloatingBidButton();
             setupChatObserver();
+            updateBidBadge();
         });
         window.addEventListener('popstate', () => {
+            getCurrentVideoId();
             createAllUI();
             updateFloatingBidButton();
             setupChatObserver();
+            updateBidBadge();
         });
 
         attachChatFrameListener();
 
         startUIObserver();
         setupChatObserver();
+        updateBidBadge();
 
         console.log(
             PREFIX,
