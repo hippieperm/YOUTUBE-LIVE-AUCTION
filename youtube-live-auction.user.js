@@ -528,7 +528,20 @@
     /** 낙찰 내역 버튼 내부 콘텐츠 (iOS 스타일 배지 포함) 렌더링 */
     function renderBidButtonContent(btn, count = 0) {
         if (!btn) return;
+        injectAuctionHighlightStyles(btn.ownerDocument || document);
+
         const num = Number(count) || 0;
+        const prevCountAttr = btn.getAttribute('data-bid-count');
+        const hasPrev = prevCountAttr !== null && prevCountAttr !== '';
+        const prevNum = hasPrev ? Number(prevCountAttr) : null;
+        const isChanged = hasPrev && prevNum !== num;
+
+        btn.setAttribute('data-bid-count', String(num));
+
+        const animBadgeStyle = isChanged
+            ? 'animation: auctionBadgePop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both !important;'
+            : '';
+
         btn.innerHTML = `<span>📋 낙찰 내역</span><span class="__auction_badge" style="
             display: inline-flex !important;
             align-items: center !important;
@@ -549,7 +562,21 @@
             vertical-align: middle !important;
             margin-left: 2px !important;
             flex-shrink: 0 !important;
+            transform-origin: center center !important;
+            will-change: transform, box-shadow !important;
+            ${animBadgeStyle}
         ">${num}</span>`;
+
+        if (isChanged) {
+            btn.style.animation = 'none';
+            void btn.offsetHeight; // reflow
+            btn.style.animation = 'auctionBtnPulse 0.6s ease-out';
+            setTimeout(() => {
+                try {
+                    btn.style.animation = '';
+                } catch (e) {}
+            }, 650);
+        }
     }
 
 
@@ -1802,6 +1829,46 @@
             .auction-winner-badge .badge-icon {
                 font-size: 12px !important;
                 line-height: 1 !important;
+            }
+
+            @keyframes auctionBadgePop {
+                0% {
+                    transform: scale(1);
+                    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.35);
+                    filter: brightness(1);
+                }
+                30% {
+                    transform: scale(1.48);
+                    box-shadow: 0 0 16px #ff3b30, 0 0 28px rgba(255, 59, 48, 0.75);
+                    filter: brightness(1.35);
+                }
+                60% {
+                    transform: scale(0.86);
+                    box-shadow: 0 0 8px rgba(255, 59, 48, 0.4);
+                }
+                80% {
+                    transform: scale(1.14);
+                }
+                100% {
+                    transform: scale(1);
+                    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.35);
+                    filter: brightness(1);
+                }
+            }
+
+            @keyframes auctionBtnPulse {
+                0% {
+                    box-shadow: 0 0 0 rgba(255, 204, 0, 0);
+                    border-color: rgba(255, 204, 0, 0.28);
+                }
+                35% {
+                    box-shadow: 0 0 16px rgba(255, 204, 0, 0.6);
+                    border-color: rgba(255, 204, 0, 0.85);
+                }
+                100% {
+                    box-shadow: 0 0 0 rgba(255, 204, 0, 0);
+                    border-color: rgba(255, 204, 0, 0.28);
+                }
             }
         `;
 
