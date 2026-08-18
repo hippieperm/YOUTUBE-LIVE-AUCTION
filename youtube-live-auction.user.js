@@ -1213,13 +1213,6 @@
                 message
             );
 
-            // 알림 토스트 표시
-            const actualWon = formatActualPrice(winner.priceStr);
-            showAuctionToast(
-                `🏆 [자동 선별] @${winner.nickname}님 ${winner.priceStr}만 (${actualWon}원) 낙찰!`,
-                'auction',
-                3500
-            );
 
             console.log(PREFIX, '인풋창 자동 입력 완료:', message);
         } else {
