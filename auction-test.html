@@ -1094,6 +1094,7 @@
             round: 0,
             item: null,
             basePrice: 10,
+            maxPrice: 10,
             currentPrice: 10,
             bidsCount: 0,
             phase: 'idle' // 'idle' | 'bidding' | 'waiting_host_confirm' | 'cooling'
@@ -1146,7 +1147,7 @@
             }
 
             // 시작 입찰 시 '출발' 접두사 확률
-            if (isStart && Math.random() < 0.45) {
+            if (isStart && Math.random() < 0.50) {
                 return `출발 ${priceText}`;
             }
 
@@ -1187,14 +1188,15 @@
             const itemObj = BOT_ITEMS[Math.floor(Math.random() * BOT_ITEMS.length)];
             botState.item = itemObj.name;
             botState.basePrice = itemObj.basePrice;
+            botState.maxPrice = itemObj.basePrice;
             botState.currentPrice = itemObj.basePrice;
             botState.bidsCount = 0;
             botState.phase = 'bidding';
 
             addChatMessage('경매진행자', `🌸 [${botState.round}회차 경매] ${botState.item} (시작가 ${botState.basePrice}만원) 경매 시작합니다!`, true);
 
-            // 첫 입찰은 800ms ~ 1500ms 후 시작
-            scheduleNextBotStep(Math.floor(Math.random() * 700) + 800);
+            // 첫 입찰은 600ms ~ 1200ms 후 시작
+            scheduleNextBotStep(Math.floor(Math.random() * 600) + 600);
         }
 
         function runBotStep() {
@@ -1206,32 +1208,53 @@
                 const nick = getRandomNick();
                 const chatter = BOT_CHATTERS[Math.floor(Math.random() * BOT_CHATTERS.length)];
                 addChatMessage(nick, chatter);
-                scheduleNextBotStep(Math.floor(Math.random() * 600) + 600);
+                scheduleNextBotStep(Math.floor(Math.random() * 600) + 500);
                 return;
             }
 
-            // 입찰 처리
+            // 입찰 처리 (경매 흐름이 자연스럽게 상승하되, 동시 입력/지연 호가로 리얼하게 뒤죽박죽)
             const isStart = botState.bidsCount === 0;
-            let priceToBid = botState.currentPrice;
+            let priceToBid = botState.maxPrice;
 
-            if (!isStart) {
-                const stepTypeRand = Math.random();
-                if (stepTypeRand < 0.55) {
-                    // 일반 1만 또는 0.5만 증액
-                    const step = Math.random() > 0.4 ? 1 : 0.5;
-                    botState.currentPrice += step;
-                    priceToBid = botState.currentPrice;
-                } else if (stepTypeRand < 0.72) {
-                    // 공격적인 상향 입찰 (2만 ~ 3만 점프)
-                    const jump = Math.random() > 0.5 ? 2 : 3;
-                    botState.currentPrice += jump;
-                    priceToBid = botState.currentPrice;
-                } else if (stepTypeRand < 0.88) {
-                    // 동일 금액 동시/중복 입찰 (선착순 경쟁 연출)
-                    priceToBid = botState.currentPrice;
+            if (isStart) {
+                priceToBid = botState.basePrice;
+                botState.maxPrice = priceToBid;
+            } else {
+                const pattern = Math.random();
+
+                if (pattern < 0.35) {
+                    // 1) 신규 최고가 상향 경신 (+0.5만, +1만, 또는 과감한 +2~3만 점프)
+                    const jumpRand = Math.random();
+                    let step = 1;
+                    if (jumpRand < 0.50) {
+                        step = Math.random() > 0.5 ? 1 : 0.5;
+                    } else if (jumpRand < 0.85) {
+                        step = 2;
+                    } else {
+                        step = 3;
+                    }
+                    botState.maxPrice += step;
+                    priceToBid = botState.maxPrice;
+                } else if (pattern < 0.60) {
+                    // 2) 동일 금액 경쟁 (현재 최고가와 같은 금액을 살짝 늦게 전송 - 선착순 경쟁)
+                    priceToBid = botState.maxPrice;
+                } else if (pattern < 0.85) {
+                    // 3) 동시 입력 지연 호가 (현재 최고가보다 0.5만~1.5만 낮은 금액이 채팅창에 뒤늦게 뜸)
+                    const lagStep = Math.random() > 0.6 ? 1 : (Math.random() > 0.5 ? 0.5 : 1.5);
+                    priceToBid = Math.max(botState.basePrice, botState.maxPrice - lagStep);
                 } else {
-                    // 뒤늦은 지연 입찰 (현재 최고가보다 약간 낮은 금액을 뒤늦게 전송)
-                    priceToBid = Math.max(botState.basePrice, botState.currentPrice - (Math.random() > 0.5 ? 1 : 0.5));
+                    // 4) 소수점 세부 호가 (현재 최고가가 정수일 때 0.5단위 상향 또는 하향)
+                    if (botState.maxPrice % 1 === 0) {
+                        if (Math.random() > 0.4) {
+                            botState.maxPrice += 0.5;
+                            priceToBid = botState.maxPrice;
+                        } else {
+                            priceToBid = Math.max(botState.basePrice, botState.maxPrice - 0.5);
+                        }
+                    } else {
+                        botState.maxPrice = Math.ceil(botState.maxPrice);
+                        priceToBid = botState.maxPrice;
+                    }
                 }
             }
 
@@ -1240,17 +1263,22 @@
             addChatMessage(nick, msg);
             botState.bidsCount++;
 
-            // 경매 초반(활발한 호가 경쟁) vs 후반(고가 도달 후 자연스러운 대기/관망)
+            // 실제 라이브 방송 특유의 버스트(동시 다발 타이핑) vs 일반 템포 시뮬레이션
             let nextDelay;
-            if (botState.bidsCount < 5) {
-                // 초반 빠른 템포: 600ms ~ 1400ms
-                nextDelay = Math.floor(Math.random() * 800) + 600;
-            } else if (botState.bidsCount < 10) {
-                // 중반 템포: 1200ms ~ 2200ms
-                nextDelay = Math.floor(Math.random() * 1000) + 1200;
+            const isBurst = Math.random() < 0.35 && botState.bidsCount > 1;
+
+            if (isBurst) {
+                // 여러 명이 거의 동시에 엔터를 친 상황: 200ms ~ 450ms 초고속 연속 출력
+                nextDelay = Math.floor(Math.random() * 250) + 200;
+            } else if (botState.bidsCount < 6) {
+                // 초반 활발한 호가 경쟁: 600ms ~ 1300ms
+                nextDelay = Math.floor(Math.random() * 700) + 600;
+            } else if (botState.bidsCount < 12) {
+                // 중반 템포: 1100ms ~ 2000ms
+                nextDelay = Math.floor(Math.random() * 900) + 1100;
             } else {
-                // 후반 템포: 2000ms ~ 3800ms (진행자의 밑줄 마감을 기다리는 긴장감 있는 호가 및 관전챗)
-                nextDelay = Math.floor(Math.random() * 1800) + 2000;
+                // 후반 템포 (진행자의 밑줄 마감을 기다리는 관망/눈치 싸움): 1800ms ~ 3200ms
+                nextDelay = Math.floor(Math.random() * 1400) + 1800;
             }
 
             scheduleNextBotStep(nextDelay);
