@@ -3554,13 +3554,11 @@ ${xmlRows.join('')}
                         delBtn.style.color = 'rgba(255,255,255,.4)';
                     });
                     delBtn.addEventListener('click', () => {
-                        // 🛑 다시보기 환경: 실수로 인한 삭제 방지 확인 가드
-                        if (isReplayMode()) {
-                            const nick = record.nickname ? `@${record.nickname}` : '해당';
-                            const priceStr = record.price ? ` (${record.price}만)` : '';
-                            if (!confirm(`[다시보기] ${nick}${priceStr} 낙찰 내역을 정말 삭제하시겠습니까?`)) {
-                                return;
-                            }
+                        const nick = record.nickname ? `@${record.nickname}님` : '해당';
+                        const priceStr = record.price ? ` (${record.price}만)` : '';
+                        const timeStr = record.time ? ` [${record.time}]` : '';
+                        if (!confirm(`[낙찰 내역 삭제 확인]\n${nick}${priceStr}${timeStr} 항목을 정말 삭제하시겠습니까?`)) {
+                            return;
                         }
 
                         const all = loadBidRecords();
@@ -3569,6 +3567,7 @@ ${xmlRows.join('')}
                         updateBidBadge();
                         updateStats();
                         renderBidList();
+                        showAuctionToast(`🗑️ ${nick} 낙찰 내역이 삭제되었습니다.`, 'separator');
                     });
 
                     item.appendChild(delBtn);
