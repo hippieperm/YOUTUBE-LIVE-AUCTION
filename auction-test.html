@@ -807,7 +807,12 @@
         function clearAuctionRecords() {
             localStorage.removeItem('__auction_bid_records');
             const btn = document.getElementById('__auction_bid_list_btn');
-            if (btn) btn.textContent = '📋 낙찰 내역 (0건)';
+            if (btn) {
+                btn.innerHTML = `<span>📋 낙찰 내역</span><span class="__auction_badge" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5.5px;box-sizing:border-box;background:linear-gradient(180deg,#ff453a,#ff3b30);color:#fff;border-radius:9999px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;font-size:11px;font-weight:800;line-height:1;letter-spacing:-0.2px;box-shadow:0 1.5px 3px rgba(0,0,0,0.35);margin-left:2px;">0</span>`;
+            }
+            try {
+                window.dispatchEvent(new Event('storage'));
+            } catch (e) {}
             alert('낙찰 내역이 모두 초기화되었습니다.');
         }
 

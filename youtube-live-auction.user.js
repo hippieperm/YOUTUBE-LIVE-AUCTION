@@ -525,16 +525,43 @@
     }
 
 
+    /** 낙찰 내역 버튼 내부 콘텐츠 (iOS 스타일 배지 포함) 렌더링 */
+    function renderBidButtonContent(btn, count = 0) {
+        if (!btn) return;
+        const num = Number(count) || 0;
+        btn.innerHTML = `<span>📋 낙찰 내역</span><span class="__auction_badge" style="
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-width: 18px !important;
+            height: 18px !important;
+            padding: 0 5.5px !important;
+            box-sizing: border-box !important;
+            background: linear-gradient(180deg, #ff453a 0%, #ff3b30 100%) !important;
+            color: #ffffff !important;
+            border-radius: 9999px !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', Roboto, 'Segoe UI', sans-serif !important;
+            font-size: 11px !important;
+            font-weight: 800 !important;
+            line-height: 1 !important;
+            letter-spacing: -0.2px !important;
+            box-shadow: 0 1.5px 3px rgba(0,0,0,0.35), inset 0 0.5px 0.5px rgba(255,255,255,0.4) !important;
+            vertical-align: middle !important;
+            margin-left: 2px !important;
+            flex-shrink: 0 !important;
+        ">${num}</span>`;
+    }
+
+
     /** 낙찰 배지 업데이트 (메인창 + iframe + 플로팅 버튼 전역 동기화) */
     function updateBidBadge() {
 
         const count = getTodayBidRecords().length;
-        const text = `📋 낙찰 내역 (${count}건)`;
 
         // 1) 현재 document에서 탐색
         const btn = document.getElementById('__auction_bid_list_btn');
         if (btn) {
-            btn.textContent = text;
+            renderBidButtonContent(btn, count);
         }
 
         // 2) iframe 내부에서도 탐색
@@ -543,7 +570,7 @@
             if (iframe && iframe.contentDocument) {
                 const iframeBtn = iframe.contentDocument.getElementById('__auction_bid_list_btn');
                 if (iframeBtn) {
-                    iframeBtn.textContent = text;
+                    renderBidButtonContent(iframeBtn, count);
                 }
             }
         } catch (e) {}
@@ -552,9 +579,9 @@
         try {
             if (window.top && window.top !== window && window.top.document) {
                 const topBtn = window.top.document.getElementById('__auction_bid_list_btn');
-                if (topBtn) topBtn.textContent = text;
+                if (topBtn) renderBidButtonContent(topBtn, count);
                 const topFloatBtn = window.top.document.getElementById('__auction_floating_bid_btn');
-                if (topFloatBtn) topFloatBtn.textContent = text;
+                if (topFloatBtn) renderBidButtonContent(topFloatBtn, count);
             }
         } catch (e) {}
 
@@ -2378,7 +2405,7 @@
         const count = getTodayBidRecords().length;
         const totalAll = loadBidRecords().length;
         const displayCount = count > 0 ? count : totalAll;
-        btn.textContent = `📋 낙찰 내역 (${displayCount}건)`;
+        renderBidButtonContent(btn, displayCount);
 
         btn.addEventListener('mouseenter', () => {
             btn.style.transform = 'translateY(-2px) scale(1.02)';
@@ -2436,7 +2463,7 @@
         }
 
         const todayRecords = getTodayBidRecords();
-        btn.textContent = `📋 낙찰 내역 (${todayRecords.length}건)`;
+        renderBidButtonContent(btn, todayRecords.length);
 
         // 안내 패널이 활성화되어 있으면 채팅창 내 버튼이 있으므로 플로팅 숨김,
         // 방송이 종료되거나 채팅창이 닫혀 안내 패널이 없을 때 플로팅 버튼 노출
@@ -7562,9 +7589,12 @@ ${xmlRows.join('')}
                     color:#e8c56d !important;
                     cursor:pointer !important;
                     font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
-                    font-size:11px !important;
+                    font-size:11.5px !important;
                     font-weight:700 !important;
-                    line-height:30px !important;
+                    display:flex !important;
+                    align-items:center !important;
+                    justify-content:center !important;
+                    gap:6px !important;
                     white-space:nowrap !important;
                     overflow:hidden !important;
                     text-overflow:ellipsis !important;
@@ -7573,7 +7603,7 @@ ${xmlRows.join('')}
             }
         );
         const initCount = getTodayBidRecords().length;
-        bidListBtn.textContent = `📋 낙찰 내역 (${initCount}건)`;
+        renderBidButtonContent(bidListBtn, initCount);
 
         bidListBtn.addEventListener('mouseenter', () => {
             bidListBtn.style.background = 'rgba(255,204,0,.18)';
