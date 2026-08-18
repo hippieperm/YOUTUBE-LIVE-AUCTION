@@ -848,15 +848,14 @@
             });
         }
 
-        /** 3. 동일 금액 선착순 우선 및 진행자 공지 제외 테스트 시나리오 */
+        /** 3. 동일 금액 선착순 우선 테스트 시나리오 */
         function runTieBreakerScenario() {
-            addChatMessage('해담분재경매장', '👉 @다은님 20만 낙찰입니다. 감사합니다😄', true);
-            setTimeout(() => addChatMessage('해담분재경매장', '📢 [동일가 선착순 검증] 3명이 동일한 20만을 입찰합니다.', true), 500);
+            addChatMessage('해담분재경매장', '📢 [동일가 선착순 검증] 3명이 동일한 20만을 입찰합니다.', true);
 
-            setTimeout(() => addChatMessage('1등선착순', '20만'), 1200);
-            setTimeout(() => addChatMessage('2등입찰자', '20만'), 1900);
-            setTimeout(() => addChatMessage('3등입찰자', '20만'), 2600);
-            setTimeout(() => addChatMessage('해담분재경매장', '===================', true), 3400);
+            setTimeout(() => addChatMessage('1등선착순', '20만'), 700);
+            setTimeout(() => addChatMessage('2등입찰자', '20만'), 1400);
+            setTimeout(() => addChatMessage('3등입찰자', '20만'), 2100);
+            setTimeout(() => addChatMessage('해담분재경매장', '===================', true), 2900);
         }
 
         /** 봇 입찰 시뮬레이터 */
