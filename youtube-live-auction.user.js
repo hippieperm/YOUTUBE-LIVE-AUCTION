@@ -7,6 +7,9 @@
 // @match        https://youtube.com/*
 // @match        https://www.youtube.com/live_chat*
 // @match        https://www.youtube.com/live_chat_replay*
+// @match        *://localhost/*
+// @match        *://127.0.0.1/*
+// @match        file://*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
@@ -511,7 +514,90 @@
 
 
     // =========================================================
-    // 닉네임 추출
+    // 진행자 / 운영자 / 시스템 메시지 판별
+    // =========================================================
+
+    /**
+     * 진행자, 채널 소유자, 모더레이터(운영자) 또는 시스템 메시지 요소인지 판별
+     */
+    function isHostOrSystemElement(el) {
+        if (!el || !(el instanceof Element)) return false;
+
+        // 1) author-type 속성 확인 (YouTube 표준: "owner", "moderator")
+        const authorType = (el.getAttribute('author-type') || '').toLowerCase();
+        if (authorType === 'owner' || authorType === 'moderator') return true;
+
+        // 2) message renderer 내부 author-chip 확인
+        const authorChip = el.closest('yt-live-chat-author-chip') || el.querySelector('yt-live-chat-author-chip');
+        if (authorChip) {
+            const chipType = (authorChip.getAttribute('type') || '').toLowerCase();
+            if (chipType === 'owner' || chipType === 'moderator') return true;
+            if (authorChip.querySelector('[type="owner"], [type="moderator"], .host-badge')) return true;
+        }
+
+        // 3) 배지 렌더러 확인 (YouTube 표준 뱃지)
+        if (el.querySelector('yt-live-chat-author-badge-renderer[type="owner"], yt-live-chat-author-badge-renderer[type="moderator"], .host-badge')) {
+            return true;
+        }
+
+        // 4) 시뮬레이터 및 커스텀 클래스
+        if (el.classList.contains('system-host') || (typeof el.closest === 'function' && el.closest('.system-host'))) {
+            return true;
+        }
+
+        return false;
+    }
+
+
+    /**
+     * 공지, 안내문구, 낙찰완료 문구, 밑줄 등 시스템/진행자 텍스트인지 판별
+     */
+    function isSystemOrNoticeMessage(text) {
+        if (!text || typeof text !== 'string') return true;
+        const clean = text.trim();
+
+        // 1) 밑줄 / 구분선
+        if (isSeparatorMessage(clean) || /^={3,}$/.test(clean)) return true;
+
+        // 2) 낙찰 완료 메시지 ("👉 @...", "낙찰입니다. 감사합니다")
+        if (clean.includes('낙찰입니다') || clean.startsWith('👉 @') || clean.includes('감사합니다😄')) return true;
+
+        // 3) 공지 및 안내 이모지/접두사
+        if (
+            clean.startsWith('📢') ||
+            clean.startsWith('✨') ||
+            clean.startsWith('🧹') ||
+            clean.startsWith('🤖') ||
+            clean.startsWith('⚠️') ||
+            clean.startsWith('[공지]') ||
+            clean.startsWith('[안내]') ||
+            clean.startsWith('[품목') ||
+            clean.startsWith('[동일가') ||
+            clean.startsWith('[알림]')
+        ) {
+            return true;
+        }
+
+        // 4) 8종 기본 안내 메시지 내용 포함 여부
+        if (
+            clean.includes('회원등록 ┃') ||
+            clean.includes('호가 ┃') ||
+            clean.includes('경매장 ┃') ||
+            clean.includes('낙찰 취소 ┃') ||
+            clean.includes('택배 ┃') ||
+            clean.includes('입찰 안내 ┃') ||
+            clean.includes('채팅 안내 ┃') ||
+            clean.includes('응원문구 ┃')
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+
+    // =========================================================
+    // 닉네임 추출 (배지 텍스트 분리 및 정제)
     // =========================================================
 
     function getNickname(author) {
@@ -528,10 +614,15 @@
                     ? author
                     : (author.querySelector('#author-name') || author);
 
+            // 뱃지 엘리먼트(.host-badge, yt-live-chat-author-badge-renderer 등)가 포함된 경우 배지 텍스트를 제거하고 순수 텍스트만 추출
+            const clone = nameEl.cloneNode(true);
+            const badges = clone.querySelectorAll('yt-live-chat-author-badge-renderer, .host-badge, #chat-badges, [type="owner"], [type="moderator"]');
+            badges.forEach(b => b.remove());
+
             text =
-                nameEl.innerText ||
-                nameEl.textContent ||
-                nameEl.getAttribute('aria-label') ||
+                clone.innerText ||
+                clone.textContent ||
+                clone.getAttribute('aria-label') ||
                 '';
 
         } else if (typeof author === 'string') {
@@ -542,6 +633,7 @@
             text
                 .trim()
                 .replace(/^@+/, '')
+                .replace(/\s*(?:진행자|소유자|운영자|방장)$/i, '')
                 .trim();
 
         return nickname || null;
@@ -993,13 +1085,22 @@
         const validBids = [];
 
         targetItems.forEach((item, index) => {
-            const authorEl = findAuthor(item);
-            const nickname = getNickname(authorEl);
-            if (!nickname) return;
+            // 🛑 진행자, 방장, 운영자 또는 시스템 메시지는 입찰 대상에서 완벽 제외
+            if (isHostOrSystemElement(item)) {
+                return;
+            }
 
             const msgEl = item.querySelector('#message');
             const chatText = msgEl ? msgEl.textContent.trim() : '';
-            if (!chatText || isSeparatorMessage(chatText)) return;
+            if (!chatText || isSystemOrNoticeMessage(chatText)) {
+                return;
+            }
+
+            const authorEl = findAuthor(item);
+            const nickname = getNickname(authorEl);
+            if (!nickname || nickname === '경매진행자') {
+                return;
+            }
 
             const parsedPrice = parseBidPrice(chatText);
             if (parsedPrice) {
@@ -4468,6 +4569,12 @@ ${xmlRows.join('')}
             return;
         }
 
+        // 🛑 가드 3: 진행자, 운영자 또는 시스템 메시지는 낙찰 대상에서 제외
+        if (isHostOrSystemElement(messageItem)) {
+            console.log(PREFIX, '진행자/운영자 메시지는 낙찰 처리 대상이 아닙니다.');
+            return;
+        }
+
         const author =
             findAuthor(
                 event.target,
@@ -4485,7 +4592,7 @@ ${xmlRows.join('')}
             );
 
 
-        if (!nickname) {
+        if (!nickname || nickname === '경매진행자') {
             return;
         }
 
@@ -4508,6 +4615,12 @@ ${xmlRows.join('')}
                 event
             );
 
+        // 🛑 가드 4: 공지, 안내문구, 낙찰완료 메시지, 밑줄 등은 클릭 무시
+        if (!lastChatMessage || isSystemOrNoticeMessage(lastChatMessage)) {
+            console.log(PREFIX, '공지/시스템/낙찰완료 메시지는 낙찰 처리 대상이 아닙니다.');
+            return;
+        }
+
 
         console.log(
             PREFIX,
@@ -4519,9 +4632,7 @@ ${xmlRows.join('')}
 
 
         const parsedPrice =
-            lastChatMessage
-                ? parseBidPrice(lastChatMessage)
-                : null;
+            parseBidPrice(lastChatMessage);
 
 
         if (parsedPrice) {

@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔨 YouTube Live 경매 가상 테스트룸 (Simulator)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #0b0c10;
+            color: #e0e0e0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* =========================================================
+           좌측: 시뮬레이터 제어 패널 (Control Center)
+           ========================================================= */
+        #simulator-sidebar {
+            width: 440px;
+            min-width: 400px;
+            background: #12131a;
+            border-right: 1px solid #232533;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+            z-index: 100;
+        }
+
+        .sidebar-header {
+            padding: 18px 20px;
+            background: linear-gradient(135deg, #181926 0%, #1f2133 100%);
+            border-bottom: 1px solid #2d3047;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .sidebar-header h1 {
+            font-size: 16px;
+            font-weight: 800;
+            color: #ffd043;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: -0.3px;
+        }
+
+        .badge-test {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 7px;
+            border-radius: 6px;
+            background: rgba(255, 208, 67, 0.15);
+            color: #ffd043;
+            border: 1px solid rgba(255, 208, 67, 0.3);
+            text-transform: uppercase;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .sidebar-content::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar-content::-webkit-scrollbar-thumb {
+            background: #2a2d3e;
+            border-radius: 3px;
+        }
+
+        .section-card {
+            background: #181a24;
+            border: 1px solid #26293a;
+            border-radius: 12px;
+            padding: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .section-card:hover {
+            border-color: #3b3f5c;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #a5b4fc;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .section-desc {
+            font-size: 11.5px;
+            color: #8b92aa;
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn-group.single-col {
+            grid-template-columns: 1fr;
+        }
+
+        .sim-btn {
+            background: #242738;
+            border: 1px solid #363a52;
+            color: #d1d5db;
+            padding: 10px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sim-btn:hover {
+            background: #2f334a;
+            border-color: #4f557a;
+            color: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        .sim-btn:active {
+            transform: translateY(0);
+        }
+
+        .sim-btn.primary {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(79, 70, 229, 0.3));
+            border-color: rgba(99, 102, 241, 0.4);
+            color: #c7d2fe;
+        }
+        .sim-btn.primary:hover {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(79, 70, 229, 0.45));
+            border-color: rgba(99, 102, 241, 0.6);
+            color: #ffffff;
+        }
+
+        .sim-btn.gold {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.25));
+            border-color: rgba(245, 158, 11, 0.4);
+            color: #fde68a;
+        }
+        .sim-btn.gold:hover {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35));
+            border-color: rgba(245, 158, 11, 0.6);
+            color: #ffffff;
+        }
+
+        .sim-btn.red {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.35);
+            color: #fca5a5;
+        }
+        .sim-btn.red:hover {
+            background: rgba(239, 68, 68, 0.25);
+            border-color: rgba(239, 68, 68, 0.5);
+            color: #ffffff;
+        }
+
+        .sim-btn.green {
+            background: rgba(34, 197, 94, 0.15);
+            border-color: rgba(34, 197, 94, 0.35);
+            color: #86efac;
+        }
+        .sim-btn.green:hover {
+            background: rgba(34, 197, 94, 0.25);
+            border-color: rgba(34, 197, 94, 0.5);
+            color: #ffffff;
+        }
+
+        /* 수동 입력 폼 */
+        .manual-form {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .form-input {
+            background: #0f1017;
+            border: 1px solid #2d3044;
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: #fff;
+            font-size: 12px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .form-input:focus {
+            border-color: #6366f1;
+        }
+
+        .form-input.nickname {
+            width: 110px;
+        }
+
+        .form-input.message {
+            flex: 1;
+        }
+
+        .quick-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .quick-tag {
+            background: #202333;
+            border: 1px solid #31354d;
+            color: #9ca3af;
+            font-size: 11px;
+            padding: 3px 7px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.12s;
+        }
+
+        .quick-tag:hover {
+            background: #313650;
+            color: #fff;
+            border-color: #4b5275;
+        }
+
+        /* 가이드 안내 박스 */
+        .guide-tip {
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px dashed rgba(99, 102, 241, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 11.5px;
+            color: #a5b4fc;
+            line-height: 1.6;
+        }
+
+        .guide-tip strong {
+            color: #ffd043;
+        }
+
+        /* =========================================================
+           우측: 실제 YouTube 라이브 채팅 UI (100% 모사)
+           ========================================================= */
+        #youtube-container {
+            flex: 1;
+            background: #0f0f0f;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* 유튜브 라이브 채팅 헤더 */
+        .yt-chat-header {
+            height: 48px;
+            background: #181818;
+            border-bottom: 1px solid #272727;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            user-select: none;
+        }
+
+        .yt-chat-header-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #f1f1f1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .yt-live-badge {
+            background: #cc0000;
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            letter-spacing: 0.5px;
+        }
+
+        .yt-chat-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #aaa;
+            font-size: 13px;
+        }
+
+        /* 유튜브 커스텀 태그 에뮬레이션 */
+        yt-live-chat-app {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            height: calc(100vh - 48px);
+            position: relative;
+        }
+
+        yt-live-chat-renderer {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            height: 100%;
+            position: relative;
+            background: #0f0f0f;
+        }
+
+        yt-live-chat-item-list-renderer {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        yt-live-chat-item-list-renderer::-webkit-scrollbar {
+            width: 8px;
+        }
+        yt-live-chat-item-list-renderer::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        #items {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            min-height: 100%;
+            padding: 8px 0;
+        }
+
+        /* 유튜브 채팅 메시지 렌더러 */
+        yt-live-chat-text-message-renderer {
+            display: flex;
+            align-items: flex-start;
+            padding: 6px 16px;
+            font-size: 13px;
+            line-height: 20px;
+            color: #e5e5e5;
+            transition: background 0.15s ease;
+            cursor: pointer;
+            position: relative;
+            user-select: text;
+        }
+
+        yt-live-chat-text-message-renderer:hover {
+            background-color: #272727;
+        }
+
+        yt-live-chat-text-message-renderer.system-host {
+            background: rgba(255, 208, 67, 0.08);
+            border-left: 3px solid #ffd043;
+        }
+
+        yt-live-chat-text-message-renderer.separator-msg {
+            background: rgba(239, 68, 68, 0.12);
+            border-left: 3px solid #ef4444;
+            color: #f87171;
+            font-weight: 700;
+        }
+
+        .yt-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            margin-right: 12px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+            user-select: none;
+        }
+
+        #author-name {
+            font-weight: 600;
+            color: #aaaaaa;
+            margin-right: 8px;
+            font-size: 13px;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .host-badge {
+            background: #ffd043;
+            color: #000;
+            font-size: 9.5px;
+            font-weight: 800;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-left: 5px;
+        }
+
+        #message {
+            color: #f1f1f1;
+            word-break: break-word;
+            flex: 1;
+        }
+
+        .yt-timestamp {
+            font-size: 11px;
+            color: #717171;
+            margin-right: 8px;
+            flex-shrink: 0;
+            user-select: none;
+        }
+
+        /* 채팅 입력창 영역 (YouTube Live Footer) */
+        yt-live-chat-message-input-renderer {
+            background: #181818;
+            border-top: 1px solid #272727;
+            padding: 10px 16px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .yt-input-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+        }
+
+        yt-live-chat-text-input-field-renderer {
+            flex: 1;
+            background: #272727;
+            border-radius: 20px;
+            padding: 6px 14px;
+            display: flex;
+            align-items: center;
+            border: 1px solid transparent;
+            transition: border-color 0.2s;
+            position: relative;
+        }
+
+        yt-live-chat-text-input-field-renderer:focus-within {
+            border-color: #3ea6ff;
+            background: #222;
+        }
+
+        #input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #fff;
+            font-size: 13px;
+            font-family: inherit;
+            line-height: 20px;
+            min-height: 20px;
+            max-height: 80px;
+            overflow-y: auto;
+            word-break: break-word;
+        }
+
+        #input:empty:before {
+            content: "채팅 입력...";
+            color: #717171;
+        }
+
+        .yt-send-btn {
+            background: #3ea6ff;
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #0f0f0f;
+            transition: background 0.15s;
+            flex-shrink: 0;
+        }
+
+        .yt-send-btn:hover {
+            background: #65b8ff;
+        }
+
+        .yt-send-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- =========================================================
+         좌측: 시뮬레이터 제어 센터 (테스트 도구함)
+         ========================================================= -->
+    <aside id="simulator-sidebar">
+        <div class="sidebar-header">
+            <h1>🔨 경매 시뮬레이터 <span class="badge-test">TEST ROOM</span></h1>
+            <span style="font-size: 11px; color: #8b92aa;">v2.1 Full Suite</span>
+        </div>
+
+        <div class="sidebar-content">
+            <!-- 시나리오 1 -->
+            <div class="section-card">
+                <div class="section-title">⚡ 원클릭 시나리오 테스트</div>
+                <div class="section-desc">클릭 한 번으로 다양한 경매 상황을 시뮬레이션하여 자동 낙찰과 최고가 선별을 테스트합니다.</div>
+                
+                <div class="btn-group single-col" style="gap: 8px;">
+                    <button class="sim-btn primary" onclick="runStandardAuctionScenario()">
+                        <span>🏁 1. 표준 경매 & 밑줄 마감 (최고가 자동 선별)</span>
+                    </button>
+                    <button class="sim-btn gold" onclick="runFormatTestScenario()">
+                        <span>🔢 2. 다양한 금액 포맷 일괄 생성 (.5, 3,5, 15만 5천 등)</span>
+                    </button>
+                    <button class="sim-btn primary" onclick="runTieBreakerScenario()">
+                        <span>⏱️ 3. 동일 금액 선착순 우선 테스트</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 봇 자동 입찰 -->
+            <div class="section-card">
+                <div class="section-title">🤖 실시간 가상 입찰 봇</div>
+                <div class="section-desc">실제 라이브 방송처럼 1.5초마다 가상 시청자들이 랜덤 입찰 채팅을 올립니다.</div>
+                
+                <div class="btn-group">
+                    <button class="sim-btn green" id="btn-bot-start" onclick="toggleBot(true)">
+                        <span>▶ 봇 시작</span>
+                    </button>
+                    <button class="sim-btn red" id="btn-bot-stop" onclick="toggleBot(false)" style="opacity: 0.6;">
+                        <span>⏹ 봇 정지</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 수동 메시지 발송 -->
+            <div class="section-card">
+                <div class="section-title">✍️ 가상 시청자 수동 채팅 발송</div>
+                <div class="manual-form">
+                    <div class="form-row">
+                        <input type="text" id="manual-nickname" class="form-input nickname" placeholder="닉네임" value="입찰왕">
+                        <input type="text" id="manual-message" class="form-input message" placeholder="채팅 메시지 (예: 15만, 15.5)" value="15만">
+                        <button class="sim-btn primary" style="padding: 0 14px;" onclick="sendManualChat()">전송</button>
+                    </div>
+                    <div class="quick-tags">
+                        <span class="quick-tag" onclick="quickFill('15만')">15만</span>
+                        <span class="quick-tag" onclick="quickFill('15.5만')">15.5만</span>
+                        <span class="quick-tag" onclick="quickFill('.5')">.5</span>
+                        <span class="quick-tag" onclick="quickFill('3,5')">3,5</span>
+                        <span class="quick-tag" onclick="quickFill('15만 5천')">15만 5천</span>
+                        <span class="quick-tag" onclick="quickFill('150000원')">150,000원</span>
+                        <span class="quick-tag" onclick="quickFill('저요')">저요 (텍스트)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 밑줄 즉시 긋기 및 관리 -->
+            <div class="section-card">
+                <div class="section-title">🔴 밑줄 전송 & 관리</div>
+                <div class="btn-group single-col" style="gap: 8px;">
+                    <button class="sim-btn red" onclick="sendSeparatorFromHost()">
+                        <span>🔴 진행자 밑줄 즉시 전송 (===================)</span>
+                    </button>
+                </div>
+                <div class="btn-group" style="margin-top: 8px;">
+                    <button class="sim-btn" onclick="clearChatMessages()">
+                        <span>🧹 채팅창 비우기</span>
+                    </button>
+                    <button class="sim-btn" onclick="clearAuctionRecords()">
+                        <span>🗑️ 낙찰 기록 초기화</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 사용 방법 팁 -->
+            <div class="guide-tip">
+                💡 <strong>테스트 방법</strong><br>
+                1. 우측 채팅창의 <strong>채팅 행이나 닉네임을 클릭</strong>해보세요.<br>
+                - 숫자가 있으면: <strong>다이렉트 낙찰 문구 입력 + 토스트</strong><br>
+                - 숫자가 없으면: <strong>정사각형 가상 키패드 모달 팝업</strong><br>
+                2. 상단 <strong>안내 버튼 8종</strong> 및 <strong>밑줄 버튼</strong>을 클릭해보세요.<br>
+                3. 밑줄이 전송되면 <strong>직전 최고 입찰자가 자동 선별</strong>됩니다!
+            </div>
+        </div>
+    </aside>
+
+
+    <!-- =========================================================
+         우측: 실제 YouTube 라이브 채팅창 100% 모사 UI
+         ========================================================= -->
+    <main id="youtube-container">
+        <!-- 상단 헤더 -->
+        <header class="yt-chat-header">
+            <div class="yt-chat-header-title">
+                <span class="yt-live-badge">실시간</span>
+                <span>주요 채팅</span>
+            </div>
+            <div class="yt-chat-header-actions">
+                <span>👥 시청자 184명</span>
+            </div>
+        </header>
+
+        <!-- 유튜브 채팅 본체 (유저스크립트 타겟 DOM) -->
+        <yt-live-chat-app>
+            <yt-live-chat-renderer>
+                <yt-live-chat-item-list-renderer>
+                    <div id="items" class="yt-live-chat-item-list-renderer">
+                        <!-- 초기 안내 메시지 -->
+                        <yt-live-chat-text-message-renderer class="system-host" author-type="owner">
+                            <div class="yt-avatar" style="background: #e11d48;">경</div>
+                            <span id="author-name">경매진행자<span class="host-badge" type="owner">진행자</span></span>
+                            <div id="message">✨ 유튜브 라이브 경매 가상 테스트룸에 오신 것을 환영합니다! 좌측 도구함에서 시나리오를 실행해보세요.</div>
+                        </yt-live-chat-text-message-renderer>
+                    </div>
+                </yt-live-chat-item-list-renderer>
+
+                <!-- 채팅 입력창 영역 -->
+                <yt-live-chat-message-input-renderer id="input-renderer">
+                    <!-- 안내 버튼 패널 (__auction_guide_panel) 이 유저스크립트에 의해 여기에 자동 삽입됨 -->
+                    <div class="yt-input-row">
+                        <div class="yt-avatar" style="background: #e11d48; margin-right: 0;">경</div>
+                        <yt-live-chat-text-input-field-renderer>
+                            <div id="input" contenteditable="true" role="textbox" aria-multiline="true"></div>
+                        </yt-live-chat-text-input-field-renderer>
+                        <!-- 밑줄 버튼 (__auction_separator_button) 이 유저스크립트에 의해 input 옆에 자동 삽입됨 -->
+                        <button class="yt-send-btn" id="send-button" title="메시지 보내기" onclick="submitHostInput()">
+                            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                        </button>
+                    </div>
+                </yt-live-chat-message-input-renderer>
+            </yt-live-chat-renderer>
+        </yt-live-chat-app>
+    </main>
+
+
+    <!-- =========================================================
+         시뮬레이터 제어 스크립트 (가상 시청자 생성 & 시나리오)
+         ========================================================= -->
+    <script>
+        // 아바타 배경색 팔레트
+        const AVATAR_COLORS = [
+            '#e11d48', '#2563eb', '#059669', '#d97706', '#7c3aed',
+            '#db2777', '#0891b2', '#4f46e5', '#ea580c', '#16a34a'
+        ];
+
+        function getAvatarColor(name) {
+            let hash = 0;
+            for (let i = 0; i < name.length; i++) {
+                hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+        }
+
+        /** 채팅창에 가상 메시지 추가 */
+        function addChatMessage(nickname, text, isHost = false) {
+            const itemsContainer = document.getElementById('items');
+            if (!itemsContainer) return;
+
+            const isSeparator = text.trim() === '===================';
+
+            const renderer = document.createElement('yt-live-chat-text-message-renderer');
+            if (isHost) {
+                renderer.classList.add('system-host');
+                renderer.setAttribute('author-type', 'owner');
+            }
+            if (isSeparator) renderer.classList.add('separator-msg');
+
+            const color = isHost ? '#e11d48' : getAvatarColor(nickname);
+            const firstChar = nickname.charAt(0) || 'U';
+
+            renderer.innerHTML = `
+                <div class="yt-avatar" style="background: ${color};">${firstChar}</div>
+                <span id="author-name">${escapeHtml(nickname)}${isHost ? '<span class="host-badge" type="owner">진행자</span>' : ''}</span>
+                <div id="message">${escapeHtml(text)}</div>
+            `;
+
+            itemsContainer.appendChild(renderer);
+
+            // 자동 스크롤
+            const listRenderer = document.querySelector('yt-live-chat-item-list-renderer');
+            if (listRenderer) {
+                listRenderer.scrollTop = listRenderer.scrollHeight;
+            }
+
+            return renderer;
+        }
+
+        function escapeHtml(str) {
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        /** 빠른 입력 도우미 */
+        function quickFill(msg) {
+            document.getElementById('manual-message').value = msg;
+        }
+
+        /** 수동 채팅 발송 */
+        function sendManualChat() {
+            const nicknameInput = document.getElementById('manual-nickname');
+            const messageInput = document.getElementById('manual-message');
+
+            const nickname = nicknameInput.value.trim() || '입찰자';
+            const message = messageInput.value.trim();
+
+            if (!message) return;
+
+            addChatMessage(nickname, message);
+            messageInput.value = '';
+            messageInput.focus();
+        }
+
+        // 수동 입력창에서 Enter 키 지원
+        document.getElementById('manual-message').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendManualChat();
+            }
+        });
+
+        /** 진행자 밑줄 즉시 전송 */
+        function sendSeparatorFromHost() {
+            addChatMessage('경매진행자', '===================', true);
+        }
+
+        /** 채팅창 비우기 */
+        function clearChatMessages() {
+            const items = document.getElementById('items');
+            if (items) {
+                items.innerHTML = `
+                    <yt-live-chat-text-message-renderer class="system-host">
+                        <div class="yt-avatar" style="background: #e11d48;">경</div>
+                        <span id="author-name">경매진행자<span class="host-badge">진행자</span></span>
+                        <div id="message">🧹 채팅창이 초기화되었습니다. 새로운 테스트를 시작해보세요!</div>
+                    </yt-live-chat-text-message-renderer>
+                `;
+            }
+        }
+
+        /** 낙찰 기록 초기화 */
+        function clearAuctionRecords() {
+            localStorage.removeItem('__auction_bid_records');
+            const btn = document.getElementById('__auction_bid_list_btn');
+            if (btn) btn.textContent = '📋 낙찰 내역 (0건)';
+            alert('낙찰 내역이 모두 초기화되었습니다.');
+        }
+
+        /** 진행자 인풋창 메시지 전송 핸들러 */
+        function submitHostInput() {
+            const input = document.getElementById('input');
+            if (!input) return;
+
+            const text = (input.innerText || input.textContent || '').trim();
+            if (!text) return;
+
+            addChatMessage('경매진행자', text, true);
+            input.innerText = '';
+            input.textContent = '';
+            input.focus();
+        }
+
+        // 인풋창 Enter 키 처리
+        document.getElementById('input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submitHostInput();
+            }
+        });
+
+        /* =========================================================
+           시나리오 모음
+           ========================================================= */
+
+        /** 1. 표준 경매 & 밑줄 마감 시나리오 */
+        let _scenarioTimer = null;
+        function runStandardAuctionScenario() {
+            clearTimeout(_scenarioTimer);
+            addChatMessage('경매진행자', '📢 [품목 #1] 명품 분재 경매를 시작합니다! 시작가 10만원', true);
+
+            const steps = [
+                { nick: '산수화', msg: '10만', delay: 800 },
+                { nick: '소나무사랑', msg: '12만', delay: 1800 },
+                { nick: '분재마니아', msg: '15만', delay: 2900 },
+                { nick: '푸른언덕', msg: '15.5만', delay: 4000 },
+                { nick: '경매진행자', msg: '===================', delay: 5200, isHost: true }
+            ];
+
+            steps.forEach(step => {
+                setTimeout(() => {
+                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                }, step.delay);
+            });
+        }
+
+        /** 2. 다양한 금액 포맷 일괄 생성 시나리오 */
+        function runFormatTestScenario() {
+            addChatMessage('경매진행자', '📢 다양한 금액 포맷 테스트 메시지를 생성합니다. 각 채팅을 클릭해보세요!', true);
+
+            const samples = [
+                { nick: '철수', msg: '15만' },
+                { nick: '영희', msg: '.5' },
+                { nick: '민수', msg: '3,5' },
+                { nick: '지우', msg: '15만 5천' },
+                { nick: '현우', msg: '150,000원' },
+                { nick: '다은', msg: '20' },
+                { nick: '태양', msg: '저요 (가상 키패드 팝업 테스트)' }
+            ];
+
+            samples.forEach((s, idx) => {
+                setTimeout(() => {
+                    addChatMessage(s.nick, s.msg);
+                }, (idx + 1) * 300);
+            });
+        }
+
+        /** 3. 동일 금액 선착순 우선 및 진행자 공지 제외 테스트 시나리오 */
+        function runTieBreakerScenario() {
+            addChatMessage('경매진행자', '👉 @다은님 20만 낙찰입니다. 감사합니다😄', true);
+            setTimeout(() => addChatMessage('경매진행자', '📢 [동일가 선착순 검증] 3명이 동일한 20만을 입찰합니다.', true), 500);
+
+            setTimeout(() => addChatMessage('1등선착순', '20만'), 1200);
+            setTimeout(() => addChatMessage('2등입찰자', '20만'), 1900);
+            setTimeout(() => addChatMessage('3등입찰자', '20만'), 2600);
+            setTimeout(() => addChatMessage('경매진행자', '===================', true), 3400);
+        }
+
+        /** 봇 입찰 시뮬레이터 */
+        let botInterval = null;
+        const BOT_NAMES = ['솔바람', '단풍나무', '황금송', '비단잉어', '도예가', '자연인', '초록이', '청솔'];
+        let currentBotPrice = 10;
+
+        function toggleBot(start) {
+            const btnStart = document.getElementById('btn-bot-start');
+            const btnStop = document.getElementById('btn-bot-stop');
+
+            if (start) {
+                if (botInterval) return;
+                btnStart.style.opacity = '0.6';
+                btnStop.style.opacity = '1';
+
+                currentBotPrice = 10;
+                addChatMessage('경매진행자', '🤖 [알림] 가상 입찰 봇이 활성화되었습니다.', true);
+
+                botInterval = setInterval(() => {
+                    const nick = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
+                    // 1만 또는 0.5만씩 증액
+                    const step = Math.random() > 0.5 ? 1 : 0.5;
+                    currentBotPrice += step;
+
+                    const priceFormat = currentBotPrice % 1 === 0 ? `${currentBotPrice}만` : `${currentBotPrice}만`;
+                    addChatMessage(nick, priceFormat);
+
+                    // 80% 확률로 7번 입찰 후 밑줄 긋고 다시 시작
+                    if (currentBotPrice >= 18) {
+                        setTimeout(() => {
+                            addChatMessage('경매진행자', '===================', true);
+                            currentBotPrice = 10;
+                        }, 1200);
+                    }
+                }, 1500);
+            } else {
+                if (botInterval) {
+                    clearInterval(botInterval);
+                    botInterval = null;
+                }
+                btnStart.style.opacity = '1';
+                btnStop.style.opacity = '0.6';
+                addChatMessage('경매진행자', '🤖 [알림] 가상 입찰 봇이 정지되었습니다.', true);
+            }
+        }
+    </script>
+
+    <!-- =========================================================
+         실제 유저스크립트 엔진 로드 (독립 실행 지원)
+         ========================================================= -->
+    <script src="./youtube-live-auction.user.js"></script>
+</body>
+</html>
