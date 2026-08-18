@@ -567,7 +567,7 @@
             <!-- 봇 자동 입찰 -->
             <div class="section-card">
                 <div class="section-title">🤖 실시간 가상 입찰 봇 (초현실 라이브 모드)</div>
-                <div class="section-desc">다양한 닉네임, 실전 말투(손, 콜, 부탁), 소수점/생략 포맷, 지연/동일가 선착순 및 비선형 최고가 낙찰 등 실제 라이브 방송 환경을 생생하게 시뮬레이션합니다.</div>
+                <div class="section-desc">가상 시청자들이 실전 호가를 올리며, 진행자가 <strong>[밑줄]</strong>을 그어 낙찰자를 선별하고 입력창에 자동 생성된 안내 메시지를 전송해야 다음 경매가 시작됩니다.</div>
                 
                 <div class="btn-group">
                     <button class="sim-btn green" id="btn-bot-start" onclick="toggleBot(true)">
@@ -715,7 +715,17 @@
                 renderer.classList.add('system-host');
                 renderer.setAttribute('author-type', 'owner');
             }
-            if (isSeparator) renderer.classList.add('separator-msg');
+            if (isSeparator) {
+                renderer.classList.add('separator-msg');
+                // 가상 봇 실행 중 밑줄 감지 시 -> 진행자 안내 텍스트 전송 대기 모드로 즉시 전환 (채팅 올스톱)
+                if (typeof botIsRunning !== 'undefined' && botIsRunning && typeof botState !== 'undefined' && botState.phase === 'bidding') {
+                    if (typeof botTimer !== 'undefined' && botTimer) {
+                        clearTimeout(botTimer);
+                        botTimer = null;
+                    }
+                    botState.phase = 'waiting_host_confirm';
+                }
+            }
 
             const color = isHost ? '#e11d48' : getAvatarColor(nickname);
             const firstChar = nickname.charAt(0) || 'U';
@@ -850,6 +860,19 @@
             input.innerText = '';
             input.textContent = '';
             input.focus();
+
+            // 가상 봇이 실행 중이고 낙찰 안내 전송 대기 상태인 경우:
+            // "낙찰입니다. 감사합니다😄" 문구(또는 낙찰 안내 문구)가 전송되었을 때만 다음 회차 경매 시작 (그 전까지는 완전 정지 대기)
+            if (typeof botIsRunning !== 'undefined' && botIsRunning && typeof botState !== 'undefined' && botState.phase === 'waiting_host_confirm') {
+                if (text.includes('낙찰입니다') || text.includes('감사합니다') || text.startsWith('👉 @')) {
+                    botState.phase = 'cooling';
+                    setTimeout(() => {
+                        if (botIsRunning) {
+                            startBotRound();
+                        }
+                    }, 2000);
+                }
+            }
         }
 
         // 인풋창 Enter 키 처리
@@ -1073,8 +1096,7 @@
             basePrice: 10,
             currentPrice: 10,
             bidsCount: 0,
-            targetBids: 6,
-            phase: 'idle' // 'starting' | 'bidding' | 'closing' | 'cooling'
+            phase: 'idle' // 'idle' | 'bidding' | 'waiting_host_confirm' | 'cooling'
         };
 
         function getRandomNick(excludeNick = null) {
@@ -1167,8 +1189,6 @@
             botState.basePrice = itemObj.basePrice;
             botState.currentPrice = itemObj.basePrice;
             botState.bidsCount = 0;
-            // 5회 ~ 10회 입찰 후 마감
-            botState.targetBids = Math.floor(Math.random() * 6) + 5;
             botState.phase = 'bidding';
 
             addChatMessage('경매진행자', `🌸 [${botState.round}회차 경매] ${botState.item} (시작가 ${botState.basePrice}만원) 경매 시작합니다!`, true);
@@ -1179,132 +1199,61 @@
 
         function runBotStep() {
             if (!botIsRunning) return;
+            if (botState.phase !== 'bidding') return;
 
-            if (botState.phase === 'idle') {
-                startBotRound();
-                return;
-            }
-
-            if (botState.phase === 'bidding') {
-                // 15% 확률로 관전/추임새 채팅
-                if (Math.random() < 0.15 && botState.bidsCount > 1) {
-                    const nick = getRandomNick();
-                    const chatter = BOT_CHATTERS[Math.floor(Math.random() * BOT_CHATTERS.length)];
-                    addChatMessage(nick, chatter);
-                    scheduleNextBotStep(Math.floor(Math.random() * 600) + 500);
-                    return;
-                }
-
-                // 입찰 처리
-                const isStart = botState.bidsCount === 0;
-                let priceToBid = botState.currentPrice;
-
-                if (!isStart) {
-                    const stepTypeRand = Math.random();
-                    if (stepTypeRand < 0.55) {
-                        // 일반 1만 또는 0.5만 증액
-                        const step = Math.random() > 0.4 ? 1 : 0.5;
-                        botState.currentPrice += step;
-                        priceToBid = botState.currentPrice;
-                    } else if (stepTypeRand < 0.75) {
-                        // 공격적인 상향 입찰 (2만 ~ 3만 점프)
-                        const jump = Math.random() > 0.5 ? 2 : 3;
-                        botState.currentPrice += jump;
-                        priceToBid = botState.currentPrice;
-                    } else if (stepTypeRand < 0.90) {
-                        // 동일 금액 동시/중복 입찰 (선착순 경쟁 연출)
-                        priceToBid = botState.currentPrice;
-                    } else {
-                        // 뒤늦은 지연 입찰 (현재 최고가보다 약간 낮은 금액을 뒤늦게 전송)
-                        priceToBid = Math.max(botState.basePrice, botState.currentPrice - (Math.random() > 0.5 ? 1 : 0.5));
-                    }
-                }
-
+            // 15% 확률로 관전/추임새 채팅
+            if (Math.random() < 0.15 && botState.bidsCount > 1) {
                 const nick = getRandomNick();
-                const msg = formatRealisticBidMessage(priceToBid, isStart);
-                addChatMessage(nick, msg);
-                botState.bidsCount++;
-
-                if (botState.bidsCount >= botState.targetBids) {
-                    // 마감 카운트다운 페이즈로 전환
-                    botState.phase = 'closing';
-                    // 900ms 후 진행자 카운트 멘트
-                    scheduleNextBotStep(900);
-                } else {
-                    // 다음 입찰 템포 (600ms ~ 1700ms 사이의 불규칙한 실제 템포)
-                    const delay = Math.floor(Math.random() * 1100) + 600;
-                    scheduleNextBotStep(delay);
-                }
+                const chatter = BOT_CHATTERS[Math.floor(Math.random() * BOT_CHATTERS.length)];
+                addChatMessage(nick, chatter);
+                scheduleNextBotStep(Math.floor(Math.random() * 600) + 600);
                 return;
             }
 
-            if (botState.phase === 'closing') {
-                // 마감 직전/직후의 긴박한 상황 연출 (밑줄 바로 위가 무조건 최고가가 아니도록 다양한 현장 상황 생성)
-                // 패턴 A: 최고가 이후 뒤늦은 낮은 호가/동일가 입력 1~2개 도착 후 밑줄
-                // 패턴 B: 최고가 이후 관전평/탄식 챗 도착 후 밑줄
-                // 패턴 C: 막판 1만 추가 상향 호가 발생 후 바로 밑줄
-                const closingPattern = Math.random();
+            // 입찰 처리
+            const isStart = botState.bidsCount === 0;
+            let priceToBid = botState.currentPrice;
 
-                if (closingPattern < 0.40) {
-                    // 패턴 A: 늦은 호가 또는 동일가 도착 후 밑줄
-                    setTimeout(() => {
-                        if (!botIsRunning) return;
-                        const lagNick = getRandomNick();
-                        const lagPrice = Math.random() > 0.5 ? botState.currentPrice : Math.max(botState.basePrice, botState.currentPrice - 1);
-                        addChatMessage(lagNick, formatRealisticBidMessage(lagPrice));
-                    }, 600);
-
-                    setTimeout(() => {
-                        if (!botIsRunning) return;
-                        addChatMessage('경매진행자', '===================', true);
-                        finishClosing();
-                    }, 1400);
-                } else if (closingPattern < 0.70) {
-                    // 패턴 B: 아쉬워하는 채팅 도착 후 밑줄
-                    setTimeout(() => {
-                        if (!botIsRunning) return;
-                        const chatNick = getRandomNick();
-                        const reaction = Math.random() > 0.5 ? '아 늦었다 ㅠㅠ' : '아깝네요 놓쳤다';
-                        addChatMessage(chatNick, reaction);
-                    }, 700);
-
-                    setTimeout(() => {
-                        if (!botIsRunning) return;
-                        addChatMessage('경매진행자', '===================', true);
-                        finishClosing();
-                    }, 1500);
+            if (!isStart) {
+                const stepTypeRand = Math.random();
+                if (stepTypeRand < 0.55) {
+                    // 일반 1만 또는 0.5만 증액
+                    const step = Math.random() > 0.4 ? 1 : 0.5;
+                    botState.currentPrice += step;
+                    priceToBid = botState.currentPrice;
+                } else if (stepTypeRand < 0.72) {
+                    // 공격적인 상향 입찰 (2만 ~ 3만 점프)
+                    const jump = Math.random() > 0.5 ? 2 : 3;
+                    botState.currentPrice += jump;
+                    priceToBid = botState.currentPrice;
+                } else if (stepTypeRand < 0.88) {
+                    // 동일 금액 동시/중복 입찰 (선착순 경쟁 연출)
+                    priceToBid = botState.currentPrice;
                 } else {
-                    // 패턴 C: 막판 버저비터 추가 입찰 후 즉시 밑줄
-                    setTimeout(() => {
-                        if (!botIsRunning) return;
-                        botState.currentPrice += 1;
-                        const finalNick = getRandomNick();
-                        addChatMessage(finalNick, `${botState.currentPrice}만 막판!`);
-                    }, 600);
-
-                    setTimeout(() => {
-                        if (!botIsRunning) return;
-                        addChatMessage('경매진행자', '===================', true);
-                        finishClosing();
-                    }, 1300);
+                    // 뒤늦은 지연 입찰 (현재 최고가보다 약간 낮은 금액을 뒤늦게 전송)
+                    priceToBid = Math.max(botState.basePrice, botState.currentPrice - (Math.random() > 0.5 ? 1 : 0.5));
                 }
             }
-        }
 
-        function finishClosing() {
-            if (!botIsRunning) return;
-            botState.phase = 'cooling';
+            const nick = getRandomNick();
+            const msg = formatRealisticBidMessage(priceToBid, isStart);
+            addChatMessage(nick, msg);
+            botState.bidsCount++;
 
-            // 밑줄 후 축하 멘트 & 2.8초 후 다음 라운드 자동 시작
-            setTimeout(() => {
-                if (!botIsRunning) return;
-                addChatMessage('경매진행자', '🎉 축하드립니다! 낙찰되신 분께서는 안내에 따라 구매를 진행해 주세요.', true);
-            }, 700);
+            // 경매 초반(활발한 호가 경쟁) vs 후반(고가 도달 후 자연스러운 대기/관망)
+            let nextDelay;
+            if (botState.bidsCount < 5) {
+                // 초반 빠른 템포: 600ms ~ 1400ms
+                nextDelay = Math.floor(Math.random() * 800) + 600;
+            } else if (botState.bidsCount < 10) {
+                // 중반 템포: 1200ms ~ 2200ms
+                nextDelay = Math.floor(Math.random() * 1000) + 1200;
+            } else {
+                // 후반 템포: 2000ms ~ 3800ms (진행자의 밑줄 마감을 기다리는 긴장감 있는 호가 및 관전챗)
+                nextDelay = Math.floor(Math.random() * 1800) + 2000;
+            }
 
-            setTimeout(() => {
-                if (!botIsRunning) return;
-                startBotRound();
-            }, 3000);
+            scheduleNextBotStep(nextDelay);
         }
 
         function toggleBot(start) {
@@ -1317,9 +1266,9 @@
                 btnStart.style.opacity = '0.6';
                 btnStop.style.opacity = '1';
 
-                addChatMessage('경매진행자', '🤖 [알림] 초현실 실시간 가상 입찰 봇이 활성화되었습니다. (실제 방송 호가/지연/말투 시뮬레이션)', true);
+                addChatMessage('경매진행자', '🤖 [알림] 초현실 실시간 가상 입찰 봇이 활성화되었습니다. (진행자 [밑줄] 전송으로 마감 및 선별)', true);
                 botState.phase = 'idle';
-                scheduleNextBotStep(1000);
+                startBotRound();
             } else {
                 botIsRunning = false;
                 if (botTimer) {
