@@ -1414,8 +1414,8 @@
                 ? (anchorPrices.reduce((sum, v) => sum + v, 0) / anchorPrices.length)
                 : (tenPlusBids.length > 0 ? (tenPlusBids.reduce((sum, v) => sum + v, 0) / tenPlusBids.length) : null);
 
-            // [케이스 1] 2자리 숫자 (55, 65, 75 등)
-            if (raw >= 25 && raw <= 95 && raw % 10 === 5 && isLowScale) {
+            // [케이스 1] 2자리 숫자 (10~99: 29 ➔ 2.9만, 27 ➔ 2.7만, 65 ➔ 6.5만 등)
+            if (raw >= 10 && raw <= 99 && isLowScale) {
                 const candidate = raw / 10;
                 if (underTenAvg !== null && Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg)) {
                     console.log(
@@ -1669,12 +1669,12 @@
             // 보정 조건:
             // 1) '만', '원' 등의 명시적 단위가 없고,
             // 2) 소수점이 없는 순수 정수이며,
-            // 3) 끝자리가 5인 정수 (2자리: 55, 65, 75 등 / 3자리: 105, 125, 155, 205, 255, 355 등)
+            // 3) 2자리 정수 (29, 65, 75 등) 또는 끝자리가 5인 3자리 정수 (105, 125, 255 등)
             if (!b.detail.hasExplicitUnit && b.detail.isRawInteger) {
                 const raw = b.detail.rawNum;
 
-                // [케이스 1] 2자리 숫자 (55, 65, 75, 85, 95 등): 10미만 경매에서 5.5만, 6.5만 등으로 보정
-                if (raw >= 25 && raw <= 95 && raw % 10 === 5 && isLowScaleAuction) {
+                // [케이스 1] 2자리 숫자 (10~99: 29 ➔ 2.9만, 27 ➔ 2.7만, 65 ➔ 6.5만 등): 10미만 경매에서 2.9만, 6.5만 등으로 보정
+                if (raw >= 10 && raw <= 99 && isLowScaleAuction) {
                     const candidate = raw / 10;
                     if (underTenAvg !== null && Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg)) {
                         finalPrice = candidate;
