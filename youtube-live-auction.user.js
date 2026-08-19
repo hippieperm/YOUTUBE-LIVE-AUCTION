@@ -6944,11 +6944,11 @@ ${xmlRows.join('')}
         });
 
         const specFields = [
-            { key: '수고', placeholder: '수고 (예: 50)' },
-            { key: '수폭', placeholder: '수폭 (예: 30)' },
-            { key: '목대', placeholder: '목대 (예: 15)' },
-            { key: '근장', placeholder: '근장 (예: 8)' },
-            { key: '전체높이', placeholder: '전체높이 (예: 70)' }
+            { key: '수고', placeholder: '' },
+            { key: '수폭', placeholder: '' },
+            { key: '목대', placeholder: '' },
+            { key: '근장', placeholder: '' },
+            { key: '전체높이', placeholder: '' }
         ];
 
         const inputs = [];
@@ -7025,13 +7025,13 @@ ${xmlRows.join('')}
             });
 
             inputEl.addEventListener('focus', () => {
-                inputEl.style.borderColor = '#38bdf8';
-                inputEl.style.background = 'rgba(56,189,248,.12)';
+                inputEl.style.borderColor = 'rgba(125,211,252,.55)';
+                inputEl.style.background = 'rgba(2,6,23,.5)';
             });
 
             inputEl.addEventListener('blur', () => {
-                inputEl.style.borderColor = 'rgba(255,255,255,.16)';
-                inputEl.style.background = 'rgba(255,255,255,.07)';
+                inputEl.style.borderColor = 'rgba(148,163,184,.18)';
+                inputEl.style.background = 'rgba(2,6,23,.34)';
             });
 
             inputEl.addEventListener('keydown', (e) => {
@@ -8069,25 +8069,26 @@ ${xmlRows.join('')}
                 });
 
                 if (modal.id === '__auction_spec_modal') {
-                    modal.style.setProperty('width', '390px', 'important');
-                    modal.style.setProperty('padding', '18px 20px 16px', 'important');
-                    modal.style.setProperty('gap', '11px', 'important');
+                    modal.style.setProperty('width', '400px', 'important');
+                    modal.style.setProperty('padding', '20px', 'important');
+                    modal.style.setProperty('gap', '14px', 'important');
                     modal.style.setProperty('height', 'auto', 'important');
                     modal.style.setProperty('min-height', '0', 'important');
                     modal.style.setProperty('max-height', 'none', 'important');
                     modal.style.setProperty('overflow', 'hidden', 'important');
-                    modal.style.setProperty('border-color', 'rgba(56,189,248,.38)', 'important');
+                    modal.style.setProperty('border-color', 'rgba(148,163,184,.24)', 'important');
+                    modal.style.setProperty('background', 'linear-gradient(155deg,rgba(15,23,42,.99),rgba(17,24,39,.98))', 'important');
 
                     const form = modal.querySelector('div:nth-of-type(2)');
                     if (form) {
                         form.style.setProperty('width', '100%', 'important');
                         form.style.setProperty('min-height', '0', 'important');
-                        form.style.setProperty('gap', '6px', 'important');
+                        form.style.setProperty('gap', '8px', 'important');
                     }
 
                     const title = modal.firstElementChild && modal.firstElementChild.firstElementChild;
                     if (title) {
-                        title.style.setProperty('font-size', '17px', 'important');
+                        title.style.setProperty('font-size', '19px', 'important');
                         title.style.setProperty('letter-spacing', '-.5px', 'important');
                     }
 
@@ -8097,38 +8098,57 @@ ${xmlRows.join('')}
                             ? row.lastElementChild
                             : null;
                         if (label && input) {
-                            row.style.setProperty('height', '38px', 'important');
-                            row.style.setProperty('min-height', '38px', 'important');
+                            row.style.setProperty('height', '58px', 'important');
+                            row.style.setProperty('min-height', '58px', 'important');
                             row.style.setProperty('gap', '12px', 'important');
-                            label.style.setProperty('width', '52px', 'important');
-                            label.style.setProperty('flex', '0 0 52px', 'important');
-                            label.style.setProperty('font-size', '15px', 'important');
+                            row.style.setProperty('padding', '7px 8px 7px 14px', 'important');
+                            row.style.setProperty('box-sizing', 'border-box', 'important');
+                            row.style.setProperty('border', '1px solid rgba(148,163,184,.12)', 'important');
+                            row.style.setProperty('border-radius', '14px', 'important');
+                            row.style.setProperty('background', 'rgba(255,255,255,.025)', 'important');
+                            row.style.setProperty('transition', 'border-color .15s ease,background .15s ease', 'important');
+                            label.style.setProperty('width', '88px', 'important');
+                            label.style.setProperty('flex', '0 0 88px', 'important');
+                            label.style.setProperty('font-size', '19px', 'important');
                             label.style.setProperty('font-weight', '900', 'important');
-                            label.style.setProperty('color', 'rgba(226,232,240,.92)', 'important');
+                            label.style.setProperty('color', 'rgba(226,232,240,.88)', 'important');
+                            label.style.setProperty('letter-spacing', '-.3px', 'important');
+                            label.style.setProperty('white-space', 'nowrap', 'important');
                             input.style.setProperty('width', '100%', 'important');
                             input.style.setProperty('flex', '1 1 auto', 'important');
                             input.style.setProperty('box-sizing', 'border-box', 'important');
-                            input.style.setProperty('height', '38px', 'important');
-                            input.style.setProperty('min-height', '38px', 'important');
-                            input.style.setProperty('padding', '0 12px', 'important');
+                            input.style.setProperty('height', '42px', 'important');
+                            input.style.setProperty('min-height', '42px', 'important');
+                            input.style.setProperty('padding', '0 13px', 'important');
                             input.style.setProperty('font-size', '16px', 'important');
                             input.style.setProperty('font-weight', '800', 'important');
+                            input.style.setProperty('border', '1px solid rgba(148,163,184,.16)', 'important');
+                            input.style.setProperty('border-radius', '10px', 'important');
+                            input.style.setProperty('background', 'rgba(2,6,23,.34)', 'important');
                             input.style.setProperty('color', '#ffffff', 'important');
                             input.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
-                            input.style.setProperty('text-shadow', '0 0 1px rgba(255,255,255,.35)', 'important');
+                            input.style.setProperty('text-shadow', 'none', 'important');
                             input.style.setProperty('caret-color', '#67e8f9', 'important');
+                            input.addEventListener('focus', () => {
+                                row.style.setProperty('border-color', 'rgba(125,211,252,.38)', 'important');
+                                row.style.setProperty('background', 'rgba(56,189,248,.045)', 'important');
+                            });
+                            input.addEventListener('blur', () => {
+                                row.style.setProperty('border-color', 'rgba(148,163,184,.12)', 'important');
+                                row.style.setProperty('background', 'rgba(255,255,255,.025)', 'important');
+                            });
                         }
                     });
 
                     const submit = Array.from(modal.querySelectorAll('button')).find(button => button.textContent.includes('규격 전송'));
                     if (submit) {
-                        submit.style.setProperty('height', '42px', 'important');
-                        submit.style.setProperty('min-height', '42px', 'important');
-                        submit.style.setProperty('margin-top', '2px', 'important');
+                        submit.style.setProperty('height', '52px', 'important');
+                        submit.style.setProperty('min-height', '52px', 'important');
+                        submit.style.setProperty('margin-top', '4px', 'important');
                         submit.style.setProperty('border-radius', '14px', 'important');
                         submit.style.setProperty('background', 'linear-gradient(135deg, #0e7490, #0369a1)', 'important');
                         submit.style.setProperty('border-color', 'rgba(125,211,252,.7)', 'important');
-                        submit.style.setProperty('font-size', '13px', 'important');
+                        submit.style.setProperty('font-size', '15px', 'important');
                         submit.style.setProperty('box-shadow', '0 8px 20px rgba(3,105,161,.28), inset 0 1px 0 rgba(255,255,255,.18)', 'important');
                     }
                 }
