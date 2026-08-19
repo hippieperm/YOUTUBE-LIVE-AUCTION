@@ -6943,10 +6943,10 @@ ${xmlRows.join('')}
 
         const specFields = [
             { key: '수고', placeholder: '수고 (예: 50)' },
-            { key: '폭',   placeholder: '폭 (예: 30)' },
-            { key: '높이', placeholder: '높이 (예: 20)' },
+            { key: '수폭', placeholder: '수폭 (예: 30)' },
             { key: '목대', placeholder: '목대 (예: 15)' },
-            { key: '근장', placeholder: '근장 (예: 8)' }
+            { key: '근장', placeholder: '근장 (예: 8)' },
+            { key: '전체높이', placeholder: '전체높이 (예: 70)' }
         ];
 
         const inputs = [];
@@ -7035,7 +7035,14 @@ ${xmlRows.join('')}
             inputEl.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    submitSpec();
+                    const currentIndex = inputs.findIndex(item => item.input === inputEl);
+                    const nextItem = currentIndex >= 0 ? inputs[currentIndex + 1] : null;
+                    if (nextItem && nextItem.input) {
+                        nextItem.input.focus();
+                        nextItem.input.select();
+                    } else {
+                        submitSpec();
+                    }
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
                     removeCustomModals();
@@ -7098,6 +7105,7 @@ ${xmlRows.join('')}
 
         mountTarget.appendChild(backdrop);
         mountTarget.appendChild(modal);
+        applyModernUiToElements(mountTarget.ownerDocument || document);
 
         modal.addEventListener('wheel', (e) => {
             e.preventDefault();
@@ -7359,6 +7367,7 @@ ${xmlRows.join('')}
 
         mountTarget.appendChild(backdrop);
         mountTarget.appendChild(modal);
+        applyModernUiToElements(mountTarget.ownerDocument || document);
 
         modal.addEventListener('wheel', (e) => {
             e.preventDefault();
@@ -7602,6 +7611,7 @@ ${xmlRows.join('')}
 
         mountTarget.appendChild(backdrop);
         mountTarget.appendChild(modal);
+        applyModernUiToElements(mountTarget.ownerDocument || document);
 
         modal.addEventListener('wheel', (e) => {
             e.preventDefault();
@@ -7864,6 +7874,235 @@ ${xmlRows.join('')}
 
     let _isMorePanelOpen = false;
 
+    // 전체 UI 공통 테마. 유튜브의 기본 스타일 변화에도 패널/모달의 인상을 일정하게 유지한다.
+    function injectModernUiStyles(targetDoc = document) {
+        if (!targetDoc || targetDoc.getElementById('__auction_modern_ui_styles')) return;
+
+        const style = targetDoc.createElement('style');
+        style.id = '__auction_modern_ui_styles';
+        style.textContent = `
+            #__auction_guide_panel {
+                padding: 9px 10px 8px !important;
+                margin: 0 0 6px !important;
+                gap: 7px !important;
+                border: 1px solid rgba(148,163,184,.16) !important;
+                border-radius: 14px !important;
+                background: linear-gradient(135deg, rgba(15,23,42,.92), rgba(30,41,59,.72)) !important;
+                box-shadow: 0 10px 28px rgba(2,6,23,.22), inset 0 1px 0 rgba(255,255,255,.06) !important;
+                backdrop-filter: blur(14px) saturate(130%) !important;
+                -webkit-backdrop-filter: blur(14px) saturate(130%) !important;
+            }
+
+            #__auction_guide_panel button {
+                height: 36px !important;
+                border-radius: 10px !important;
+                font-size: 11.5px !important;
+                line-height: 36px !important;
+                box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 3px 8px rgba(2,6,23,.14) !important;
+            }
+
+            #__auction_guide_panel button:hover {
+                transform: translateY(-1px) !important;
+                box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 6px 14px rgba(2,6,23,.24) !important;
+            }
+
+            #__auction_more_container {
+                padding: 4px 0 1px !important;
+                border-top: 1px solid rgba(148,163,184,.12) !important;
+            }
+
+            #__auction_spec_modal,
+            #__auction_price_choice_modal,
+            #__auction_price_amount_modal,
+            #__auction_auto_modal,
+            #__auction_bid_list_modal {
+                border: 1px solid rgba(125,211,252,.24) !important;
+                border-radius: 20px !important;
+                background: linear-gradient(145deg, rgba(15,23,42,.98), rgba(17,24,39,.96)) !important;
+                box-shadow: 0 24px 80px rgba(2,6,23,.62), 0 0 0 1px rgba(255,255,255,.03), inset 0 1px 0 rgba(255,255,255,.07) !important;
+                backdrop-filter: blur(20px) saturate(135%) !important;
+                -webkit-backdrop-filter: blur(20px) saturate(135%) !important;
+            }
+
+            #__auction_spec_modal input,
+            #__auction_price_amount_modal input {
+                height: 40px !important;
+                border-radius: 10px !important;
+                background: rgba(15,23,42,.72) !important;
+                border-color: rgba(148,163,184,.22) !important;
+                box-shadow: inset 0 1px 2px rgba(2,6,23,.25) !important;
+            }
+
+            #__auction_spec_modal input:focus,
+            #__auction_price_amount_modal input:focus {
+                border-color: #38bdf8 !important;
+                box-shadow: 0 0 0 3px rgba(56,189,248,.14), inset 0 1px 2px rgba(2,6,23,.25) !important;
+            }
+
+            #__auction_spec_modal button,
+            #__auction_price_choice_modal button,
+            #__auction_price_amount_modal button {
+                border-radius: 11px !important;
+                transition: transform .16s ease, filter .16s ease, box-shadow .16s ease !important;
+            }
+
+            #__auction_spec_modal button:hover,
+            #__auction_price_choice_modal button:hover,
+            #__auction_price_amount_modal button:hover {
+                filter: brightness(1.14) saturate(1.08) !important;
+                transform: translateY(-1px) !important;
+            }
+        `;
+        (targetDoc.head || targetDoc.documentElement).appendChild(style);
+    }
+
+    function applyModernUiToElements(targetDoc = document) {
+        if (!targetDoc) return;
+
+        const panel = targetDoc.getElementById('__auction_guide_panel');
+        if (panel) {
+            panel.style.setProperty('padding', '10px 10px 9px', 'important');
+            panel.style.setProperty('margin', '0 0 7px', 'important');
+            panel.style.setProperty('gap', '8px', 'important');
+            panel.style.setProperty('border', '1px solid rgba(125,211,252,.22)', 'important');
+            panel.style.setProperty('border-radius', '16px', 'important');
+            panel.style.setProperty('background', 'linear-gradient(135deg, rgba(8,24,38,.98), rgba(25,35,58,.96))', 'important');
+            panel.style.setProperty('box-shadow', '0 12px 30px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.08)', 'important');
+
+            panel.querySelectorAll('button').forEach((button, index) => {
+                button.style.setProperty('height', '38px', 'important');
+                button.style.setProperty('border-radius', '11px', 'important');
+                button.style.setProperty('font-size', '12px', 'important');
+                button.style.setProperty('font-weight', '800', 'important');
+                button.style.setProperty('box-shadow', 'inset 0 1px 0 rgba(255,255,255,.12), 0 4px 10px rgba(0,0,0,.2)', 'important');
+                button.addEventListener('mouseenter', () => {
+                    button.style.setProperty('filter', 'brightness(1.18) saturate(1.12)', 'important');
+                    button.style.setProperty('transform', 'translateY(-2px)', 'important');
+                });
+                button.addEventListener('mouseleave', () => {
+                    button.style.setProperty('filter', 'none', 'important');
+                    button.style.setProperty('transform', 'translateY(0)', 'important');
+                });
+            });
+        }
+
+        ['#__auction_spec_modal', '#__auction_price_choice_modal', '#__auction_price_amount_modal', '#__auction_auto_modal', '#__auction_bid_list_modal']
+            .map(selector => targetDoc.querySelector(selector))
+            .filter(Boolean)
+            .forEach(modal => {
+                modal.style.setProperty('border', '1px solid rgba(125,211,252,.32)', 'important');
+                modal.style.setProperty('border-radius', '22px', 'important');
+                modal.style.setProperty('background', 'linear-gradient(145deg, rgba(10,18,32,.99), rgba(21,31,52,.98))', 'important');
+                modal.style.setProperty('box-shadow', '0 28px 90px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.09)', 'important');
+
+                const header = modal.firstElementChild;
+                if (header) {
+                    header.style.setProperty('padding', '2px 0 14px', 'important');
+                    header.style.setProperty('border-bottom-color', 'rgba(125,211,252,.18)', 'important');
+                }
+
+                modal.querySelectorAll('button').forEach(button => {
+                    button.style.setProperty('min-height', '42px', 'important');
+                    button.style.setProperty('border-radius', '12px', 'important');
+                    button.style.setProperty('font-weight', '800', 'important');
+                    button.style.setProperty('letter-spacing', '-.2px', 'important');
+                    button.style.setProperty('box-shadow', 'inset 0 1px 0 rgba(255,255,255,.1), 0 5px 14px rgba(0,0,0,.18)', 'important');
+                });
+
+                modal.querySelectorAll('input').forEach(input => {
+                    input.style.setProperty('height', '44px', 'important');
+                    input.style.setProperty('border-radius', '12px', 'important');
+                    input.style.setProperty('background', 'rgba(8,15,30,.82)', 'important');
+                    input.style.setProperty('border-color', 'rgba(148,163,184,.28)', 'important');
+                    input.style.setProperty('font-size', '15px', 'important');
+                });
+
+                if (modal.id === '__auction_spec_modal') {
+                    modal.style.setProperty('width', '390px', 'important');
+                    modal.style.setProperty('padding', '18px 20px 16px', 'important');
+                    modal.style.setProperty('gap', '11px', 'important');
+                    modal.style.setProperty('height', 'auto', 'important');
+                    modal.style.setProperty('min-height', '0', 'important');
+                    modal.style.setProperty('max-height', 'none', 'important');
+                    modal.style.setProperty('overflow', 'hidden', 'important');
+                    modal.style.setProperty('border-color', 'rgba(56,189,248,.38)', 'important');
+
+                    const form = modal.querySelector('div:nth-of-type(2)');
+                    if (form) {
+                        form.style.setProperty('width', '100%', 'important');
+                        form.style.setProperty('min-height', '0', 'important');
+                        form.style.setProperty('gap', '6px', 'important');
+                    }
+
+                    const title = modal.firstElementChild && modal.firstElementChild.firstElementChild;
+                    if (title) {
+                        title.style.setProperty('font-size', '17px', 'important');
+                        title.style.setProperty('letter-spacing', '-.5px', 'important');
+                    }
+
+                    modal.querySelectorAll('div').forEach(row => {
+                        const label = row.firstElementChild;
+                        const input = row.children.length === 2 && row.lastElementChild && row.lastElementChild.tagName === 'INPUT'
+                            ? row.lastElementChild
+                            : null;
+                        if (label && input) {
+                            row.style.setProperty('height', '38px', 'important');
+                            row.style.setProperty('min-height', '38px', 'important');
+                            row.style.setProperty('gap', '12px', 'important');
+                            label.style.setProperty('width', '52px', 'important');
+                            label.style.setProperty('flex', '0 0 52px', 'important');
+                            label.style.setProperty('font-size', '15px', 'important');
+                            label.style.setProperty('font-weight', '900', 'important');
+                            label.style.setProperty('color', 'rgba(226,232,240,.92)', 'important');
+                            input.style.setProperty('width', '100%', 'important');
+                            input.style.setProperty('flex', '1 1 auto', 'important');
+                            input.style.setProperty('box-sizing', 'border-box', 'important');
+                            input.style.setProperty('height', '38px', 'important');
+                            input.style.setProperty('min-height', '38px', 'important');
+                            input.style.setProperty('padding', '0 12px', 'important');
+                            input.style.setProperty('font-size', '16px', 'important');
+                            input.style.setProperty('font-weight', '800', 'important');
+                            input.style.setProperty('color', '#ffffff', 'important');
+                            input.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
+                            input.style.setProperty('text-shadow', '0 0 1px rgba(255,255,255,.35)', 'important');
+                            input.style.setProperty('caret-color', '#67e8f9', 'important');
+                        }
+                    });
+
+                    const submit = Array.from(modal.querySelectorAll('button')).find(button => button.textContent.includes('규격 전송'));
+                    if (submit) {
+                        submit.style.setProperty('height', '42px', 'important');
+                        submit.style.setProperty('min-height', '42px', 'important');
+                        submit.style.setProperty('margin-top', '2px', 'important');
+                        submit.style.setProperty('border-radius', '14px', 'important');
+                        submit.style.setProperty('background', 'linear-gradient(135deg, #0e7490, #0369a1)', 'important');
+                        submit.style.setProperty('border-color', 'rgba(125,211,252,.7)', 'important');
+                        submit.style.setProperty('font-size', '13px', 'important');
+                        submit.style.setProperty('box-shadow', '0 8px 20px rgba(3,105,161,.28), inset 0 1px 0 rgba(255,255,255,.18)', 'important');
+                    }
+                }
+
+                if (modal.id === '__auction_price_choice_modal') {
+                    modal.querySelectorAll('button').forEach(button => {
+                        button.style.setProperty('height', '52px', 'important');
+                        button.style.setProperty('justify-content', 'flex-start', 'important');
+                        button.style.setProperty('gap', '10px', 'important');
+                        button.style.setProperty('padding', '0 16px', 'important');
+                    });
+                }
+
+                if (modal.id === '__auction_price_amount_modal') {
+                    const guide = modal.children[1];
+                    if (guide) {
+                        guide.style.setProperty('padding', '10px 12px', 'important');
+                        guide.style.setProperty('border-radius', '10px', 'important');
+                        guide.style.setProperty('background', 'rgba(56,189,248,.08)', 'important');
+                        guide.style.setProperty('color', 'rgba(224,242,254,.78)', 'important');
+                    }
+                }
+            });
+    }
+
     function createGuidePanel() {
 
         const input =
@@ -7876,6 +8115,8 @@ ${xmlRows.join('')}
         const targetDoc =
             input.ownerDocument ||
             document;
+
+        injectModernUiStyles(targetDoc);
 
         // 중복 패널이 이미 있으면 모두 정리하고 1개만 남기거나 조기 반환
         const existingPanels =
@@ -8118,7 +8359,6 @@ ${xmlRows.join('')}
         panel.appendChild(row1);
         panel.appendChild(moreContainer);
 
-
         // =====================================================
         // 삽입 위치
         // =====================================================
@@ -8159,6 +8399,8 @@ ${xmlRows.join('')}
                 host
             );
         }
+
+        applyModernUiToElements(targetDoc);
 
         console.log(
             PREFIX,
