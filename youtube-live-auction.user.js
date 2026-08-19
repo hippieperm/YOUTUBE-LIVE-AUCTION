@@ -2417,9 +2417,10 @@
 
 
     // =========================================================
-    // 플로팅 낙찰 내역 버튼 (방송 종료 후 / 채팅창 숨김 시에도 언제든 접근 가능)
+    // 플로팅 낙찰 내역 버튼 (미사용 주석 처리)
     // =========================================================
 
+    /*
     function createFloatingBidButton() {
         if (window !== window.top) {
             return null; // 최상위 메인 윈도우에서만 생성
@@ -2538,13 +2539,18 @@
             }
         }
     }
+    */
+    function createFloatingBidButton() { return null; }
+    function updateFloatingBidButton() {}
 
 
     // =========================================================
-    // 낙찰 내역 모달 (현재 방송 전용)
+    // 낙찰 내역 모달 (현재 방송 전용 - 미사용 주석 처리)
     // =========================================================
 
     function openBidListModal() {
+        // 미사용 처리
+        return;
 
         const nowTime = Date.now();
         if (nowTime - _lastOpenBidListModalTime < 250) {
@@ -7966,12 +7972,13 @@ ${xmlRows.join('')}
 
         // =====================================================
         // 버튼 구성:
-        // 0행: 낙찰 내역 관리 버튼 (full-width, 고정)
+        // 0행: 낙찰 내역 관리 버튼 (full-width, 고정) [미사용 주석 처리됨]
         // 1행: 메인 상시 노출 (📐 규격입력, 💰 가격입력, 📁 정사각형 토글 버튼)
         // 펼침 영역: 8종 안내 버튼 (클릭 시 자동 닫힘)
         // =====================================================
 
-        // 0행: 낙찰 내역 버튼 (full-width, 고정)
+        /*
+        // 0행: 낙찰 내역 버튼 (full-width, 고정) - 미사용 주석 처리
         const bidListBtn = createElement(
             'button',
             {
@@ -8028,6 +8035,7 @@ ${xmlRows.join('')}
 
         bidListBtn.addEventListener('click', handleBidListBtnClick);
         panel.appendChild(bidListBtn);
+        */
 
 
         // 1행: 메인 상시 노출 버튼 (📐 규격입력, 💰 가격입력, 📁 정사각형 토글)
@@ -8415,10 +8423,12 @@ ${xmlRows.join('')}
 
     function createAllUI() {
 
-        // 플로팅 낙찰내역 버튼 동기화 (스트리밍 종료 후에도 낙찰 내역 항시 접근 가능)
+        // 플로팅 낙찰내역 버튼 동기화 (미사용 주석 처리)
+        /*
         try {
             updateFloatingBidButton();
         } catch (e) {}
+        */
 
         const input =
             findChatInput();
@@ -8466,8 +8476,7 @@ ${xmlRows.join('')}
 
         if (
             guidePanel &&
-            separatorButton &&
-            targetDoc.getElementById('__auction_bid_list_btn')
+            separatorButton
         ) {
             return;
         }
@@ -8608,9 +8617,6 @@ ${xmlRows.join('')}
                         ) &&
                         targetDoc.getElementById(
                             '__auction_separator_button'
-                        ) &&
-                        targetDoc.getElementById(
-                            '__auction_bid_list_btn'
                         )
                     ) {
                         return;
@@ -8691,7 +8697,8 @@ ${xmlRows.join('')}
 
     function handleGlobalClick(event) {
 
-        // 1) 낙찰 내역 버튼 클릭 위임 (수식키 무관)
+        // 1) 낙찰 내역 버튼 클릭 위임 (미사용 주석 처리)
+        /*
         try {
             if (event.target && typeof event.target.closest === 'function') {
                 const btn = event.target.closest('#__auction_bid_list_btn, #__auction_floating_bid_btn');
@@ -8703,6 +8710,7 @@ ${xmlRows.join('')}
                 }
             }
         } catch (e) {}
+        */
 
         // 2) 채팅 클릭 (채팅 닉네임/금액 감지 -> 다이렉트 입력 또는 모달 팝업)
         handleChatMessageClick(event);
