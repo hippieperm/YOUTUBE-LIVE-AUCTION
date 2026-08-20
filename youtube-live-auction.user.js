@@ -4855,6 +4855,204 @@ ${xmlRows.join('')}
     // 낙찰 모달
     // =========================================================
 
+    let _closeWinnerChangeConfirm = null;
+
+    /**
+     * 채팅창 내부에 낙찰자 변경 확인 팝업을 표시한다.
+     * Enter는 확인, Escape 및 배경 클릭은 취소로 처리한다.
+     */
+    function showWinnerActionConfirm(prevLabel, newLabel, mode = 'change') {
+        if (_closeWinnerChangeConfirm) {
+            _closeWinnerChangeConfirm(false);
+        }
+
+        return new Promise(resolve => {
+            const isCancel = mode === 'cancel';
+            const accentColor = isCancel ? '#ff7373' : '#ffcc00';
+            const accentBg = isCancel ? 'rgba(255,90,90,.13)' : 'rgba(255,204,0,.10)';
+            const accentBorder = isCancel ? 'rgba(255,90,90,.38)' : 'rgba(255,204,0,.30)';
+            const mountTarget = getChatMountTarget();
+            if (!mountTarget) {
+                resolve(false);
+                return;
+            }
+
+            const targetDoc = mountTarget.ownerDocument || document;
+            const targetWin = targetDoc.defaultView || window;
+
+            const oldBackdrop = targetDoc.getElementById('__auction_winner_change_backdrop');
+            const oldModal = targetDoc.getElementById('__auction_winner_change_modal');
+            if (oldBackdrop) oldBackdrop.remove();
+            if (oldModal) oldModal.remove();
+
+            const backdrop = targetDoc.createElement('div');
+            backdrop.id = '__auction_winner_change_backdrop';
+            backdrop.setAttribute('style', `
+                position:fixed !important;
+                inset:0 !important;
+                width:100% !important;
+                height:100% !important;
+                background:rgba(0,0,0,.68) !important;
+                backdrop-filter:blur(5px) !important;
+                -webkit-backdrop-filter:blur(5px) !important;
+                z-index:2147483647 !important;
+                pointer-events:auto !important;
+                overscroll-behavior:contain !important;
+            `);
+
+            const modal = targetDoc.createElement('div');
+            modal.id = '__auction_winner_change_modal';
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+            modal.setAttribute('aria-labelledby', '__auction_winner_change_title');
+            modal.setAttribute('style', `
+                position:fixed !important;
+                left:50% !important;
+                top:50% !important;
+                transform:translate(-50%,-50%) !important;
+                width:350px !important;
+                max-width:calc(100% - 24px) !important;
+                box-sizing:border-box !important;
+                padding:18px !important;
+                background:linear-gradient(145deg,rgba(22,24,31,.99),rgba(12,14,19,.99)) !important;
+                border:1px solid ${accentBorder} !important;
+                border-radius:18px !important;
+                box-shadow:0 28px 90px rgba(0,0,0,.82),0 0 30px ${accentBg},inset 0 1px 0 rgba(255,255,255,.07) !important;
+                color:#fff !important;
+                z-index:2147483647 !important;
+                font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif !important;
+            `);
+
+            const header = targetDoc.createElement('div');
+            header.setAttribute('style', 'display:flex !important;align-items:center !important;gap:10px !important;margin-bottom:8px !important;');
+
+            const icon = targetDoc.createElement('div');
+            icon.textContent = isCancel ? '!' : '↻';
+            icon.setAttribute('style', `width:32px !important;height:32px !important;display:flex !important;align-items:center !important;justify-content:center !important;border-radius:9px !important;background:${accentBg} !important;color:${accentColor} !important;font-size:20px !important;font-weight:900 !important;flex:none !important;`);
+
+            const title = targetDoc.createElement('div');
+            title.id = '__auction_winner_change_title';
+            title.textContent = isCancel ? '낙찰 취소 확인' : '낙찰자 변경 확인';
+            title.setAttribute('style', 'font-size:17px !important;font-weight:850 !important;letter-spacing:-.3px !important;color:#fff !important;');
+
+            header.appendChild(icon);
+            header.appendChild(title);
+
+            const description = targetDoc.createElement('div');
+            description.textContent = isCancel
+                ? '선택한 낙찰 처리를 취소할까요?'
+                : '현재 경매 회차의 낙찰자를 변경할까요?';
+            description.setAttribute('style', 'margin:0 0 14px 42px !important;color:rgba(255,255,255,.62) !important;font-size:12.5px !important;line-height:1.45 !important;');
+
+            const comparison = targetDoc.createElement('div');
+            comparison.setAttribute('style', 'display:flex !important;flex-direction:column !important;gap:7px !important;margin-bottom:15px !important;');
+
+            const makeWinnerRow = (label, value, isEmphasis) => {
+                const row = targetDoc.createElement('div');
+                row.setAttribute('style', `
+                    display:flex !important;
+                    align-items:center !important;
+                    gap:10px !important;
+                    min-height:42px !important;
+                    box-sizing:border-box !important;
+                    padding:9px 11px !important;
+                    border-radius:11px !important;
+                    background:${isEmphasis ? accentBg : 'rgba(255,255,255,.05)'} !important;
+                    border:1px solid ${isEmphasis ? accentBorder : 'rgba(255,255,255,.09)'} !important;
+                `);
+
+                const rowLabel = targetDoc.createElement('span');
+                rowLabel.textContent = label;
+                rowLabel.setAttribute('style', 'width:58px !important;flex:none !important;color:rgba(255,255,255,.45) !important;font-size:11px !important;font-weight:700 !important;');
+
+                const rowValue = targetDoc.createElement('span');
+                rowValue.textContent = value;
+                rowValue.setAttribute('style', `
+                    min-width:0 !important;
+                    overflow:hidden !important;
+                    text-overflow:ellipsis !important;
+                    white-space:nowrap !important;
+                    color:${isEmphasis ? accentColor : 'rgba(255,255,255,.78)'} !important;
+                    font-size:13px !important;
+                    font-weight:800 !important;
+                `);
+
+                row.appendChild(rowLabel);
+                row.appendChild(rowValue);
+                return row;
+            };
+
+            if (isCancel) {
+                comparison.appendChild(makeWinnerRow('낙찰자', prevLabel, true));
+                comparison.appendChild(makeWinnerRow('취소 처리', '하이라이트 · 입력 내용 · 낙찰 내역 삭제', false));
+            } else {
+                comparison.appendChild(makeWinnerRow('기존', prevLabel, false));
+                comparison.appendChild(makeWinnerRow('변경', newLabel, true));
+            }
+
+            const buttonArea = targetDoc.createElement('div');
+            buttonArea.setAttribute('style', 'display:flex !important;gap:8px !important;');
+
+            const cancelButton = targetDoc.createElement('button');
+            cancelButton.type = 'button';
+            cancelButton.textContent = '취소';
+            cancelButton.setAttribute('style', 'flex:1 !important;height:44px !important;border:1px solid rgba(255,255,255,.12) !important;border-radius:11px !important;background:rgba(255,255,255,.06) !important;color:rgba(255,255,255,.72) !important;font-size:13px !important;font-weight:750 !important;cursor:pointer !important;');
+
+            const confirmButton = targetDoc.createElement('button');
+            confirmButton.type = 'button';
+            confirmButton.textContent = isCancel ? '낙찰 취소' : '낙찰자 변경';
+            confirmButton.setAttribute('style', `flex:1.35 !important;height:44px !important;border:1px solid ${accentColor} !important;border-radius:11px !important;background:${accentColor} !important;color:#151515 !important;font-size:13px !important;font-weight:850 !important;cursor:pointer !important;box-shadow:0 7px 20px ${accentBg} !important;`);
+
+            buttonArea.appendChild(cancelButton);
+            buttonArea.appendChild(confirmButton);
+
+            const shortcut = targetDoc.createElement('div');
+            shortcut.textContent = 'Enter 확인  ·  Esc 취소';
+            shortcut.setAttribute('style', 'margin-top:10px !important;text-align:center !important;color:rgba(255,255,255,.34) !important;font-size:10.5px !important;font-weight:650 !important;');
+
+            modal.appendChild(header);
+            modal.appendChild(description);
+            modal.appendChild(comparison);
+            modal.appendChild(buttonArea);
+            modal.appendChild(shortcut);
+
+            let settled = false;
+            const finish = confirmed => {
+                if (settled) return;
+                settled = true;
+                targetWin.removeEventListener('keydown', handleKeydown, true);
+                backdrop.remove();
+                modal.remove();
+                if (_closeWinnerChangeConfirm === finish) {
+                    _closeWinnerChangeConfirm = null;
+                }
+                resolve(confirmed);
+            };
+
+            const handleKeydown = event => {
+                if (event.key !== 'Enter' && event.key !== 'Escape') return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (typeof event.stopImmediatePropagation === 'function') {
+                    event.stopImmediatePropagation();
+                }
+                finish(event.key === 'Enter');
+            };
+
+            _closeWinnerChangeConfirm = finish;
+            cancelButton.addEventListener('click', () => finish(false));
+            confirmButton.addEventListener('click', () => finish(true));
+            backdrop.addEventListener('click', event => {
+                if (event.target === backdrop) finish(false);
+            });
+            targetWin.addEventListener('keydown', handleKeydown, true);
+
+            mountTarget.appendChild(backdrop);
+            mountTarget.appendChild(modal);
+            setTimeout(() => confirmButton.focus(), 20);
+        });
+    }
+
     function openAuctionModal(
         nickname,
         lastChatMessage = null,
@@ -5918,10 +6116,11 @@ ${xmlRows.join('')}
             if (!winnerChangeConfirmed && existingWinner && (existingWinner.element !== targetChatItem || (nickname && existingWinner.nickname && existingWinner.nickname.trim() !== nickname.trim()))) {
                 const prevLabel = existingWinner.nickname ? `@${existingWinner.nickname}님${existingWinner.price ? ` (${existingWinner.price}만)` : ''}` : '기존 낙찰자';
                 const newLabel = nickname ? `@${nickname}님 (${price}만)` : `${price}만`;
-                const confirmChange = `[낙찰자 변경 확인]\n현재 경매 회차에 이미 낙찰자가 선정되어 있습니다.\n\n- 기존 낙찰자: ${prevLabel}\n- 변경할 낙찰자: ${newLabel}\n\n정말 낙찰자를 변경하시겠습니까?`;
-                if (!confirm(confirmChange)) {
+                const confirmed = await showWinnerActionConfirm(prevLabel, newLabel);
+                if (!confirmed) {
                     return;
                 }
+                winnerChangeConfirmed = true;
             }
 
             const message =
@@ -6537,7 +6736,7 @@ ${xmlRows.join('')}
     // 채팅 메시지 좌클릭 핸들러 (수식키 없이 좌클릭만으로 동작)
     // =========================================================
 
-    function handleChatMessageClick(
+    async function handleChatMessageClick(
         event
     ) {
 
@@ -6603,9 +6802,8 @@ ${xmlRows.join('')}
             const author = findAuthor(event.target, event) || messageItem.querySelector('#author-name');
             const nickname = author ? getNickname(author) : '';
             const nickLabel = nickname ? `@${nickname}님` : '해당 낙찰자';
-            const confirmMsg = `[낙찰 취소 확인]\n${nickLabel}의 낙찰 처리를 취소하시겠습니까?\n\n- 채팅 하이라이트 해제\n- 채팅 입력창 내용 비우기\n- 낙찰 내역에서 삭제`;
-
-            if (!confirm(confirmMsg)) {
+            const confirmed = await showWinnerActionConfirm(nickLabel, '', 'cancel');
+            if (!confirmed) {
                 return;
             }
 
@@ -6702,8 +6900,8 @@ ${xmlRows.join('')}
             const newLabel = parsedPrice
                 ? (nickname ? `@${nickname}님 (${parsedPrice}만)` : `${parsedPrice}만`)
                 : (nickname ? `@${nickname}님` : '해당 입찰자');
-            const confirmChange = `[낙찰자 변경 확인]\n현재 경매 회차에 이미 낙찰자가 선정되어 있습니다.\n\n- 기존 낙찰자: ${prevLabel}\n- 변경 대상: ${newLabel}\n\n정말 낙찰자를 변경하시겠습니까?`;
-            if (!confirm(confirmChange)) {
+            const confirmed = await showWinnerActionConfirm(prevLabel, newLabel);
+            if (!confirmed) {
                 return;
             }
             winnerChangeConfirmed = true;
