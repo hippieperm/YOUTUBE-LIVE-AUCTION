@@ -2147,10 +2147,17 @@
 
         // 낙찰 뱃지 추가 (중복 방지)
         if (!targetEl.querySelector('.auction-winner-badge')) {
-            const badge = (targetEl.ownerDocument || document).createElement('span');
+            const badgeDoc = targetEl.ownerDocument || document;
+            const badge = badgeDoc.createElement('span');
             badge.className = 'auction-winner-badge';
             const priceText = winnerInfo.priceStr ? ` ${winnerInfo.priceStr}만` : '';
-            badge.innerHTML = `<span class="badge-icon">👑</span>낙찰${priceText}`;
+
+            // YouTube의 Trusted Types 정책에 걸리지 않도록 innerHTML 대신 DOM API 사용
+            const badgeIcon = badgeDoc.createElement('span');
+            badgeIcon.className = 'badge-icon';
+            badgeIcon.textContent = '👑';
+            badge.appendChild(badgeIcon);
+            badge.appendChild(badgeDoc.createTextNode(`낙찰${priceText}`));
 
             const authorEl = targetEl.querySelector('#author-name') || targetEl.querySelector('yt-live-chat-author-chip');
             if (authorEl && authorEl.parentNode) {

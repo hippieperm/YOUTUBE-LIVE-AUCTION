@@ -1,6 +1,6 @@
 # 🔨 YouTube Live 낙찰 자동화 & 안내 패널 스튜디오
 
-YouTube 라이브 경매 방송 진행을 위한 실시간 낙찰 자동화, 8종 맞춤형 안내 버튼, 구분선(밑줄) 기능을 제공하는 Tampermonkey 유저스크립트입니다.
+YouTube 라이브 경매 방송 진행을 위한 실시간 낙찰 자동화, 8종 맞춤형 안내 버튼, 구분선(밑줄) 기능을 제공하는 Chrome 확장 프로그램 겸 Tampermonkey 유저스크립트입니다.
 
 ---
 
@@ -10,6 +10,8 @@ YouTube 라이브 경매 방송 진행을 위한 실시간 낙찰 자동화, 8�
 
 ```
 YOUTUBE-LIVE-AUCTION/
+├── manifest.json                  # Chrome 확장 프로그램 설정
+├── icons/                         # Chrome 확장 프로그램 아이콘
 ├── youtube-live-auction.user.js   # Tampermonkey에 등록하는 단일 스크립트
 ├── auction-test.html              # 🧪 유튜브 없이 바로 테스트할 수 있는 가상 테스트룸
 └── README.md                      # 사용 설명서 및 가이드
@@ -31,7 +33,19 @@ YOUTUBE-LIVE-AUCTION/
 
 ---
 
-## 🚀 실제 유튜브 설치 및 사용 방법
+## 🚀 Chrome 확장 프로그램으로 설치하기
+
+1. Chrome 주소창에 `chrome://extensions`를 입력합니다.
+2. 우측 상단의 **개발자 모드**를 켭니다.
+3. **압축해제된 확장 프로그램을 로드합니다**를 누릅니다.
+4. 이 프로젝트의 `YOUTUBE-LIVE-AUCTION` 폴더를 선택합니다.
+5. 이미 열려 있던 YouTube 탭을 새로고침합니다.
+
+업데이트한 파일을 적용하려면 `chrome://extensions`에서 이 확장 프로그램의 새로고침 버튼을 누른 뒤 YouTube 탭도 새로고침하세요. `auction-test.html`을 직접 열어 테스트할 때는 확장 프로그램 상세 화면에서 **파일 URL에 대한 액세스 허용**도 켜야 합니다.
+
+> Tampermonkey 버전과 Chrome 확장 버전을 동시에 켜면 스크립트가 두 번 실행됩니다. 둘 중 하나만 활성화하세요.
+
+## 🚀 Tampermonkey로 설치하기
 
 1. 브라우저 확장 프로그램 **Tampermonkey**(또는 Violentmonkey / Greasemonkey)를 설치합니다.
 2. Tampermonkey 대시보드에서 **새 스크립트 만들기(+)**를 클릭합니다.
