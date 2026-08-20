@@ -54,10 +54,7 @@
             button.style.color = _isSpectatorMode ? '#7dd3fc' : '#cbd5e1';
         }
 
-        getTargetDocs().forEach(doc => {
-            const separatorButton = doc && doc.getElementById('__auction_separator_button');
-            if (separatorButton) updateSeparatorButtonVisualState(separatorButton);
-        });
+        syncSpectatorModeUI();
 
         showAuctionToast(
             _isSpectatorMode
@@ -71,16 +68,95 @@
         if (!button) return;
         const spectator = _isSpectatorMode;
         button.textContent = spectator ? '👀🔥' : '밑줄';
-        button.disabled = spectator;
-        button.setAttribute('aria-disabled', spectator ? 'true' : 'false');
-        button.style.pointerEvents = spectator ? 'none' : 'auto';
-        button.style.cursor = spectator ? 'default' : 'pointer';
+        button.disabled = false;
+        button.setAttribute('aria-disabled', 'false');
+        button.style.pointerEvents = 'auto';
+        button.style.cursor = 'pointer';
         button.style.background = spectator ? 'rgba(34,197,94,.18)' : 'rgba(190,60,60,.14)';
         button.style.borderColor = spectator ? 'rgba(74,222,128,.7)' : 'rgba(220,80,80,.30)';
         button.style.color = spectator ? '#86efac' : '#f08a8a';
         button.title = spectator
-            ? '관전자 모드 ON: 밑줄 19개를 감지해 하이라이트만 적용합니다.'
+            ? '관전자 모드 ON: 클릭하면 해제 코드 입력창이 열립니다.'
             : '밑줄 버튼을 누른 뒤 전송하면 낙찰 처리합니다.';
+    }
+
+    function syncSpectatorModeUI() {
+        getTargetDocs().forEach(doc => {
+            try {
+                if (!doc) return;
+                const guidePanel = doc.getElementById('__auction_guide_panel');
+                if (guidePanel) {
+                    guidePanel.style.display = _isSpectatorMode ? 'none' : '';
+                }
+                const separatorButton = doc.getElementById('__auction_separator_button');
+                if (separatorButton) updateSeparatorButtonVisualState(separatorButton);
+            } catch (e) {}
+        });
+    }
+
+    function openSpectatorUnlockModal(targetDoc = document) {
+        removeCustomModals();
+        const mountTarget = targetDoc && targetDoc.body ? targetDoc.body : getChatMountTarget();
+        if (!mountTarget) return;
+
+        const backdrop = createElement('div', {
+            id: '__auction_spectator_unlock_backdrop',
+            style: 'position:fixed !important; inset:0 !important; background:rgba(2,6,23,.72) !important; z-index:2147483646 !important;'
+        });
+        const modal = createElement('div', {
+            id: '__auction_spectator_unlock_modal',
+            style: 'position:fixed !important; left:50% !important; top:50% !important; transform:translate(-50%,-50%) !important; width:300px !important; max-width:calc(100% - 24px) !important; box-sizing:border-box !important; padding:20px !important; background:linear-gradient(145deg,rgba(10,18,32,.99),rgba(21,31,52,.98)) !important; color:#fff !important; border:1px solid rgba(74,222,128,.5) !important; border-radius:16px !important; box-shadow:0 28px 90px rgba(0,0,0,.72) !important; z-index:2147483647 !important; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif !important;'
+        });
+        const title = createElement('div', {
+            text: '👀🔥 관전자 모드 해제',
+            style: 'font-size:17px !important; font-weight:900 !important; color:#86efac !important; margin-bottom:10px !important;'
+        });
+        const guide = createElement('div', {
+            text: '해제 코드를 입력하세요.',
+            style: 'font-size:12px !important; color:#cbd5e1 !important; margin-bottom:10px !important;'
+        });
+        const input = createElement('input', {
+            type: 'password',
+            inputmode: 'numeric',
+            placeholder: '해제 코드',
+            style: 'width:100% !important; height:40px !important; box-sizing:border-box !important; padding:0 12px !important; border:1px solid rgba(148,163,184,.4) !important; border-radius:8px !important; background:rgba(255,255,255,.08) !important; color:#fff !important; outline:none !important; font-size:16px !important;'
+        });
+        const confirm = createElement('button', {
+            type: 'button',
+            text: '확인',
+            style: 'width:100% !important; height:38px !important; margin-top:10px !important; border:1px solid rgba(74,222,128,.6) !important; border-radius:8px !important; background:rgba(34,197,94,.2) !important; color:#bbf7d0 !important; font-weight:800 !important; cursor:pointer !important;'
+        });
+        const submit = () => {
+            if (input.value.trim() !== SPECTATOR_MODE_CHANGE_CODE) {
+                input.value = '';
+                input.placeholder = '코드가 올바르지 않습니다.';
+                input.focus();
+                return;
+            }
+            toggleSpectatorMode();
+            removeCustomModals();
+        };
+        confirm.addEventListener('click', submit);
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submit();
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                removeCustomModals();
+            }
+        });
+        backdrop.addEventListener('click', event => {
+            if (event.target === backdrop) removeCustomModals();
+        });
+        modal.appendChild(title);
+        modal.appendChild(guide);
+        modal.appendChild(input);
+        modal.appendChild(confirm);
+        mountTarget.appendChild(backdrop);
+        mountTarget.appendChild(modal);
+        setTimeout(() => input.focus(), 30);
     }
 
     function loadAlwaysExpandedGuidePanelMode() {
@@ -2497,7 +2573,9 @@
                     '__auction_price_unified_modal',
                     '__auction_price_unified_backdrop',
                     '__auction_price_amount_modal',
-                    '__auction_price_amount_backdrop'
+                    '__auction_price_amount_backdrop',
+                    '__auction_spectator_unlock_modal',
+                    '__auction_spectator_unlock_backdrop'
                 ];
                 ids.forEach(id => {
                     const el = doc.getElementById(id);
@@ -9111,6 +9189,7 @@ ${xmlRows.join('')}
                 event.stopPropagation();
 
                 if (_isSpectatorMode) {
+                    openSpectatorUnlockModal(button.ownerDocument || document);
                     return;
                 }
 
@@ -9254,6 +9333,7 @@ ${xmlRows.join('')}
             guidePanel &&
             separatorButton
         ) {
+            syncSpectatorModeUI();
             return;
         }
 
@@ -9264,6 +9344,8 @@ ${xmlRows.join('')}
         if (!separatorButton) {
             createSeparatorButton();
         }
+
+        syncSpectatorModeUI();
     }
 
 
