@@ -26,6 +26,52 @@
 
     const GUIDE_PANEL_MODE_STORAGE_KEY = '__auction_guide_panel_always_expanded';
     const GUIDE_PANEL_MODE_CHANGE_CODE = '123123123';
+    const SPECTATOR_MODE_STORAGE_KEY = '__auction_spectator_mode';
+    const SPECTATOR_MODE_CHANGE_CODE = '135798';
+
+    function loadSpectatorMode() {
+        try {
+            return localStorage.getItem(SPECTATOR_MODE_STORAGE_KEY) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    let _isSpectatorMode = loadSpectatorMode();
+
+    function isSpectatorMode() {
+        return _isSpectatorMode;
+    }
+
+    function toggleSpectatorMode() {
+        setSpectatorMode(!_isSpectatorMode);
+    }
+
+    function setSpectatorMode(enabled) {
+        _isSpectatorMode = !!enabled;
+        try {
+            localStorage.setItem(
+                SPECTATOR_MODE_STORAGE_KEY,
+                _isSpectatorMode ? '1' : '0'
+            );
+        } catch (e) {}
+
+        getTargetDocs().forEach(doc => {
+            const separatorState = getSeparatorSharedState(doc);
+            if (separatorState) separatorState.pending = null;
+        });
+
+        removeCustomModals();
+        createAllUI();
+        applySpectatorUiState();
+
+        showAuctionToast(
+            _isSpectatorMode
+                ? '👀🔥 관전자 모드를 켰습니다. 최고가 하이라이트만 적용됩니다.'
+                : '🔓 관전자 모드를 해제했습니다. 일반 진행자 모드로 복구했습니다.',
+            'success'
+        );
+    }
 
     function loadAlwaysExpandedGuidePanelMode() {
         try {
@@ -1621,6 +1667,11 @@
 
         const clean = text.trim();
 
+        // 관전자 모드에서는 진행자가 보낸 표준 구분선만 처리한다.
+        if (isSpectatorMode()) {
+            return clean === EXACT_AUCTION_SEPARATOR;
+        }
+
         // 1) 정확히 등호 19개 일치 (표준 밑줄 버튼)
         if (clean === EXACT_AUCTION_SEPARATOR) {
             return true;
@@ -2282,8 +2333,8 @@
             '(원문:', winner.originalChat + ')'
         );
 
-        // 🛑 다시보기 환경: 인풋창 자동 입력 및 DB 낙찰 기록 추가/수정은 차단하고, 채팅창 하이라이터만 완벽 적용!
-        if (isReplayMode()) {
+        // 🛑 관전자/다시보기 환경: 하이라이트만 적용하고 입력창·낙찰내역은 건드리지 않는다.
+        if (isSpectatorMode() || isReplayMode()) {
             highlightWinnerChatMessage(winner.element, winner, targetDoc);
             return;
         }
@@ -2435,7 +2486,9 @@
                     '__auction_price_unified_modal',
                     '__auction_price_unified_backdrop',
                     '__auction_price_amount_modal',
-                    '__auction_price_amount_backdrop'
+                    '__auction_price_amount_backdrop',
+                    '__auction_spectator_unlock_modal',
+                    '__auction_spectator_unlock_backdrop'
                 ];
                 ids.forEach(id => {
                     const el = doc.getElementById(id);
@@ -6527,6 +6580,11 @@ ${xmlRows.join('')}
         message
     ) {
 
+        if (isSpectatorMode()) {
+            console.log(PREFIX, '관전자 모드에서는 채팅 입력창을 수정하지 않습니다.');
+            return false;
+        }
+
         if (!input) {
             return false;
         }
@@ -6824,6 +6882,11 @@ ${xmlRows.join('')}
             event.button !== undefined &&
             event.button !== 0
         ) {
+            return;
+        }
+
+        // 관전자 모드에서는 입찰자 선택·수정·낙찰 취소를 모두 비활성화한다.
+        if (isSpectatorMode()) {
             return;
         }
 
@@ -7542,7 +7605,7 @@ ${xmlRows.join('')}
         plusTenButton.style.setProperty('border-color', 'rgba(167,139,250,.62)', 'important');
         plusTenButton.style.setProperty('color', '#c4b5fd', 'important');
         quick.appendChild(plusOneButton); quick.appendChild(plusFiveButton); quick.appendChild(plusTenButton); modal.appendChild(quick); modal.appendChild(tabs);
-        const submitPrice=(mode)=>{const value=input.value.trim();if(mode!=='최고가'&&!value){input.focus();return;}if(mode!=='최고가'&&value===GUIDE_PANEL_MODE_CHANGE_CODE){toggleGuidePanelMode();return;}const chatInput=findChatInput();if(chatInput){setChatInput(chatInput,mode==='최고가'?'최고가':`${value}${mode==='이상'?'만이상':'만'}`);chatInput.focus();}removeCustomModals();};
+        const submitPrice=(mode)=>{const value=input.value.trim();if(mode!=='최고가'&&!value){input.focus();return;}if(mode!=='최고가'&&value===GUIDE_PANEL_MODE_CHANGE_CODE){toggleGuidePanelMode();return;}if(mode!=='최고가'&&value===SPECTATOR_MODE_CHANGE_CODE){toggleSpectatorMode();return;}const chatInput=findChatInput();if(chatInput){setChatInput(chatInput,mode==='최고가'?'최고가':`${value}${mode==='이상'?'만이상':'만'}`);chatInput.focus();}removeCustomModals();};
         Array.from(tabs.children).forEach(tab=>tab.addEventListener('click',e=>{e.preventDefault();submitPrice(tab.dataset.mode);})); input.addEventListener('input',()=>{input.value=sanitizeDecimalInput(input.value);}); input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitPrice('일반');}}); backdrop.addEventListener('click',e=>{if(e.target===backdrop)removeCustomModals();}); modal.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();},{passive:false}); mountTarget.appendChild(backdrop);mountTarget.appendChild(modal);const modalDocument=mountTarget.ownerDocument||document;_priceModalKeydownDocument=modalDocument;_priceModalKeydownHandler=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();removeCustomModals();}};modalDocument.addEventListener('keydown',_priceModalKeydownHandler,true);setTimeout(()=>input.focus(),40);
     }
 
@@ -7970,6 +8033,10 @@ ${xmlRows.join('')}
                 toggleGuidePanelMode();
                 return;
             }
+            if (val === SPECTATOR_MODE_CHANGE_CODE) {
+                toggleSpectatorMode();
+                return;
+            }
             if (val) {
                 const resultText = `${val}${guideSuffix}`;
                 const chatInput = findChatInput();
@@ -8049,6 +8116,133 @@ ${xmlRows.join('')}
         setTimeout(() => {
             inputEl.focus();
         }, 40);
+    }
+
+    // =========================================================
+    // 👀🔥 관전자 모드 해제 모달
+    // =========================================================
+
+    function openSpectatorUnlockModal() {
+        if (!isSpectatorMode()) return;
+
+        removeCustomModals();
+
+        const mountTarget = getChatMountTarget();
+        if (!mountTarget) return;
+
+        const backdrop = createElement('div', {
+            id: '__auction_spectator_unlock_backdrop',
+            style: `
+                position:fixed !important;
+                inset:0 !important;
+                background:rgba(2,6,23,.72) !important;
+                backdrop-filter:blur(6px) !important;
+                z-index:2147483646 !important;
+            `
+        });
+
+        const modal = createElement('div', {
+            id: '__auction_spectator_unlock_modal',
+            style: `
+                position:fixed !important;
+                left:50% !important;
+                top:50% !important;
+                transform:translate(-50%,-50%) !important;
+                width:300px !important;
+                max-width:calc(100% - 24px) !important;
+                box-sizing:border-box !important;
+                padding:18px !important;
+                background:linear-gradient(145deg,rgba(10,18,32,.99),rgba(21,31,52,.98)) !important;
+                color:#fff !important;
+                border:1px solid rgba(251,191,36,.42) !important;
+                border-radius:18px !important;
+                box-shadow:0 28px 90px rgba(0,0,0,.72) !important;
+                z-index:2147483647 !important;
+                font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif !important;
+            `
+        });
+
+        const title = createElement('div', {
+            text: '👀🔥 관전자 모드 해제',
+            style: 'font-size:17px !important; font-weight:900 !important; color:#fde68a !important; margin-bottom:10px !important;'
+        });
+        const guide = createElement('div', {
+            text: '해제 코드 135798을 입력하세요.',
+            style: 'font-size:12px !important; color:rgba(255,255,255,.68) !important; margin-bottom:12px !important;'
+        });
+        const input = createElement('input', {
+            type: 'text',
+            inputmode: 'numeric',
+            placeholder: '해제 코드',
+            style: 'width:100% !important; height:42px !important; box-sizing:border-box !important; padding:0 12px !important; border:1px solid rgba(255,255,255,.18) !important; border-radius:10px !important; background:rgba(8,15,30,.82) !important; color:#fff !important; font-size:16px !important; font-weight:800 !important; outline:none !important;'
+        });
+        const status = createElement('div', {
+            style: 'min-height:18px !important; margin-top:8px !important; color:#fca5a5 !important; font-size:12px !important;'
+        });
+        const buttons = createElement('div', {
+            style: 'display:flex !important; gap:8px !important; margin-top:10px !important;'
+        });
+        const cancel = createElement('button', {
+            type: 'button',
+            text: '취소',
+            style: 'flex:1 !important; height:40px !important; border:1px solid rgba(255,255,255,.18) !important; border-radius:10px !important; background:rgba(255,255,255,.06) !important; color:#fff !important; font-weight:800 !important; cursor:pointer !important;'
+        });
+        const unlock = createElement('button', {
+            type: 'button',
+            text: '해제',
+            style: 'flex:1 !important; height:40px !important; border:1px solid rgba(251,191,36,.6) !important; border-radius:10px !important; background:rgba(245,158,11,.2) !important; color:#fde68a !important; font-weight:900 !important; cursor:pointer !important;'
+        });
+
+        const submit = () => {
+            if (input.value.trim() !== SPECTATOR_MODE_CHANGE_CODE) {
+                status.textContent = '코드가 올바르지 않습니다.';
+                input.focus();
+                input.select();
+                return;
+            }
+            setSpectatorMode(false);
+        };
+
+        cancel.addEventListener('click', () => removeCustomModals());
+        unlock.addEventListener('click', submit);
+        input.addEventListener('input', () => {
+            input.value = input.value.replace(/[^0-9]/g, '');
+            status.textContent = '';
+        });
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submit();
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                removeCustomModals();
+            }
+        });
+        backdrop.addEventListener('click', event => {
+            if (event.target === backdrop) removeCustomModals();
+        });
+
+        buttons.appendChild(cancel);
+        buttons.appendChild(unlock);
+        modal.appendChild(title);
+        modal.appendChild(guide);
+        modal.appendChild(input);
+        modal.appendChild(status);
+        modal.appendChild(buttons);
+        mountTarget.appendChild(backdrop);
+        mountTarget.appendChild(modal);
+
+        const modalDocument = mountTarget.ownerDocument || document;
+        _priceModalKeydownDocument = modalDocument;
+        _priceModalKeydownHandler = event => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                removeCustomModals();
+            }
+        };
+        modalDocument.addEventListener('keydown', _priceModalKeydownHandler, true);
+        setTimeout(() => input.focus(), 40);
     }
 
 
@@ -8548,6 +8742,21 @@ ${xmlRows.join('')}
             });
     }
 
+    function applySpectatorUiState() {
+        const docs = getTargetDocs();
+        docs.forEach(doc => {
+            if (!doc) return;
+
+            if (isSpectatorMode()) {
+                const panel = doc.getElementById('__auction_guide_panel');
+                if (panel) panel.remove();
+            }
+
+            const separatorButton = doc.getElementById('__auction_separator_button');
+            if (separatorButton) updateSeparatorButtonState(separatorButton);
+        });
+    }
+
     function createGuidePanel() {
 
         const input =
@@ -8560,6 +8769,12 @@ ${xmlRows.join('')}
         const targetDoc =
             input.ownerDocument ||
             document;
+
+        if (isSpectatorMode()) {
+            const existingPanel = targetDoc.getElementById('__auction_guide_panel');
+            if (existingPanel) existingPanel.remove();
+            return;
+        }
 
         injectModernUiStyles(targetDoc);
 
@@ -8870,6 +9085,17 @@ ${xmlRows.join('')}
     // 밑줄 버튼
     // =========================================================
 
+    function updateSeparatorButtonState(button) {
+        if (!button) return;
+
+        const spectator = isSpectatorMode();
+        button.textContent = spectator ? '👀🔥' : '밑줄';
+        button.title = spectator
+            ? '관전자 모드 해제'
+            : '등호 19개를 입력하고 전송 대기';
+        button.setAttribute('aria-label', button.title);
+    }
+
     function createSeparatorButton() {
 
         const input =
@@ -8892,6 +9118,7 @@ ${xmlRows.join('')}
             for (let i = 1; i < existingSeparators.length; i++) {
                 existingSeparators[i].remove();
             }
+            updateSeparatorButtonState(existingSeparators[0]);
             return;
         }
 
@@ -8922,7 +9149,7 @@ ${xmlRows.join('')}
                         'button',
 
                     text:
-                        '밑줄',
+                        isSpectatorMode() ? '👀🔥' : '밑줄',
 
                     style: `
                         flex-shrink:0 !important;
@@ -9046,6 +9273,11 @@ ${xmlRows.join('')}
                 event.preventDefault();
                 event.stopPropagation();
 
+                if (isSpectatorMode()) {
+                    openSpectatorUnlockModal();
+                    return;
+                }
+
                 const currentInput =
                     findChatInput();
 
@@ -9118,6 +9350,8 @@ ${xmlRows.join('')}
             button
         );
 
+        updateSeparatorButtonState(button);
+
         console.log(
             PREFIX,
             '밑줄 버튼 생성 완료'
@@ -9148,6 +9382,8 @@ ${xmlRows.join('')}
         const targetDoc =
             input.ownerDocument ||
             document;
+
+        applySpectatorUiState();
 
         // 중복 요소 청소
         const existingPanels =
@@ -9260,7 +9496,7 @@ ${xmlRows.join('')}
                                 const text = msgEl ? msgEl.textContent.trim() : '';
 
                                 if (text && isSeparatorMessage(text)) {
-                                    if (!isReplayMode()) {
+                                    if (!isReplayMode() && !isSpectatorMode()) {
                                         const alreadyAuthorized = chatItem.dataset.auctionSeparatorAuthorized === 'true';
                                         if (!alreadyAuthorized) {
                                             if (!consumeAuthorizedSeparatorSubmission(text, doc)) {
@@ -9503,6 +9739,12 @@ ${xmlRows.join('')}
 
         // 부모-iframe 간 실시간 동기화 리스너
         window.addEventListener('storage', (e) => {
+            if (e.key === SPECTATOR_MODE_STORAGE_KEY) {
+                _isSpectatorMode = e.newValue === '1';
+                removeCustomModals();
+                createAllUI();
+                applySpectatorUiState();
+            }
             if (e.key === BID_STORAGE_KEY || e.key === '__auction_active_video_id') {
                 updateBidBadge();
             }
