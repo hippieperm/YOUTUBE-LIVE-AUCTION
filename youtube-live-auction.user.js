@@ -18,6 +18,14 @@
 
     'use strict';
 
+    // Tampermonkey 주입과 로컬 시뮬레이터 <script> 로드가 겹쳐도 한 번만 실행한다.
+    const AUCTION_INSTANCE_GUARD = '__youtubeLiveAuctionInstanceActive';
+    if (window[AUCTION_INSTANCE_GUARD]) {
+        console.log('[낙찰 자동화]', '중복 실행 방지: 기존 인스턴스를 사용합니다.');
+        return;
+    }
+    window[AUCTION_INSTANCE_GUARD] = true;
+
     const GUIDE_PANEL_MODE_STORAGE_KEY = '__auction_guide_panel_always_expanded';
     const GUIDE_PANEL_MODE_CHANGE_CODE = '123123123';
 
@@ -1543,8 +1551,18 @@
 
     const EXACT_AUCTION_SEPARATOR = '==================='; // 등호 19개
     const SEPARATOR_SEND_CONFIRM_TIMEOUT_MS = 30 * 1000;
-    const _separatorSendTrackingDocs = new WeakSet();
-    let _pendingSeparatorSubmission = null;
+    const SEPARATOR_SHARED_STATE_KEY = '__auctionSeparatorSubmissionState';
+
+    function getSeparatorSharedState(targetDoc) {
+        if (!targetDoc) return null;
+        if (!targetDoc[SEPARATOR_SHARED_STATE_KEY]) {
+            targetDoc[SEPARATOR_SHARED_STATE_KEY] = {
+                pending: null,
+                sendTrackingInstalled: false
+            };
+        }
+        return targetDoc[SEPARATOR_SHARED_STATE_KEY];
+    }
 
     function getChatInputText(input) {
         if (!input) return '';
@@ -1552,10 +1570,13 @@
     }
 
     function setupSeparatorSendTracking(targetDoc) {
-        if (!targetDoc || _separatorSendTrackingDocs.has(targetDoc)) return;
+        const sharedState = getSeparatorSharedState(targetDoc);
+        if (!sharedState || sharedState.sendTrackingInstalled) return;
+        sharedState.sendTrackingInstalled = true;
 
         targetDoc.addEventListener('click', event => {
-            if (!_pendingSeparatorSubmission || _pendingSeparatorSubmission.targetDoc !== targetDoc) return;
+            const currentState = getSeparatorSharedState(targetDoc);
+            if (!currentState || !currentState.pending) return;
 
             const path = typeof event.composedPath === 'function' ? event.composedPath() : [event.target];
             const clickedSendButton = path.some(element => {
@@ -1566,32 +1587,32 @@
 
             if (!clickedSendButton) return;
 
-            const pending = _pendingSeparatorSubmission;
+            const pending = currentState.pending;
             if (getChatInputText(pending.input) === EXACT_AUCTION_SEPARATOR) {
                 pending.sendClickedAt = Date.now();
                 console.log(PREFIX, '밑줄 전송 버튼 확인 (자동 낙찰 처리 대기)');
                 setTimeout(() => {
-                    if (_pendingSeparatorSubmission === pending) {
-                        _pendingSeparatorSubmission = null;
+                    const latestState = getSeparatorSharedState(targetDoc);
+                    if (latestState && latestState.pending === pending) {
+                        latestState.pending = null;
                     }
                 }, SEPARATOR_SEND_CONFIRM_TIMEOUT_MS);
             } else {
-                _pendingSeparatorSubmission = null;
+                currentState.pending = null;
             }
         }, true);
-
-        _separatorSendTrackingDocs.add(targetDoc);
     }
 
     function consumeAuthorizedSeparatorSubmission(text, targetDoc) {
-        const pending = _pendingSeparatorSubmission;
+        const sharedState = getSeparatorSharedState(targetDoc);
+        const pending = sharedState && sharedState.pending;
         if (!pending || text.trim() !== EXACT_AUCTION_SEPARATOR || pending.targetDoc !== targetDoc) return false;
 
         const now = Date.now();
         const authorized = !!pending.sendClickedAt &&
             now - pending.sendClickedAt <= SEPARATOR_SEND_CONFIRM_TIMEOUT_MS;
 
-        _pendingSeparatorSubmission = null;
+        sharedState.pending = null;
         return authorized;
     }
 
@@ -9045,7 +9066,8 @@ ${xmlRows.join('')}
 
                 const currentDoc = currentInput.ownerDocument || document;
                 setupSeparatorSendTracking(currentDoc);
-                _pendingSeparatorSubmission = {
+                const sharedState = getSeparatorSharedState(currentDoc);
+                sharedState.pending = {
                     input: currentInput,
                     targetDoc: currentDoc,
                     sendClickedAt: 0
@@ -9204,6 +9226,13 @@ ${xmlRows.join('')}
                 }
 
                 const observer = new MutationObserver(mutations => {
+                    // 채팅 iframe 자체에 유저스크립트 인스턴스가 있으면,
+                    // top 페이지 인스턴스는 cross-realm DOM 처리를 iframe 인스턴스에게 양보한다.
+                    const targetWindow = doc.defaultView;
+                    if (targetWindow && targetWindow !== window && targetWindow[AUCTION_INSTANCE_GUARD]) {
+                        return;
+                    }
+
                     mutations.forEach(mutation => {
                         mutation.addedNodes.forEach(node => {
                             if (!node || node.nodeType !== Node.ELEMENT_NODE) {
@@ -9233,11 +9262,22 @@ ${xmlRows.join('')}
                                 const text = msgEl ? msgEl.textContent.trim() : '';
 
                                 if (text && isSeparatorMessage(text)) {
-                                    if (!isReplayMode() && !consumeAuthorizedSeparatorSubmission(text, doc)) {
-                                        chatItem.dataset.auctionProcessed = 'true';
-                                        console.log(PREFIX, '밑줄 버튼 + 전송 조건 불충족으로 자동 낙찰 처리 무시:', text);
+                                    if (!isReplayMode()) {
+                                        const alreadyAuthorized = chatItem.dataset.auctionSeparatorAuthorized === 'true';
+                                        if (!alreadyAuthorized) {
+                                            if (!consumeAuthorizedSeparatorSubmission(text, doc)) {
+                                                chatItem.dataset.auctionProcessed = 'true';
+                                                console.log(PREFIX, '밑줄 버튼 + 전송 조건 불충족으로 자동 낙찰 처리 무시:', text);
+                                                return;
+                                            }
+                                            // top 페이지와 채팅 iframe의 복수 감시자가 동일한 승인 결과를 공유한다.
+                                            chatItem.dataset.auctionSeparatorAuthorized = 'true';
+                                        }
+                                    }
+                                    if (chatItem.dataset.auctionProcessingScheduled === 'true') {
                                         return;
                                     }
+                                    chatItem.dataset.auctionProcessingScheduled = 'true';
                                     console.log(PREFIX, isReplayMode() ? '다시보기 밑줄 감지:' : '실시간 새 밑줄 감지:', text);
                                     // DOM이 완전히 업데이트될 시간을 위해 미세 딜레이 후 선별 처리
                                     setTimeout(() => {
