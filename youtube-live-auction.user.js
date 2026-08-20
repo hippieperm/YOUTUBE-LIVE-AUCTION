@@ -54,12 +54,33 @@
             button.style.color = _isSpectatorMode ? '#7dd3fc' : '#cbd5e1';
         }
 
+        getTargetDocs().forEach(doc => {
+            const separatorButton = doc && doc.getElementById('__auction_separator_button');
+            if (separatorButton) updateSeparatorButtonVisualState(separatorButton);
+        });
+
         showAuctionToast(
             _isSpectatorMode
                 ? '👀 관전자 모드 ON: 정확한 밑줄 19개를 자동 감지합니다.'
                 : '🔒 관전자 모드 OFF: 밑줄 버튼 + 전송이 필요합니다.',
             'success'
         );
+    }
+
+    function updateSeparatorButtonVisualState(button) {
+        if (!button) return;
+        const spectator = _isSpectatorMode;
+        button.textContent = spectator ? '👀🔥' : '밑줄';
+        button.disabled = spectator;
+        button.setAttribute('aria-disabled', spectator ? 'true' : 'false');
+        button.style.pointerEvents = spectator ? 'none' : 'auto';
+        button.style.cursor = spectator ? 'default' : 'pointer';
+        button.style.background = spectator ? 'rgba(34,197,94,.18)' : 'rgba(190,60,60,.14)';
+        button.style.borderColor = spectator ? 'rgba(74,222,128,.7)' : 'rgba(220,80,80,.30)';
+        button.style.color = spectator ? '#86efac' : '#f08a8a';
+        button.title = spectator
+            ? '관전자 모드 ON: 밑줄 19개를 감지해 하이라이트만 적용합니다.'
+            : '밑줄 버튼을 누른 뒤 전송하면 낙찰 처리합니다.';
     }
 
     function loadAlwaysExpandedGuidePanelMode() {
@@ -2319,6 +2340,12 @@
 
         // 🛑 다시보기 환경: 인풋창 자동 입력 및 DB 낙찰 기록 추가/수정은 차단하고, 채팅창 하이라이터만 완벽 적용!
         if (isReplayMode()) {
+            highlightWinnerChatMessage(winner.element, winner, targetDoc);
+            return;
+        }
+
+        // 👀 관전자 모드: 입력창·낙찰 내역은 건드리지 않고 하이라이터만 적용
+        if (_isSpectatorMode) {
             highlightWinnerChatMessage(winner.element, winner, targetDoc);
             return;
         }
@@ -8224,7 +8251,6 @@ ${xmlRows.join('')}
                 }
             );
 
-
         button.addEventListener(
             'mouseenter',
             function () {
@@ -9035,32 +9061,30 @@ ${xmlRows.join('')}
                 }
             );
 
+        updateSeparatorButtonVisualState(button);
+
 
         button.addEventListener(
             'mouseenter',
             function () {
-                button.style.background =
-                    'rgba(190,60,60,.25)';
+                if (_isSpectatorMode) return;
+                button.style.background = _isSpectatorMode
+                    ? 'rgba(34,197,94,.3)'
+                    : 'rgba(190,60,60,.25)';
 
-                button.style.borderColor =
-                    'rgba(220,80,80,.45)';
+                button.style.borderColor = _isSpectatorMode
+                    ? 'rgba(74,222,128,.95)'
+                    : 'rgba(220,80,80,.45)';
 
-                button.style.color =
-                    '#ffb0b0';
+                button.style.color = _isSpectatorMode ? '#bbf7d0' : '#ffb0b0';
             }
         );
 
         button.addEventListener(
             'mouseleave',
             function () {
-                button.style.background =
-                    'rgba(190,60,60,.14)';
-
-                button.style.borderColor =
-                    'rgba(220,80,80,.30)';
-
-                button.style.color =
-                    '#f08a8a';
+                if (_isSpectatorMode) return;
+                updateSeparatorButtonVisualState(button);
             }
         );
 
@@ -9085,6 +9109,10 @@ ${xmlRows.join('')}
             function (event) {
                 event.preventDefault();
                 event.stopPropagation();
+
+                if (_isSpectatorMode) {
+                    return;
+                }
 
                 const currentInput =
                     findChatInput();
