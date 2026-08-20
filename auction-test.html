@@ -597,10 +597,19 @@
     <aside id="simulator-sidebar">
         <div class="sidebar-header">
             <h1>🔨 경매 시뮬레이터 <span class="badge-test">TEST ROOM</span></h1>
-            <span style="font-size: 11px; color: #8b92aa;">v2.2 Full Suite</span>
+            <span style="font-size: 11px; color: #8b92aa;">v2.3 REAL IFRAME</span>
         </div>
 
         <div class="sidebar-content">
+            <div class="section-card" style="border-color: rgba(56,189,248,.45); background: rgba(14,165,233,.08);">
+                <div class="section-title" style="color:#7dd3fc;">🌐 실제 YouTube 구조 검증 모드</div>
+                <div class="section-desc" style="margin-bottom:0; color:#bae6fd;">
+                    현재 페이지는 <strong>top 페이지 + iframe#chatframe</strong> 구조입니다.
+                    저장소의 <code>youtube-live-auction.user.js</code>를 양쪽에서 직접 로드해 실제 YouTube의 iframe 감시 충돌까지 검증합니다.
+                    <div id="simulator-engine-status" style="margin-top:7px; font-weight:800; color:#fde68a;">⏳ 유저스크립트 엔진 확인 중…</div>
+                </div>
+            </div>
+
             <!-- 시나리오 1 -->
             <div class="section-card">
                 <div class="section-title">⚡ 원클릭 시나리오 테스트</div>
@@ -946,6 +955,11 @@
         }
 
         function prepareSeparatorGateSimulation(callback) {
+            if (window.__youtubeLiveAuctionBuild !== '2.5-20260821-real-iframe-gate') {
+                updateSeparatorGateResult('fail', '❌ 현재 youtube-live-auction.user.js가 아닌 구버전 설치본이 실행 중입니다. Tampermonkey 스크립트를 업데이트한 뒤 페이지를 새로고침해주세요.');
+                return;
+            }
+
             const renderer = document.querySelector('yt-live-chat-renderer');
             if (renderer && renderer.hasAttribute('replay')) {
                 toggleReplayMode();
@@ -1683,15 +1697,55 @@
          실제 유저스크립트 엔진 로드 (독립 실행 지원)
          ========================================================= -->
     <script>
-        // Tampermonkey가 이미 주입한 경우 로컬 스크립트를 중복 실행하지 않는다.
         (() => {
+            const expectedBuild = '2.5-20260821-real-iframe-gate';
+            const params = new URLSearchParams(window.location.search);
+            const isEmbeddedChat = params.get('embeddedChat') === '1';
+
+            // 기본 접속은 실제 YouTube처럼 top 페이지 + iframe#chatframe 구조로 재구성한다.
+            if (!isEmbeddedChat) {
+                const sidebar = document.getElementById('simulator-sidebar');
+                const youtubeContainer = document.getElementById('youtube-container');
+                if (sidebar) sidebar.style.display = 'none';
+                if (youtubeContainer) youtubeContainer.style.display = 'none';
+
+                const chatFrame = document.createElement('iframe');
+                const chatUrl = new URL(window.location.href);
+                chatUrl.searchParams.set('embeddedChat', '1');
+                chatUrl.hash = '';
+                chatFrame.id = 'chatframe';
+                chatFrame.title = '실제 YouTube 구조 경매 시뮬레이터';
+                chatFrame.src = chatUrl.href;
+                chatFrame.style.cssText = 'width:100vw;height:100vh;border:0;display:block;background:#0b0c10;';
+                document.body.appendChild(chatFrame);
+                document.body.dataset.auctionSimulatorMode = 'youtube-top-page';
+            } else {
+                document.body.dataset.auctionSimulatorMode = 'live-chat-iframe';
+            }
+
+            // 업데이트 전 Tampermonkey 설치본이 테스트 URL에 이미 주입된 경우만 중복 로드를 피한다.
+            const updateEngineStatus = () => {
+                const status = document.getElementById('simulator-engine-status');
+                if (!status) return;
+                if (window.__youtubeLiveAuctionBuild === expectedBuild) {
+                    status.textContent = `✅ 현재 엔진 로드 완료: ${expectedBuild}`;
+                    status.style.color = '#86efac';
+                } else {
+                    status.textContent = '❌ 엔진 버전 불일치: Tampermonkey 설치본 또는 로컬 user.js를 업데이트해주세요.';
+                    status.style.color = '#fca5a5';
+                }
+            };
+
             if (window.__youtubeLiveAuctionInstanceActive || window.__AuctionAutomation) {
                 console.log('[Simulator] 이미 주입된 낙찰 자동화 인스턴스를 사용합니다.');
+                updateEngineStatus();
                 return;
             }
             const script = document.createElement('script');
             script.src = './youtube-live-auction.user.js';
             script.dataset.auctionSimulatorEngine = 'true';
+            script.addEventListener('load', updateEngineStatus, { once: true });
+            script.addEventListener('error', updateEngineStatus, { once: true });
             document.body.appendChild(script);
         })();
     </script>

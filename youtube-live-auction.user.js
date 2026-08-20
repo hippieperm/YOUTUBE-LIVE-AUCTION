@@ -7,9 +7,6 @@
 // @match        https://youtube.com/*
 // @match        https://www.youtube.com/live_chat*
 // @match        https://www.youtube.com/live_chat_replay*
-// @match        *://localhost/*
-// @match        *://127.0.0.1/*
-// @match        file://*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
@@ -25,6 +22,7 @@
         return;
     }
     window[AUCTION_INSTANCE_GUARD] = true;
+    window.__youtubeLiveAuctionBuild = '2.5-20260821-real-iframe-gate';
 
     const GUIDE_PANEL_MODE_STORAGE_KEY = '__auction_guide_panel_always_expanded';
     const GUIDE_PANEL_MODE_CHANGE_CODE = '123123123';
