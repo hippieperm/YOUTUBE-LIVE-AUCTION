@@ -305,6 +305,36 @@
             color: #ffd043;
         }
 
+        /* 밑줄 버튼 + 전송 2단계 가드 시뮬레이션 */
+        .separator-gate-result {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border: 1px solid #34384d;
+            border-radius: 8px;
+            background: #11131b;
+            color: #9ca3af;
+            font-size: 11.5px;
+            line-height: 1.55;
+        }
+
+        .separator-gate-result.running {
+            border-color: rgba(56, 189, 248, 0.5);
+            background: rgba(14, 165, 233, 0.1);
+            color: #bae6fd;
+        }
+
+        .separator-gate-result.pass {
+            border-color: rgba(74, 222, 128, 0.5);
+            background: rgba(34, 197, 94, 0.1);
+            color: #bbf7d0;
+        }
+
+        .separator-gate-result.fail {
+            border-color: rgba(248, 113, 113, 0.55);
+            background: rgba(239, 68, 68, 0.1);
+            color: #fecaca;
+        }
+
         /* =========================================================
            우측: 실제 YouTube 라이브 채팅 UI (100% 모사)
            ========================================================= */
@@ -596,7 +626,7 @@
                         <span>🔄 6. 연속 경매 회차 & 단일 낙찰자 교체/유지 테스트</span>
                     </button>
                     <button class="sim-btn red" onclick="runStrictUnderlineScenario()">
-                        <span>🛑 7. 실시간 밑줄 등호 19개(= 19개) 엄격 판별 테스트</span>
+                        <span>🛑 7. 밑줄 버튼 + 전송 2단계 종합 테스트</span>
                     </button>
                     <button class="sim-btn primary" onclick="runReplayFullCycleScenario()">
                         <span>🎬 8. 다시보기(Replay) 환경 낙찰자 표시 & 가드 테스트</span>
@@ -665,12 +695,34 @@
             </div>
             -->
 
+            <!-- 밑줄 2단계 필수 조건 검증 -->
+            <div class="section-card" id="separator-gate-test-card">
+                <div class="section-title">🧪 밑줄 2단계 필수 조건 테스트</div>
+                <div class="section-desc">
+                    각 버튼이 입찰 채팅을 자동으로 준비합니다. 1·2번은 낙찰을 차단하고, 3번만 하이라이트와 낙찰 안내 입력을 생성해야 합니다.
+                </div>
+                <div class="btn-group single-col" style="gap: 7px;">
+                    <button class="sim-btn red" onclick="runSeparatorGateSimulation('direct')">
+                        <span>① 밑줄 문자만 직접 전송 → 차단되어야 함</span>
+                    </button>
+                    <button class="sim-btn gold" onclick="runSeparatorGateSimulation('buttonOnly')">
+                        <span>② 밑줄 버튼만 클릭 → 대기 상태여야 함</span>
+                    </button>
+                    <button class="sim-btn green" onclick="runSeparatorGateSimulation('authorized')">
+                        <span>③ 밑줄 버튼 + 전송 → 낙찰 처리되어야 함</span>
+                    </button>
+                </div>
+                <div id="separator-gate-result" class="separator-gate-result">
+                    테스트를 선택하면 결과가 여기에 표시됩니다.
+                </div>
+            </div>
+
             <!-- 밑줄 즉시 긋기 및 화면 관리 -->
             <div class="section-card">
                 <div class="section-title">🔴 밑줄 전송 & 화면 관리</div>
                 <div class="btn-group single-col" style="gap: 8px;">
                     <button class="sim-btn red" onclick="sendSeparatorFromHost()">
-                        <span>🔴 진행자 밑줄 즉시 전송 (===================)</span>
+                        <span>🔴 진행자 밑줄 버튼 + 전송</span>
                     </button>
                     <button class="sim-btn" id="btn-toggle-replay" onclick="toggleReplayMode()">
                         <span>🎬 다시보기 모드 시뮬레이션 (ON/OFF)</span>
@@ -684,11 +736,11 @@
             <!-- 사용 방법 팁 -->
             <div class="guide-tip">
                 💡 <strong>주요 기능 테스트 포인트</strong><br>
-                1. <strong>⚡ 원클릭 시나리오 8종</strong>: 소수점 생략(255=25.5만), 20/30만원 오보정 방지, 동일가 선착순, 회차별 단일 낙찰자 하이라이트 유지, 등호 19개 엄격 판별, 다시보기 가드 등 완벽 검증<br>
+                1. <strong>⚡ 원클릭 시나리오 8종</strong>: 소수점 생략(255=25.5만), 20/30만원 오보정 방지, 동일가 선착순, 회차별 단일 낙찰자 하이라이트 유지, 밑줄 2단계 필수 조건, 다시보기 가드 등 완벽 검증<br>
                 2. <strong>📐 규격입력</strong>: 수고·폭·높이·목대·근장 입력 후 📤 전송 클릭 (가운뎃점 조합 텍스트 입력창 자동 주입, 예: 폭12 · 높이12 · 근장12)<br>
-                3. <strong>💰 가격입력</strong>: 👑 최고가 / ⬆️ 이상(15만이상) / 📋 일반(34만) 선택 테스트<br>
+                3. <strong>💰 가격입력</strong>: 👑 최고가 / ⬆️ 이상(15만이상) / 📋 입력(34만) 즉시 입력 테스트<br>
                 4. <strong>📁 기타 안내 ▼</strong>: 접기/펼치기 토글로 추가 공지문구 버튼 확인<br>
-                5. <strong>👑 낙찰자 하이라이터</strong>: 밑줄 전송 시 최고가 낙찰자 채팅에 골드 하이라이트 & 👑 낙찰 뱃지 자동 부착 및 포커스<br>
+                5. <strong>👑 낙찰자 하이라이터</strong>: 전용 밑줄 버튼으로 입력한 뒤 전송해야만 골드 하이라이트 & 👑 낙찰 뱃지 자동 부착<br>
                 6. <strong>실시간 낙찰 자동화</strong>: 채팅창 메시지 클릭 시 스마트 감지 / 가상 키패드 팝업<br>
                 7. <strong>🚫 낙찰 재클릭 취소</strong>: 이미 선정된 낙찰자 채팅을 다시 클릭하면 확인창(Alert) 후 하이라이트 해제, 인풋창 비우기, 낙찰 내역 삭제가 즉시 취소 처리됩니다.<br>
                 8. <strong>📋 낙찰 내역 더미데이터</strong>: 5건/15건 더미 데이터를 즉시 생성하여 실시간 배지 증가, 닉네임별 묶음/소계, 엑셀 집계표/경매양식 다운로드를 원클릭으로 테스트할 수 있습니다.
@@ -844,9 +896,141 @@
             }
         });
 
-        /** 진행자 밑줄 즉시 전송 */
+        function setSimulatorHostInput(text) {
+            const input = document.getElementById('input');
+            if (!input) return false;
+            input.textContent = text;
+            input.innerText = text;
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType: 'insertText',
+                    data: text
+                }));
+            } catch (error) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            input.focus();
+            return true;
+        }
+
+        /** 진행자 밑줄을 실제 [밑줄] 버튼 -> [전송] 경로로 전송 */
         function sendSeparatorFromHost() {
-            addChatMessage('해담분재경매장', '===================', true);
+            const separatorButton = document.getElementById('__auction_separator_button');
+            const sendButton = document.getElementById('send-button');
+            if (!separatorButton || !sendButton) {
+                console.warn('[Simulator] 밑줄 또는 전송 버튼을 찾지 못했습니다.');
+                return false;
+            }
+            separatorButton.click();
+            setTimeout(() => sendButton.click(), 30);
+            return true;
+        }
+
+        /** 일반 시나리오의 밑줄도 실제 2단계 경로를 사용 */
+        function sendScenarioChatMessage(nickname, text, isHost = false) {
+            const renderer = document.querySelector('yt-live-chat-renderer');
+            const isReplay = !!(renderer && renderer.hasAttribute('replay'));
+            if (!isReplay && isHost && text.trim() === '===================') {
+                return sendSeparatorFromHost();
+            }
+            return addChatMessage(nickname, text, isHost);
+        }
+
+        function updateSeparatorGateResult(state, message) {
+            const result = document.getElementById('separator-gate-result');
+            if (!result) return;
+            result.className = `separator-gate-result ${state || ''}`.trim();
+            result.textContent = message;
+        }
+
+        function prepareSeparatorGateSimulation(callback) {
+            const renderer = document.querySelector('yt-live-chat-renderer');
+            if (renderer && renderer.hasAttribute('replay')) {
+                toggleReplayMode();
+            }
+
+            const separatorButton = document.getElementById('__auction_separator_button');
+            const sendButton = document.getElementById('send-button');
+            const input = document.getElementById('input');
+            if (!separatorButton || !sendButton || !input) {
+                updateSeparatorGateResult('fail', '❌ 유저스크립트의 밑줄 버튼을 찾지 못했습니다. 잠시 후 다시 시도해주세요.');
+                return;
+            }
+
+            // 이전 '밑줄만 클릭' 테스트의 대기 상태를 무해한 일반 전송으로 정리한다.
+            separatorButton.click();
+            setSimulatorHostInput('__separator_gate_test_reset__');
+            sendButton.click();
+
+            setTimeout(() => {
+                clearChatMessages();
+                setSimulatorHostInput('');
+                addChatMessage('해담분재경매장', '🧪 [2단계 가드 테스트] 최고가 15만 입찰자가 준비됐습니다.', true);
+                addChatMessage('게이트참가자', '10만');
+                addChatMessage('게이트낙찰자', '15만');
+                setTimeout(callback, 100);
+            }, 60);
+        }
+
+        function runSeparatorGateSimulation(mode) {
+            const descriptions = {
+                direct: '① 전용 버튼 없이 밑줄 문자를 직접 전송하는 중입니다…',
+                buttonOnly: '② 밑줄 버튼만 누르고 전송하지 않는 중입니다…',
+                authorized: '③ 밑줄 버튼을 누른 뒤 전송하는 중입니다…'
+            };
+            updateSeparatorGateResult('running', descriptions[mode] || '테스트 중입니다…');
+
+            prepareSeparatorGateSimulation(() => {
+                const input = document.getElementById('input');
+                const separatorButton = document.getElementById('__auction_separator_button');
+                const sendButton = document.getElementById('send-button');
+
+                if (mode === 'direct') {
+                    setSimulatorHostInput('===================');
+                    sendButton.click();
+                } else if (mode === 'buttonOnly') {
+                    separatorButton.click();
+                } else {
+                    separatorButton.click();
+                    setTimeout(() => sendButton.click(), 30);
+                }
+
+                let authorizedWaitCount = 0;
+                const evaluateResult = () => {
+                    const winner = document.querySelector('yt-live-chat-text-message-renderer.auction-winner-highlight');
+                    const inputText = (input.innerText || input.textContent || '').trim();
+                    let passed = false;
+                    let message = '';
+
+                    if (mode === 'direct') {
+                        passed = !winner && !inputText.includes('낙찰입니다');
+                        message = passed
+                            ? '✅ 통과: 밑줄 문자를 직접 전송했지만 하이라이트와 낙찰 안내가 생성되지 않았습니다.'
+                            : '❌ 실패: 전용 버튼 없이 자동 낙찰 처리가 실행됐습니다.';
+                    } else if (mode === 'buttonOnly') {
+                        passed = !winner && inputText === '===================';
+                        message = passed
+                            ? '✅ 통과: 밑줄은 입력창에만 준비됐고, 아직 낙찰 처리는 실행되지 않았습니다.'
+                            : '❌ 실패: 전송 전에 낙찰 처리가 실행됐거나 밑줄 입력에 실패했습니다.';
+                    } else {
+                        passed = !!winner && inputText.includes('@게이트낙찰자님') && inputText.includes('15만');
+                        if (!passed && authorizedWaitCount < 40) {
+                            authorizedWaitCount++;
+                            setTimeout(evaluateResult, 100);
+                            return;
+                        }
+                        message = passed
+                            ? '✅ 통과: 밑줄 버튼 + 전송을 모두 확인해 게이트낙찰자(15만)를 하이라이트하고 낙찰 안내를 입력했습니다.'
+                            : '❌ 실패: 두 조건을 모두 수행했지만 하이라이트 또는 낙찰 안내가 확인되지 않았습니다.';
+                    }
+
+                    updateSeparatorGateResult(passed ? 'pass' : 'fail', message);
+                };
+
+                setTimeout(evaluateResult, mode === 'authorized' ? 200 : 700);
+            });
         }
 
         /** 채팅창 비우기 */
@@ -1083,7 +1267,7 @@
 
             steps.forEach(step => {
                 setTimeout(() => {
-                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                    sendScenarioChatMessage(step.nick, step.msg, step.isHost || false);
                 }, step.delay);
             });
         }
@@ -1116,7 +1300,7 @@
             setTimeout(() => addChatMessage('1등선착순', '20만'), 700);
             setTimeout(() => addChatMessage('2등입찰자', '20만'), 1400);
             setTimeout(() => addChatMessage('3등입찰자', '20만'), 2100);
-            setTimeout(() => addChatMessage('해담분재경매장', '===================', true), 2900);
+            setTimeout(() => sendSeparatorFromHost(), 2900);
         }
 
         /** 4. 소수점 생략(65=6.5만 vs 7만) 스마트 문맥 보정 테스트 시나리오 */
@@ -1136,7 +1320,7 @@
 
             steps.forEach(step => {
                 setTimeout(() => {
-                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                    sendScenarioChatMessage(step.nick, step.msg, step.isHost || false);
                 }, step.delay);
             });
         }
@@ -1157,7 +1341,7 @@
 
             steps.forEach(step => {
                 setTimeout(() => {
-                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                    sendScenarioChatMessage(step.nick, step.msg, step.isHost || false);
                 }, step.delay);
             });
         }
@@ -1183,28 +1367,33 @@
 
             steps.forEach(step => {
                 setTimeout(() => {
-                    addChatMessage(step.nick, step.msg, step.isHost || false);
+                    sendScenarioChatMessage(step.nick, step.msg, step.isHost || false);
                 }, step.delay);
             });
         }
 
-        /** 7. 실시간 밑줄 등호 19개(= 19개) 엄격 판별 테스트 시나리오 */
+        /** 7. 직접 전송 차단 + 밑줄 버튼/전송 허용 종합 테스트 */
         function runStrictUnderlineScenario() {
-            addChatMessage('해담분재경매장', '📢 [밑줄 엄격 판별 검증] 실시간 환경에서는 일반 등호(예: === 3개 등)에는 마감되지 않고 오직 정확한 19개(===================)에만 자동 마감/낙찰되어야 합니다.', true);
+            const card = document.getElementById('separator-gate-test-card');
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-            const steps = [
-                { nick: '일반회원', msg: '10만', delay: 500 },
-                { nick: '참여자', msg: '12만', delay: 1100 },
-                { nick: '해담분재경매장', msg: '==== 안내사항 ====', delay: 1800, isHost: true }, // 19개 미만 -> 무시되어야 함
-                { nick: '뒤늦은입찰', msg: '15만', delay: 2500 },
-                { nick: '해담분재경매장', msg: '===================', delay: 3300, isHost: true }  // 정확히 19개 -> 정상 마감 및 15만 낙찰!
-            ];
+            runSeparatorGateSimulation('direct');
+            setTimeout(() => {
+                const result = document.getElementById('separator-gate-result');
+                const directPassed = !!(result && result.classList.contains('pass'));
 
-            steps.forEach(step => {
+                runSeparatorGateSimulation('authorized');
                 setTimeout(() => {
-                    addChatMessage(step.nick, step.msg, step.isHost || false);
-                }, step.delay);
-            });
+                    const authorizedPassed = !!(result && result.classList.contains('pass'));
+                    const passed = directPassed && authorizedPassed;
+                    updateSeparatorGateResult(
+                        passed ? 'pass' : 'fail',
+                        passed
+                            ? '✅ 종합 통과: 직접 밑줄 전송은 차단되고, 밑줄 버튼 + 전송 경로만 낙찰 처리됐습니다.'
+                            : '❌ 종합 실패: 직접 전송 차단 또는 2단계 낙찰 처리 결과를 확인해주세요.'
+                    );
+                }, 1100);
+            }, 1100);
         }
 
         /** 8. 다시보기(Replay) 환경 낙찰자 표시 & 가드 테스트 시나리오 */
@@ -1493,6 +1682,18 @@
     <!-- =========================================================
          실제 유저스크립트 엔진 로드 (독립 실행 지원)
          ========================================================= -->
-    <script src="./youtube-live-auction.user.js"></script>
+    <script>
+        // Tampermonkey가 이미 주입한 경우 로컬 스크립트를 중복 실행하지 않는다.
+        (() => {
+            if (window.__youtubeLiveAuctionInstanceActive || window.__AuctionAutomation) {
+                console.log('[Simulator] 이미 주입된 낙찰 자동화 인스턴스를 사용합니다.');
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = './youtube-live-auction.user.js';
+            script.dataset.auctionSimulatorEngine = 'true';
+            document.body.appendChild(script);
+        })();
+    </script>
 </body>
 </html>
