@@ -1537,11 +1537,63 @@
 
     // =========================================================
     // 밑줄(구분선) 메시지 감지
-    // - 실시간 라이브: [밑줄] 버튼을 통해 입력되는 정확히 등호 19개("===================") 일 때만 엄격 감지
+    // - 실시간 라이브: [밑줄] 버튼으로 등호 19개를 입력한 뒤 [전송] 버튼을 누른 경우에만 낙찰 처리
     // - 다시보기(Replay): 등호 19개 또는 등호 3개 이상(===...) 모두 지원
     // =========================================================
 
     const EXACT_AUCTION_SEPARATOR = '==================='; // 등호 19개
+    const SEPARATOR_SEND_CONFIRM_TIMEOUT_MS = 30 * 1000;
+    const _separatorSendTrackingDocs = new WeakSet();
+    let _pendingSeparatorSubmission = null;
+
+    function getChatInputText(input) {
+        if (!input) return '';
+        return String(input.innerText || input.textContent || input.value || '').trim();
+    }
+
+    function setupSeparatorSendTracking(targetDoc) {
+        if (!targetDoc || _separatorSendTrackingDocs.has(targetDoc)) return;
+
+        targetDoc.addEventListener('click', event => {
+            if (!_pendingSeparatorSubmission || _pendingSeparatorSubmission.targetDoc !== targetDoc) return;
+
+            const path = typeof event.composedPath === 'function' ? event.composedPath() : [event.target];
+            const clickedSendButton = path.some(element => {
+                if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+                if (element.id === 'send-button') return true;
+                return typeof element.closest === 'function' && !!element.closest('#send-button');
+            });
+
+            if (!clickedSendButton) return;
+
+            const pending = _pendingSeparatorSubmission;
+            if (getChatInputText(pending.input) === EXACT_AUCTION_SEPARATOR) {
+                pending.sendClickedAt = Date.now();
+                console.log(PREFIX, '밑줄 전송 버튼 확인 (자동 낙찰 처리 대기)');
+                setTimeout(() => {
+                    if (_pendingSeparatorSubmission === pending) {
+                        _pendingSeparatorSubmission = null;
+                    }
+                }, SEPARATOR_SEND_CONFIRM_TIMEOUT_MS);
+            } else {
+                _pendingSeparatorSubmission = null;
+            }
+        }, true);
+
+        _separatorSendTrackingDocs.add(targetDoc);
+    }
+
+    function consumeAuthorizedSeparatorSubmission(text, targetDoc) {
+        const pending = _pendingSeparatorSubmission;
+        if (!pending || text.trim() !== EXACT_AUCTION_SEPARATOR || pending.targetDoc !== targetDoc) return false;
+
+        const now = Date.now();
+        const authorized = !!pending.sendClickedAt &&
+            now - pending.sendClickedAt <= SEPARATOR_SEND_CONFIRM_TIMEOUT_MS;
+
+        _pendingSeparatorSubmission = null;
+        return authorized;
+    }
 
     function isSeparatorMessage(text, checkLenient = false) {
         if (!text || typeof text !== 'string') {
@@ -8991,6 +9043,14 @@ ${xmlRows.join('')}
                     EXACT_AUCTION_SEPARATOR
                 );
 
+                const currentDoc = currentInput.ownerDocument || document;
+                setupSeparatorSendTracking(currentDoc);
+                _pendingSeparatorSubmission = {
+                    input: currentInput,
+                    targetDoc: currentDoc,
+                    sendClickedAt: 0
+                };
+
                 currentInput.focus();
 
                 console.log(
@@ -9173,6 +9233,11 @@ ${xmlRows.join('')}
                                 const text = msgEl ? msgEl.textContent.trim() : '';
 
                                 if (text && isSeparatorMessage(text)) {
+                                    if (!isReplayMode() && !consumeAuthorizedSeparatorSubmission(text, doc)) {
+                                        chatItem.dataset.auctionProcessed = 'true';
+                                        console.log(PREFIX, '밑줄 버튼 + 전송 조건 불충족으로 자동 낙찰 처리 무시:', text);
+                                        return;
+                                    }
                                     console.log(PREFIX, isReplayMode() ? '다시보기 밑줄 감지:' : '실시간 새 밑줄 감지:', text);
                                     // DOM이 완전히 업데이트될 시간을 위해 미세 딜레이 후 선별 처리
                                     setTimeout(() => {
