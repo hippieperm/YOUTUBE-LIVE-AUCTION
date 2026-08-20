@@ -18,6 +18,48 @@
 
     'use strict';
 
+    const GUIDE_PANEL_MODE_STORAGE_KEY = '__auction_guide_panel_always_expanded';
+    const GUIDE_PANEL_MODE_CHANGE_CODE = '123123123';
+
+    function loadAlwaysExpandedGuidePanelMode() {
+        try {
+            const savedMode = localStorage.getItem(GUIDE_PANEL_MODE_STORAGE_KEY);
+            if (savedMode === '0') return false;
+            if (savedMode === '1') return true;
+        } catch (e) {}
+        return true;
+    }
+
+    let _isAlwaysExpandedGuidePanel = loadAlwaysExpandedGuidePanelMode();
+
+    function toggleGuidePanelMode() {
+        _isAlwaysExpandedGuidePanel = !_isAlwaysExpandedGuidePanel;
+        _isMorePanelOpen = _isAlwaysExpandedGuidePanel;
+
+        try {
+            localStorage.setItem(
+                GUIDE_PANEL_MODE_STORAGE_KEY,
+                _isAlwaysExpandedGuidePanel ? '1' : '0'
+            );
+        } catch (e) {}
+
+        removeCustomModals();
+        getTargetDocs().forEach(doc => {
+            try {
+                const panel = doc && doc.getElementById('__auction_guide_panel');
+                if (panel) panel.remove();
+            } catch (e) {}
+        });
+        createGuidePanel();
+
+        showAuctionToast(
+            _isAlwaysExpandedGuidePanel
+                ? '📂 안내 버튼을 항상 펼침으로 변경했습니다.'
+                : '📁 안내 버튼을 기존 접기 방식으로 변경했습니다.',
+            'success'
+        );
+    }
+
     const PREFIX = '[낙찰 자동화]';
 
     console.log(PREFIX, '시작');
@@ -7174,7 +7216,7 @@ ${xmlRows.join('')}
         quick.appendChild(plusOneButton); quick.appendChild(plusFiveButton); quick.appendChild(plusTenButton); modal.appendChild(quick);
         const submit=createElement('button',{type:'button',text:'📤 입력 완료',style:'width:100% !important; height:54px !important; margin-top:16px !important; border:1px solid rgba(250,204,21,.55) !important; border-radius:14px !important; background:linear-gradient(135deg,#a16207,#ca8a04) !important; color:#fff !important; font-size:16px !important; font-weight:900 !important; cursor:pointer !important;'}); modal.appendChild(submit);
         const updateMode=next=>{mode=next;Array.from(tabs.children).forEach(tab=>{const active=tab.dataset.mode===mode;tab.style.setProperty('background',active?'rgba(250,204,21,.2)':'rgba(255,255,255,.05)','important');tab.style.setProperty('border-color',active?'rgba(250,204,21,.7)':'rgba(148,163,184,.22)','important');tab.style.setProperty('color',active?'#fde047':'#cbd5e1','important');});const max=mode==='최고가';inputWrap.style.setProperty('display',max?'none':'grid','important');quick.style.display=max?'none':'grid';submit.textContent=max?'👑 최고가 입력':'📤 입력 완료';if(!max){setTimeout(()=>input.focus(),10);}};
-        const submitPrice=()=>{const value=input.value.trim();if(mode!=='최고가'&&!value){input.focus();return;}const chatInput=findChatInput();if(chatInput){setChatInput(chatInput,mode==='최고가'?'최고가':`${value}${mode==='이상'?'만이상':'만'}`);chatInput.focus();}removeCustomModals();};
+        const submitPrice=()=>{const value=input.value.trim();if(mode!=='최고가'&&!value){input.focus();return;}if(mode!=='최고가'&&value===GUIDE_PANEL_MODE_CHANGE_CODE){toggleGuidePanelMode();return;}const chatInput=findChatInput();if(chatInput){setChatInput(chatInput,mode==='최고가'?'최고가':`${value}${mode==='이상'?'만이상':'만'}`);chatInput.focus();}removeCustomModals();};
         Array.from(tabs.children).forEach(tab=>tab.addEventListener('click',e=>{e.preventDefault();if(tab.dataset.mode==='최고가'){const chatInput=findChatInput();if(chatInput){setChatInput(chatInput,'최고가');chatInput.focus();}removeCustomModals();return;}updateMode(tab.dataset.mode);setTimeout(()=>input.focus(),10);})); input.addEventListener('input',()=>{input.value=sanitizeDecimalInput(input.value);}); input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitPrice();}}); submit.addEventListener('click',submitPrice); backdrop.addEventListener('click',e=>{if(e.target===backdrop)removeCustomModals();}); modal.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();},{passive:false}); mountTarget.appendChild(backdrop);mountTarget.appendChild(modal);updateMode('일반');setTimeout(()=>input.focus(),40);
     }
 
@@ -7598,6 +7640,10 @@ ${xmlRows.join('')}
 
         const submitPrice = () => {
             const val = inputEl.value.trim();
+            if (val === GUIDE_PANEL_MODE_CHANGE_CODE) {
+                toggleGuidePanelMode();
+                return;
+            }
             if (val) {
                 const resultText = `${val}${guideSuffix}`;
                 const chatInput = findChatInput();
@@ -7685,6 +7731,8 @@ ${xmlRows.join('')}
     // =========================================================
 
     function closeMorePanel() {
+        if (_isAlwaysExpandedGuidePanel) return;
+
         _isMorePanelOpen = false;
         const docs = getTargetDocs();
         docs.forEach(doc => {
@@ -7923,7 +7971,7 @@ ${xmlRows.join('')}
     // 안내 버튼 영역 생성 (메인: 규격/가격/정사각형 토글 + 펼침: 기타 8종)
     // =========================================================
 
-    let _isMorePanelOpen = false;
+    let _isMorePanelOpen = _isAlwaysExpandedGuidePanel;
 
     // 전체 UI 공통 테마. 유튜브의 기본 스타일 변화에도 패널/모달의 인상을 일정하게 유지한다.
     function injectModernUiStyles(targetDoc = document) {
@@ -8373,7 +8421,7 @@ ${xmlRows.join('')}
             id: '__auction_more_container',
             style: `
                 width:100% !important;
-                display:${_isMorePanelOpen ? 'flex' : 'none'} !important;
+                display:${_isAlwaysExpandedGuidePanel || _isMorePanelOpen ? 'flex' : 'none'} !important;
                 flex-wrap:wrap !important;
                 gap:5px !important;
                 padding-top:2px !important;
@@ -8393,7 +8441,12 @@ ${xmlRows.join('')}
         ];
 
         moreButtons.forEach(b => {
-            const btn = createGuideButton(b.label, b.msg, null, true);
+            const btn = createGuideButton(
+                b.label,
+                b.msg,
+                null,
+                !_isAlwaysExpandedGuidePanel
+            );
             btn.style.flex = '1 1 calc(25% - 4px)';
             moreContainer.appendChild(btn);
         });
@@ -8426,9 +8479,16 @@ ${xmlRows.join('')}
         moreBtn.style.alignItems = 'center';
         moreBtn.style.justifyContent = 'center';
 
-        row1.appendChild(moreBtn);
-        panel.appendChild(row1);
-        panel.appendChild(moreContainer);
+        if (_isAlwaysExpandedGuidePanel) {
+            // 항상 펼침: 기타 안내 8종을 위에, 규격/가격 입력을 맨 아래에 배치
+            panel.appendChild(moreContainer);
+            panel.appendChild(row1);
+        } else {
+            // 기존 방식: 규격/가격/토글 행 아래에 접기/펼치기 영역 배치
+            row1.appendChild(moreBtn);
+            panel.appendChild(row1);
+            panel.appendChild(moreContainer);
+        }
 
         // =====================================================
         // 삽입 위치
