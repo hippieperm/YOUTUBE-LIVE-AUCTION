@@ -26,6 +26,41 @@
 
     const GUIDE_PANEL_MODE_STORAGE_KEY = '__auction_guide_panel_always_expanded';
     const GUIDE_PANEL_MODE_CHANGE_CODE = '123123123';
+    const SPECTATOR_MODE_STORAGE_KEY = '__auction_spectator_mode';
+    const SPECTATOR_MODE_CHANGE_CODE = '135798';
+
+    function loadSpectatorMode() {
+        try {
+            return localStorage.getItem(SPECTATOR_MODE_STORAGE_KEY) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    let _isSpectatorMode = loadSpectatorMode();
+
+    function toggleSpectatorMode(button) {
+        _isSpectatorMode = !_isSpectatorMode;
+        try {
+            localStorage.setItem(SPECTATOR_MODE_STORAGE_KEY, _isSpectatorMode ? '1' : '0');
+        } catch (e) {}
+
+        if (button) {
+            button.textContent = _isSpectatorMode ? '👀 관전자 ON' : '👀 관전자 OFF';
+            button.title = _isSpectatorMode
+                ? '관전자 모드 켜짐: 정확한 등호 19개를 전송 승인 없이 감지합니다.'
+                : '관전자 모드 꺼짐: 밑줄 버튼 + 전송이 필요합니다.';
+            button.style.borderColor = _isSpectatorMode ? 'rgba(56,189,248,.65)' : 'rgba(255,255,255,.16)';
+            button.style.color = _isSpectatorMode ? '#7dd3fc' : '#cbd5e1';
+        }
+
+        showAuctionToast(
+            _isSpectatorMode
+                ? '👀 관전자 모드 ON: 정확한 밑줄 19개를 자동 감지합니다.'
+                : '🔒 관전자 모드 OFF: 밑줄 버튼 + 전송이 필요합니다.',
+            'success'
+        );
+    }
 
     function loadAlwaysExpandedGuidePanelMode() {
         try {
@@ -7542,7 +7577,7 @@ ${xmlRows.join('')}
         plusTenButton.style.setProperty('border-color', 'rgba(167,139,250,.62)', 'important');
         plusTenButton.style.setProperty('color', '#c4b5fd', 'important');
         quick.appendChild(plusOneButton); quick.appendChild(plusFiveButton); quick.appendChild(plusTenButton); modal.appendChild(quick); modal.appendChild(tabs);
-        const submitPrice=(mode)=>{const value=input.value.trim();if(mode!=='최고가'&&!value){input.focus();return;}if(mode!=='최고가'&&value===GUIDE_PANEL_MODE_CHANGE_CODE){toggleGuidePanelMode();return;}const chatInput=findChatInput();if(chatInput){setChatInput(chatInput,mode==='최고가'?'최고가':`${value}${mode==='이상'?'만이상':'만'}`);chatInput.focus();}removeCustomModals();};
+        const submitPrice=(mode)=>{const value=input.value.trim();if(mode!=='최고가'&&!value){input.focus();return;}if(mode!=='최고가'&&value===SPECTATOR_MODE_CHANGE_CODE){toggleSpectatorMode();removeCustomModals();return;}if(mode!=='최고가'&&value===GUIDE_PANEL_MODE_CHANGE_CODE){toggleGuidePanelMode();return;}const chatInput=findChatInput();if(chatInput){setChatInput(chatInput,mode==='최고가'?'최고가':`${value}${mode==='이상'?'만이상':'만'}`);chatInput.focus();}removeCustomModals();};
         Array.from(tabs.children).forEach(tab=>tab.addEventListener('click',e=>{e.preventDefault();submitPrice(tab.dataset.mode);})); input.addEventListener('input',()=>{input.value=sanitizeDecimalInput(input.value);}); input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitPrice('일반');}}); backdrop.addEventListener('click',e=>{if(e.target===backdrop)removeCustomModals();}); modal.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();},{passive:false}); mountTarget.appendChild(backdrop);mountTarget.appendChild(modal);const modalDocument=mountTarget.ownerDocument||document;_priceModalKeydownDocument=modalDocument;_priceModalKeydownHandler=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();removeCustomModals();}};modalDocument.addEventListener('keydown',_priceModalKeydownHandler,true);setTimeout(()=>input.focus(),40);
     }
 
@@ -7964,8 +7999,13 @@ ${xmlRows.join('')}
             `
         });
 
-        const submitPrice = () => {
+        const submitPrice = (mode = '일반') => {
             const val = inputEl.value.trim();
+            if (mode !== '최고가' && val === SPECTATOR_MODE_CHANGE_CODE) {
+                toggleSpectatorMode();
+                removeCustomModals();
+                return;
+            }
             if (val === GUIDE_PANEL_MODE_CHANGE_CODE) {
                 toggleGuidePanelMode();
                 return;
@@ -7999,7 +8039,7 @@ ${xmlRows.join('')}
         inputEl.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                submitPrice();
+                submitPrice('일반');
             } else if (e.key === 'Escape') {
                 e.preventDefault();
                 removeCustomModals();
@@ -9260,7 +9300,8 @@ ${xmlRows.join('')}
                                 const text = msgEl ? msgEl.textContent.trim() : '';
 
                                 if (text && isSeparatorMessage(text)) {
-                                    if (!isReplayMode()) {
+                                    const spectatorAuthorized = _isSpectatorMode && text.trim() === EXACT_AUCTION_SEPARATOR;
+                                    if (!isReplayMode() && !spectatorAuthorized) {
                                         const alreadyAuthorized = chatItem.dataset.auctionSeparatorAuthorized === 'true';
                                         if (!alreadyAuthorized) {
                                             if (!consumeAuthorizedSeparatorSubmission(text, doc)) {
