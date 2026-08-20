@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         YouTube Live 낙찰 자동화
+// @name         해담분재경매 관리
 // @namespace    https://youtube.com/
 // @version      2.5
 // @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별 & 단일 낙찰자 채팅 하이라이터 + 스마트 입찰 금액 추출 + 가상 키패드 + 실시간 토스트 알림 + 안내 패널 + 낙찰 내역 관리 & 엑셀 다운로드 (다시보기 환경 낙찰자 추가/수정 방지)

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Live 낙찰 자동화",
+  "name": "해담분재경매 관리",
   "version": "2.5.0",
   "description": "YouTube 라이브 경매의 낙찰 처리, 안내 패널, 낙찰 내역 및 엑셀 다운로드를 자동화합니다.",
   "icons": {
@@ -10,7 +10,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "YouTube Live 낙찰 자동화",
+    "default_title": "해담분재경매 관리",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
