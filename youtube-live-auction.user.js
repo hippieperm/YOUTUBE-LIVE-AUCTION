@@ -4858,7 +4858,8 @@ ${xmlRows.join('')}
     function openAuctionModal(
         nickname,
         lastChatMessage = null,
-        targetChatItem = null
+        targetChatItem = null,
+        winnerChangeConfirmed = false
     ) {
 
         // 🛑 다시보기 환경: 낙찰 모달 팝업 및 낙찰자 추가/수정 완전 차단
@@ -5482,23 +5483,51 @@ ${xmlRows.join('')}
             { label: '1', value: '1', type: 'num' },
             { label: '2', value: '2', type: 'num' },
             { label: '3', value: '3', type: 'num' },
-            { label: '+1', value: '+1', type: 'fn', amount: 1 },
+            { label: '+1', value: '+1', type: 'fn', amount: 1, tone: 'plus1' },
 
             { label: '4', value: '4', type: 'num' },
             { label: '5', value: '5', type: 'num' },
             { label: '6', value: '6', type: 'num' },
-            { label: '+5', value: '+5', type: 'fn', amount: 5 },
+            { label: '+5', value: '+5', type: 'fn', amount: 5, tone: 'plus5' },
 
             { label: '7', value: '7', type: 'num' },
             { label: '8', value: '8', type: 'num' },
             { label: '9', value: '9', type: 'num' },
-            { label: '+10', value: '+10', type: 'fn', amount: 10 },
+            { label: '+10', value: '+10', type: 'fn', amount: 10, tone: 'plus10' },
 
             { label: '.', value: '.', type: 'dot' },
             { label: '0', value: '0', type: 'num' },
             { label: '⌫', value: 'backspace', type: 'del' },
-            { label: 'C', value: 'clear', type: 'clear' }
+            { label: '-1', value: '-1', type: 'fn', amount: -1, tone: 'minus1' }
         ];
+
+
+        const keypadToneStyles = {
+            minus1: {
+                bg: '#2c1520',
+                hoverBg: '#3b1b29',
+                border: '#a73f47',
+                color: '#f99294'
+            },
+            plus1: {
+                bg: '#102b25',
+                hoverBg: '#163b32',
+                border: '#2d914f',
+                color: '#77ef9c'
+            },
+            plus5: {
+                bg: '#312c1e',
+                hoverBg: '#443b25',
+                border: '#ac8917',
+                color: '#fce278'
+            },
+            plus10: {
+                bg: '#201b44',
+                hoverBg: '#2c265d',
+                border: '#6950b4',
+                color: '#b7a2fc'
+            }
+        };
 
 
         keypadButtons.forEach(btnInfo => {
@@ -5510,18 +5539,29 @@ ${xmlRows.join('')}
                 btnInfo.type === 'del' ||
                 btnInfo.type === 'clear';
 
+            const toneStyle =
+                btnInfo.tone
+                    ? keypadToneStyles[btnInfo.tone]
+                    : null;
+
             let bg =
-                isFn
+                toneStyle
+                    ? toneStyle.bg
+                    : isFn
                     ? 'rgba(255,204,0,.11)'
                     : (isDelOrClear ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.07)');
 
             let border =
-                isFn
+                toneStyle
+                    ? toneStyle.border
+                    : isFn
                     ? 'rgba(255,204,0,.22)'
                     : 'rgba(255,255,255,.08)';
 
             let color =
-                isFn
+                toneStyle
+                    ? toneStyle.color
+                    : isFn
                     ? '#ffcc00'
                     : (isDelOrClear ? 'rgba(255,255,255,.65)' : '#fff');
 
@@ -5582,7 +5622,9 @@ ${xmlRows.join('')}
                 'mouseenter',
                 function () {
                     btn.style.background =
-                        isFn
+                        toneStyle
+                            ? toneStyle.hoverBg
+                            : isFn
                             ? 'rgba(255,204,0,.22)'
                             : 'rgba(255,255,255,.14)';
                 }
@@ -5631,7 +5673,7 @@ ${xmlRows.join('')}
                         input.value = '';
                     } else if (btnInfo.type === 'fn') {
                         const current = parseFloat(input.value) || 0;
-                        const nextVal = Math.round((current + btnInfo.amount) * 100) / 100;
+                        const nextVal = Math.max(0, Math.round((current + btnInfo.amount) * 100) / 100);
                         input.value = String(nextVal);
                     }
 
@@ -5873,7 +5915,7 @@ ${xmlRows.join('')}
 
             // 🛑 [같은 블록 내 낙찰자 변경 확인 (가상 키패드 제출)]
             const existingWinner = getExistingWinnerInBlock(targetChatItem, document);
-            if (existingWinner && (existingWinner.element !== targetChatItem || (nickname && existingWinner.nickname && existingWinner.nickname.trim() !== nickname.trim()))) {
+            if (!winnerChangeConfirmed && existingWinner && (existingWinner.element !== targetChatItem || (nickname && existingWinner.nickname && existingWinner.nickname.trim() !== nickname.trim()))) {
                 const prevLabel = existingWinner.nickname ? `@${existingWinner.nickname}님${existingWinner.price ? ` (${existingWinner.price}만)` : ''}` : '기존 낙찰자';
                 const newLabel = nickname ? `@${nickname}님 (${price}만)` : `${price}만`;
                 const confirmChange = `[낙찰자 변경 확인]\n현재 경매 회차에 이미 낙찰자가 선정되어 있습니다.\n\n- 기존 낙찰자: ${prevLabel}\n- 변경할 낙찰자: ${newLabel}\n\n정말 낙찰자를 변경하시겠습니까?`;
@@ -6654,6 +6696,7 @@ ${xmlRows.join('')}
 
         // 🛑 [같은 블록 내 낙찰자 변경 확인 알림창]
         const existingWinner = getExistingWinnerInBlock(chatItem, event.target.ownerDocument || document);
+        let winnerChangeConfirmed = false;
         if (existingWinner && (existingWinner.element !== chatItem || (nickname && existingWinner.nickname && existingWinner.nickname.trim() !== nickname.trim()))) {
             const prevLabel = existingWinner.nickname ? `@${existingWinner.nickname}님${existingWinner.price ? ` (${existingWinner.price}만)` : ''}` : '기존 낙찰자';
             const newLabel = parsedPrice
@@ -6663,6 +6706,7 @@ ${xmlRows.join('')}
             if (!confirm(confirmChange)) {
                 return;
             }
+            winnerChangeConfirmed = true;
         }
 
         if (parsedPrice) {
@@ -6718,7 +6762,8 @@ ${xmlRows.join('')}
             openAuctionModal(
                 nickname,
                 lastChatMessage,
-                chatItem
+                chatItem,
+                winnerChangeConfirmed
             );
         }
     }
