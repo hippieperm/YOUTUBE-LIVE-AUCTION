@@ -2315,15 +2315,17 @@
             return;
         }
 
-        // 중복 처리 방지 마킹
-        separatorEl.dataset.auctionProcessed = 'true';
-
         const winner = findTopBidAboveSeparator(separatorEl, targetDoc);
 
         if (!winner) {
             console.log(PREFIX, '밑줄 감지: 유효 입찰자 없음');
+            // YouTube가 작성자/메시지 DOM을 늦게 채우는 경우 다음 mutation에서 재시도한다.
+            delete separatorEl.dataset.auctionProcessingScheduled;
             return;
         }
+
+        // 최고가 입찰자를 찾은 뒤에만 완료 처리하여 조기 DOM 스냅샷으로 영구 누락되지 않게 한다.
+        separatorEl.dataset.auctionProcessed = 'true';
 
         console.log(
             PREFIX,
@@ -9441,6 +9443,40 @@ ${xmlRows.join('')}
 
     const _activeChatObservers = new WeakMap();
 
+    const CHAT_ITEM_SELECTOR =
+        'yt-live-chat-text-message-renderer, ' +
+        'yt-live-chat-paid-message-renderer, ' +
+        'yt-live-chat-membership-item-renderer';
+
+    function collectChatItemsFromMutation(mutation) {
+        const items = new Set();
+        const addNode = node => {
+            if (!node) return;
+
+            const element = node.nodeType === Node.TEXT_NODE
+                ? node.parentElement
+                : node;
+            if (!element) return;
+
+            if (typeof element.matches === 'function' && element.matches(CHAT_ITEM_SELECTOR)) {
+                items.add(element);
+            }
+
+            if (typeof element.closest === 'function') {
+                const parentItem = element.closest(CHAT_ITEM_SELECTOR);
+                if (parentItem) items.add(parentItem);
+            }
+
+            if (typeof element.querySelectorAll === 'function') {
+                element.querySelectorAll(CHAT_ITEM_SELECTOR).forEach(item => items.add(item));
+            }
+        };
+
+        addNode(mutation.target);
+        mutation.addedNodes.forEach(addNode);
+        return Array.from(items);
+    }
+
     function setupChatObserver() {
         const docs = getTargetDocs();
 
@@ -9468,64 +9504,48 @@ ${xmlRows.join('')}
                     }
 
                     mutations.forEach(mutation => {
-                        mutation.addedNodes.forEach(node => {
-                            if (!node || node.nodeType !== Node.ELEMENT_NODE) {
+                        collectChatItemsFromMutation(mutation).forEach(chatItem => {
+                            if (!chatItem || chatItem.dataset.auctionProcessed === 'true') {
                                 return;
                             }
 
-                            let chatItem = null;
-                            if (
-                                typeof node.matches === 'function' &&
-                                node.matches(
-                                    'yt-live-chat-text-message-renderer, ' +
-                                    'yt-live-chat-paid-message-renderer, ' +
-                                    'yt-live-chat-membership-item-renderer'
-                                )
-                            ) {
-                                chatItem = node;
-                            } else if (typeof node.querySelector === 'function') {
-                                chatItem = node.querySelector(
-                                    'yt-live-chat-text-message-renderer, ' +
-                                    'yt-live-chat-paid-message-renderer, ' +
-                                    'yt-live-chat-membership-item-renderer'
-                                );
+                            const msgEl = chatItem.querySelector('#message');
+                            const text = msgEl ? msgEl.textContent.trim() : '';
+
+                            if (!text || !isSeparatorMessage(text)) {
+                                return;
                             }
 
-                            if (chatItem && !chatItem.dataset.auctionProcessed) {
-                                const msgEl = chatItem.querySelector('#message');
-                                const text = msgEl ? msgEl.textContent.trim() : '';
-
-                                if (text && isSeparatorMessage(text)) {
-                                    if (!isReplayMode() && !isSpectatorMode()) {
-                                        const alreadyAuthorized = chatItem.dataset.auctionSeparatorAuthorized === 'true';
-                                        if (!alreadyAuthorized) {
-                                            if (!consumeAuthorizedSeparatorSubmission(text, doc)) {
-                                                chatItem.dataset.auctionProcessed = 'true';
-                                                console.log(PREFIX, '밑줄 버튼 + 전송 조건 불충족으로 자동 낙찰 처리 무시:', text);
-                                                return;
-                                            }
-                                            // top 페이지와 채팅 iframe의 복수 감시자가 동일한 승인 결과를 공유한다.
-                                            chatItem.dataset.auctionSeparatorAuthorized = 'true';
-                                        }
-                                    }
-                                    if (chatItem.dataset.auctionProcessingScheduled === 'true') {
+                            if (!isReplayMode() && !isSpectatorMode()) {
+                                const alreadyAuthorized = chatItem.dataset.auctionSeparatorAuthorized === 'true';
+                                if (!alreadyAuthorized) {
+                                    if (!consumeAuthorizedSeparatorSubmission(text, doc)) {
+                                        chatItem.dataset.auctionProcessed = 'true';
+                                        console.log(PREFIX, '밑줄 버튼 + 전송 조건 불충족으로 자동 낙찰 처리 무시:', text);
                                         return;
                                     }
-                                    chatItem.dataset.auctionProcessingScheduled = 'true';
-                                    console.log(PREFIX, isReplayMode() ? '다시보기 밑줄 감지:' : '실시간 새 밑줄 감지:', text);
-                                    // DOM이 완전히 업데이트될 시간을 위해 미세 딜레이 후 선별 처리
-                                    setTimeout(() => {
-                                        processSeparatorElement(chatItem, doc);
-                                    }, 80);
+                                    // top 페이지와 채팅 iframe의 복수 감시자가 동일한 승인 결과를 공유한다.
+                                    chatItem.dataset.auctionSeparatorAuthorized = 'true';
                                 }
                             }
+
+                            if (chatItem.dataset.auctionProcessingScheduled === 'true') {
+                                return;
+                            }
+                            chatItem.dataset.auctionProcessingScheduled = 'true';
+                            console.log(PREFIX, isReplayMode() ? '다시보기 밑줄 감지:' : '실시간 새 밑줄 감지:', text);
+                            // YouTube가 작성자/메시지 텍스트를 비동기로 채우는 경우까지 기다린다.
+                            setTimeout(() => {
+                                processSeparatorElement(chatItem, doc);
+                            }, 120);
                         });
                     });
                 });
 
                 observer.observe(container, {
                     childList: true,
-                    subtree: true
+                    subtree: true,
+                    characterData: true
                 });
 
                 _activeChatObservers.set(container, observer);
