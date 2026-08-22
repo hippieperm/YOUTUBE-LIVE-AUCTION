@@ -2327,23 +2327,31 @@
         // 최고가 입찰자를 찾은 뒤에만 완료 처리하여 조기 DOM 스냅샷으로 영구 누락되지 않게 한다.
         separatorEl.dataset.auctionProcessed = 'true';
 
+        // 최종 보정된 숫자값을 표시용 금액의 단일 기준으로 사용한다.
+        // 하이라이트는 보정값을 쓰고 안내문은 원본 priceStr을 쓰는 불일치를 방지한다.
+        const winnerPriceStr = normalizePrice(winner.price);
+        const consistentWinner = {
+            ...winner,
+            priceStr: winnerPriceStr || winner.priceStr
+        };
+
         console.log(
             PREFIX,
             '🎯 밑줄 위 최고가 자동 선별 성공:',
-            winner.nickname,
-            winner.priceStr + '만',
-            '(원문:', winner.originalChat + ')'
+            consistentWinner.nickname,
+            consistentWinner.priceStr + '만',
+            '(원문:', consistentWinner.originalChat + ')'
         );
 
         // 🛑 관전자/다시보기 환경: 하이라이트만 적용하고 입력창·낙찰내역은 건드리지 않는다.
         if (isSpectatorMode() || isReplayMode()) {
-            highlightWinnerChatMessage(winner.element, winner, targetDoc);
+            highlightWinnerChatMessage(consistentWinner.element, consistentWinner, targetDoc);
             return;
         }
 
         removeAuctionUI();
 
-        const message = createMessage(winner.nickname, winner.priceStr);
+        const message = createMessage(consistentWinner.nickname, consistentWinner.priceStr);
         const input = findChatInput();
 
         if (input) {
@@ -2357,15 +2365,15 @@
         // 낙찰 내역 기록 (밑줄 자동 감지 고유 키 부여)
         const blockKey = `auto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
         addBidRecord(
-            winner.nickname,
-            winner.priceStr,
-            winner.originalChat || '',
+            consistentWinner.nickname,
+            consistentWinner.priceStr,
+            consistentWinner.originalChat || '',
             message,
             blockKey
         );
 
         // 🏆 채팅창에서 최고가 낙찰자 하이라이트 적용
-        highlightWinnerChatMessage(winner.element, winner, targetDoc);
+        highlightWinnerChatMessage(consistentWinner.element, consistentWinner, targetDoc);
     }
 
 
