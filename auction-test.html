@@ -680,6 +680,47 @@
                 </div>
             </div>
 
+            <!-- 소수점 버튼 전용 테스트 -->
+            <div class="section-card" id="decimal-button-test-card">
+                <div class="section-title">🔵 소수점 버튼 전용 테스트</div>
+                <div class="section-desc">
+                    각 버튼은 낙찰 템플릿을 채팅 입력칸에 넣은 뒤,
+                    실제 <strong>[소수점]</strong> 버튼을 눌러 결과를 자동 검증합니다.
+                </div>
+                <div class="btn-group" style="gap: 7px;">
+                    <button class="sim-btn primary" onclick="runDecimalButtonTest('twoDigitToPoint')">
+                        <span>① 65만 → 6.5만</span>
+                    </button>
+                    <button class="sim-btn primary" onclick="runDecimalButtonTest('pointToTwoDigit')">
+                        <span>② 6.5만 → 65만</span>
+                    </button>
+                    <button class="sim-btn gold" onclick="runDecimalButtonTest('threeDigitToPoint')">
+                        <span>③ 275만 → 27.5만</span>
+                    </button>
+                    <button class="sim-btn gold" onclick="runDecimalButtonTest('pointToThreeDigit')">
+                        <span>④ 27.5만 → 275만</span>
+                    </button>
+                    <button class="sim-btn green" onclick="runDecimalButtonTest('recover2223')">
+                        <span>⑤ 0.2223만 → 2223만</span>
+                    </button>
+                    <button class="sim-btn green" onclick="runDecimalButtonTest('recover2555')">
+                        <span>⑥ 0.2555만 → 2555만</span>
+                    </button>
+                    <button class="sim-btn" onclick="runDecimalButtonTest('keepHalf')">
+                        <span>⑦ 0.5만 유지</span>
+                    </button>
+                    <button class="sim-btn" onclick="runDecimalButtonTest('keepThirtyFive')">
+                        <span>⑧ 0.35만 유지</span>
+                    </button>
+                    <button class="sim-btn red" onclick="runDecimalButtonTest('notTemplate')">
+                        <span>⑨ 템플릿 외 문구 유지</span>
+                    </button>
+                </div>
+                <div id="decimal-button-test-result" class="separator-gate-result">
+                    테스트를 선택하면 실제 소수점 버튼의 변환 결과가 여기에 표시됩니다.
+                </div>
+            </div>
+
             <!-- [미사용 주석 처리] 낙찰 내역 & 더미데이터 관리
             <div class="section-card">
                 <div class="section-title">📋 낙찰 내역 & 더미데이터 관리</div>
@@ -922,6 +963,102 @@
             }
             input.focus();
             return true;
+        }
+
+        const DECIMAL_BUTTON_TEST_CASES = {
+            twoDigitToPoint: {
+                label: '65만 → 6.5만',
+                input: '👉 @입찰왕님 65만 낙찰입니다. 감사합니다😄',
+                expected: '👉 @입찰왕님 6.5만 낙찰입니다. 감사합니다😄'
+            },
+            pointToTwoDigit: {
+                label: '6.5만 → 65만',
+                input: '👉 @입찰왕님 6.5만 낙찰입니다. 감사합니다😄',
+                expected: '👉 @입찰왕님 65만 낙찰입니다. 감사합니다😄'
+            },
+            threeDigitToPoint: {
+                label: '275만 → 27.5만',
+                input: '👉 @입찰왕님 275만 낙찰입니다. 감사합니다😄',
+                expected: '👉 @입찰왕님 27.5만 낙찰입니다. 감사합니다😄'
+            },
+            pointToThreeDigit: {
+                label: '27.5만 → 275만',
+                input: '👉 @입찰왕님 27.5만 낙찰입니다. 감사합니다😄',
+                expected: '👉 @입찰왕님 275만 낙찰입니다. 감사합니다😄'
+            },
+            recover2223: {
+                label: '0.2223만 → 2223만',
+                input: '👉 @입찰왕님 0.2223만 낙찰입니다. 감사합니다😄',
+                expected: '👉 @입찰왕님 2223만 낙찰입니다. 감사합니다😄'
+            },
+            recover2555: {
+                label: '0.2555만 → 2555만',
+                input: '👉 @입찰왕님 0.2555만 낙찰입니다. 감사합니다😄',
+                expected: '👉 @입찰왕님 2555만 낙찰입니다. 감사합니다😄'
+            },
+            keepHalf: {
+                label: '0.5만 유지',
+                input: '👉 @입찰왕님 0.5만 낙찰입니다. 감사합니다😄',
+                expected: '👉 @입찰왕님 0.5만 낙찰입니다. 감사합니다😄'
+            },
+            keepThirtyFive: {
+                label: '0.35만 유지',
+                input: '👉 @입찰왕님 0.35만 낙찰입니다. 감사합니다😄',
+                expected: '👉 @입찰왕님 0.35만 낙찰입니다. 감사합니다😄'
+            },
+            notTemplate: {
+                label: '템플릿 외 문구 유지',
+                input: '275만 일반 메모',
+                expected: '275만 일반 메모'
+            }
+        };
+
+        function getSimulatorHostInputText() {
+            const input = document.getElementById('input');
+            return input
+                ? (input.innerText || input.textContent || '').trim()
+                : '';
+        }
+
+        function updateDecimalButtonTestResult(state, message) {
+            const result = document.getElementById('decimal-button-test-result');
+            if (!result) return;
+            result.className = `separator-gate-result ${state || ''}`.trim();
+            result.textContent = message;
+        }
+
+        function runDecimalButtonTest(testId) {
+            const testCase = DECIMAL_BUTTON_TEST_CASES[testId];
+            const decimalButton = document.getElementById('__auction_decimal_button');
+
+            if (!testCase) {
+                updateDecimalButtonTestResult('fail', '❌ 알 수 없는 소수점 버튼 테스트입니다.');
+                return;
+            }
+
+            if (!decimalButton) {
+                updateDecimalButtonTestResult('fail', '❌ 유저스크립트의 소수점 버튼을 찾지 못했습니다. 엔진 로드 후 다시 시도해주세요.');
+                return;
+            }
+
+            updateDecimalButtonTestResult('running', `⏳ ${testCase.label} 테스트 중… 입력칸에 템플릿을 넣고 실제 소수점 버튼을 누릅니다.`);
+            setSimulatorHostInput(testCase.input);
+
+            setTimeout(() => {
+                decimalButton.click();
+
+                setTimeout(() => {
+                    const actual = getSimulatorHostInputText();
+                    const passed = actual === testCase.expected;
+                    const status = passed ? 'pass' : 'fail';
+                    const prefix = passed ? '✅ 통과' : '❌ 실패';
+
+                    updateDecimalButtonTestResult(
+                        status,
+                        `${prefix}: ${testCase.label}\n결과: ${actual || '(비어 있음)'}`
+                    );
+                }, 60);
+            }, 30);
         }
 
         /** 진행자 밑줄을 실제 [밑줄] 버튼 -> [전송] 경로로 전송 */
