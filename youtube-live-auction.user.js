@@ -8764,6 +8764,9 @@ ${xmlRows.join('')}
 
             const separatorButton = doc.getElementById('__auction_separator_button');
             if (separatorButton) updateSeparatorButtonState(separatorButton);
+
+            const decimalButton = doc.getElementById('__auction_decimal_button');
+            if (decimalButton) updateDecimalButtonState(decimalButton);
         });
     }
 
@@ -9092,8 +9095,186 @@ ${xmlRows.join('')}
 
 
     // =========================================================
-    // 밑줄 버튼
+    // 채팅 입력 보조 버튼
     // =========================================================
+
+    function updateDecimalButtonState(button) {
+        if (!button) return;
+
+        const spectator = isSpectatorMode();
+        button.disabled = spectator;
+        button.title = spectator
+            ? '관전자 모드에서는 금액을 수정할 수 없습니다.'
+            : '낙찰 템플릿 금액의 소수점을 넣거나 뺍니다.';
+        button.setAttribute('aria-label', button.title);
+        button.style.opacity = spectator ? '.45' : '1';
+        button.style.cursor = spectator ? 'not-allowed' : 'pointer';
+    }
+
+    function toggleTemplateAmountDecimal(message) {
+        if (!message || typeof message !== 'string') {
+            return null;
+        }
+
+        // 자동 낙찰 템플릿의 금액만 양방향으로 변환한다.
+        // 예: "65만" ↔ "6.5만", "275만" ↔ "27.5만"
+        return message.replace(
+            /(\d+)(?:\.(\d+))?만(?=\s*낙찰입니다\.)/,
+            (fullMatch, whole, decimal) => {
+                // 소수점이 있으면 점을 빼서 축약 표기로 되돌린다.
+                if (decimal !== undefined) {
+                    return whole === '0'
+                        ? fullMatch
+                        : `${whole}${decimal}만`;
+                }
+
+                // 정수는 두 자리부터 마지막 자리를 소수 첫째 자리로 옮긴다.
+                if (whole.length < 2) {
+                    return fullMatch;
+                }
+
+                return `${whole.slice(0, -1)}.${whole.slice(-1)}만`;
+            }
+        );
+    }
+
+    function createDecimalButton() {
+
+        const input =
+            findChatInput();
+
+        if (!input) {
+            return;
+        }
+
+        const targetDoc =
+            input.ownerDocument ||
+            document;
+
+        const existingButtons =
+            targetDoc.querySelectorAll(
+                '#__auction_decimal_button'
+            );
+
+        if (existingButtons.length > 0) {
+            for (let i = 1; i < existingButtons.length; i++) {
+                existingButtons[i].remove();
+            }
+
+            const existingButton = existingButtons[0];
+            if (input.parentElement && existingButton.parentElement === input.parentElement) {
+                input.parentElement.insertBefore(existingButton, input);
+            }
+            updateDecimalButtonState(existingButton);
+            return;
+        }
+
+        const parent =
+            input.parentElement;
+
+        if (!parent) {
+            return;
+        }
+
+        const button =
+            createElement(
+                'button',
+                {
+                    id:
+                        '__auction_decimal_button',
+
+                    type:
+                        'button',
+
+                    text:
+                        '소수점',
+
+                    style: `
+                        flex-shrink:0 !important;
+                        width:48px !important;
+                        min-width:48px !important;
+                        height:32px !important;
+                        padding:0 !important;
+                        margin:0 6px 0 0 !important;
+                        box-sizing:border-box !important;
+                        border:1px solid rgba(96,165,250,.42) !important;
+                        border-radius:8px !important;
+                        background:rgba(59,130,246,.15) !important;
+                        color:#bfdbfe !important;
+                        cursor:pointer !important;
+                        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif !important;
+                        font-size:11px !important;
+                        font-weight:700 !important;
+                        line-height:32px !important;
+                        text-align:center !important;
+                        white-space:nowrap !important;
+                        transition:background .15s ease,border-color .15s ease,color .15s ease,transform .08s ease !important;
+                    `
+                }
+            );
+
+        button.addEventListener(
+            'mouseenter',
+            function () {
+                if (button.disabled) return;
+                button.style.background = 'rgba(59,130,246,.27)';
+                button.style.borderColor = 'rgba(147,197,253,.7)';
+                button.style.color = '#eff6ff';
+            }
+        );
+
+        button.addEventListener(
+            'mouseleave',
+            function () {
+                button.style.background = 'rgba(59,130,246,.15)';
+                button.style.borderColor = 'rgba(96,165,250,.42)';
+                button.style.color = '#bfdbfe';
+            }
+        );
+
+        button.addEventListener(
+            'click',
+            function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (isSpectatorMode()) {
+                    return;
+                }
+
+                const currentInput =
+                    findChatInput();
+
+                if (!currentInput) {
+                    console.warn(PREFIX, '채팅 입력창을 찾지 못했습니다.');
+                    return;
+                }
+
+                const currentMessage =
+                    currentInput.textContent ||
+                    '';
+
+                const convertedMessage =
+                    toggleTemplateAmountDecimal(currentMessage);
+
+                if (!convertedMessage || convertedMessage === currentMessage) {
+                    console.log(PREFIX, '소수점 전환 대상인 낙찰 템플릿 금액이 없습니다.');
+                    return;
+                }
+
+                setChatInput(currentInput, convertedMessage);
+                currentInput.focus();
+
+                console.log(PREFIX, '낙찰 템플릿 금액 소수점 전환 완료:', convertedMessage);
+            }
+        );
+
+        // 입력창 바로 앞에 넣어 채팅 입력칸의 맨 왼쪽을 유지한다.
+        parent.insertBefore(button, input);
+        updateDecimalButtonState(button);
+
+        console.log(PREFIX, '소수점 버튼 생성 완료');
+    }
 
     function updateSeparatorButtonState(button) {
         if (!button) return;
@@ -9418,6 +9599,17 @@ ${xmlRows.join('')}
             }
         }
 
+        const existingDecimalButtons =
+            targetDoc.querySelectorAll(
+                '#__auction_decimal_button'
+            );
+
+        if (existingDecimalButtons.length > 1) {
+            for (let i = 1; i < existingDecimalButtons.length; i++) {
+                existingDecimalButtons[i].remove();
+            }
+        }
+
         const guidePanel =
             targetDoc.getElementById(
                 '__auction_guide_panel'
@@ -9428,9 +9620,15 @@ ${xmlRows.join('')}
                 '__auction_separator_button'
             );
 
+        const decimalButton =
+            targetDoc.getElementById(
+                '__auction_decimal_button'
+            );
+
         if (
             guidePanel &&
-            separatorButton
+            separatorButton &&
+            decimalButton
         ) {
             return;
         }
@@ -9441,6 +9639,10 @@ ${xmlRows.join('')}
 
         if (!separatorButton) {
             createSeparatorButton();
+        }
+
+        if (!decimalButton) {
+            createDecimalButton();
         }
     }
 
