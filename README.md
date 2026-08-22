@@ -42,6 +42,7 @@
 ## 🌐 확장프로그램 ON/OFF
 
 - 🔧 `chrome://extensions/`
+- 🔧 `chrome://extensions/?id=ocgmdjppefohanobpkgefbpapclgmkca`
 - 📦 **“해담분재경매 관리”** 확장프로그램
 - 🔘 **ON/OFF 가능**
 
