@@ -1434,24 +1434,26 @@
             } : null;
         }
 
-        // 7. 천 단위 4자리 숫자 (예: "5000", "3000", "3500", "7500" -> 0.5, 0.3, 0.35, 0.75)
-        const fourDigitChonMatch =
+        // 7. 단위 없는 4자리 숫자는 고가 경매의 만원 표기와 원 단위 표기가 겹친다.
+        // 문맥이 있는 단계에서 1000만대 또는 0.x만으로 확정한다.
+        const fourDigitAmbiguousMatch =
             clean.match(
                 /(?:^|[^\d.])([1-9]\d{3})(?:[^\d.]|$)/
             );
 
-        if (fourDigitChonMatch) {
+        if (fourDigitAmbiguousMatch) {
             const num =
-                parseFloat(fourDigitChonMatch[1]);
-            const pStr = normalizePrice(num / 10000);
+                parseFloat(fourDigitAmbiguousMatch[1]);
+            const pStr = normalizePrice(num);
             return pStr ? {
                 priceStr: pStr,
                 priceNum: parseFloat(pStr),
                 rawNum: num,
                 hasExplicitUnit: false,
-                isRawInteger: false,
+                isRawInteger: true,
                 isPointNumber: isPointNumber,
-                isChonUnit: true
+                isChonUnit: false,
+                isAmbiguousFourDigit: true
             } : null;
         }
 
@@ -1483,7 +1485,38 @@
     /** 스마트 금액 파싱 (문자열 반환) */
     function parseBidPrice(text) {
         const detail = parseBidPriceDetail(text);
-        return detail ? detail.priceStr : null;
+        if (!detail) {
+            return null;
+        }
+
+        // 문맥 없는 네 자리 숫자는 원 단위로 안전하게 처리한다.
+        return detail.isAmbiguousFourDigit
+            ? normalizePrice(detail.rawNum / 10000)
+            : detail.priceStr;
+    }
+
+    function hasHighValueAuctionContext(items, currentItem = null) {
+        if (!items || !items.length) {
+            return false;
+        }
+
+        return items.some(item => {
+            if (!item || item === currentItem) {
+                return false;
+            }
+
+            const messageEl = item.querySelector('#message');
+            const message = messageEl ? messageEl.textContent.trim() : '';
+            const detail = parseBidPriceDetail(message);
+
+            // "1000만", "2555만", "1억"처럼 단위가 명시된 이전 금액만
+            // 고가 경매의 확실한 기준으로 사용한다.
+            return !!(
+                detail &&
+                detail.hasExplicitUnit &&
+                detail.priceNum >= 1000
+            );
+        });
     }
 
     /**
@@ -1496,6 +1529,19 @@
         if (!text) return null;
         const detail = parseBidPriceDetail(text);
         if (!detail) return null;
+
+        if (detail.isAmbiguousFourDigit) {
+            const blockItems = element
+                ? getAuctionBlockItems(element, element.ownerDocument || document)
+                : [];
+            const isHighValueAuction = hasHighValueAuctionContext(blockItems, element);
+
+            // 고가 문맥이 없으면 "5000"은 5천원, 즉 0.5만으로 본다.
+            // 경매 첫 채팅에서 고가를 입력할 때는 "2555만"처럼 단위를 붙인다.
+            return isHighValueAuction
+                ? detail.priceStr
+                : normalizePrice(detail.rawNum / 10000);
+        }
 
         // 단위가 이미 명시되어 있거나 소수점이 있는 경우 그대로 반환
         if (detail.hasExplicitUnit || !detail.isRawInteger) {
@@ -1837,6 +1883,11 @@
             return null;
         }
 
+        // 진행자의 시작가 안내를 포함해, "1000만" 이상의 명시적 금액이 있으면
+        // 이 회차의 단위 없는 네 자리 숫자는 고가 입찰로 확정한다.
+        const isHighValueAuction =
+            hasHighValueAuctionContext(targetItems);
+
         // 2단계: 경매 블록 내 호가 문맥 분석 (Context Scale Analysis)
         // 10 미만 명확한 입찰가 (1 ~ 9.9만, 예: 5, 6, 6.5, 7, .5, 3.5 등) 및 10 이상 입찰가 수집
         const underTenBids = [];
@@ -1887,8 +1938,18 @@
             if (!b.detail.hasExplicitUnit && b.detail.isRawInteger) {
                 const raw = b.detail.rawNum;
 
+                // [케이스 0] 4자리 숫자: 고가 문맥이 없으면 원 단위로 확정
+                // (예: 5000 -> 0.5만, 3500 -> 0.35만)
+                if (b.detail.isAmbiguousFourDigit && !isHighValueAuction) {
+                    finalPrice = raw / 10000;
+                    finalPriceStr = normalizePrice(finalPrice);
+                    console.log(
+                        PREFIX,
+                        `💡 [문맥 보정 (4자리/원 단위)] "${b.originalChat}" (${raw}) ➔ ${finalPriceStr}만 으로 자동 보정됨 (작성자: ${b.nickname})`
+                    );
+                }
                 // [케이스 1] 2자리 숫자 (10~99: 29 ➔ 2.9만, 27 ➔ 2.7만, 65 ➔ 6.5만 등): 10미만 경매에서 2.9만, 6.5만 등으로 보정
-                if (raw >= 10 && raw <= 99 && isLowScaleAuction) {
+                else if (raw >= 10 && raw <= 99 && isLowScaleAuction) {
                     const candidate = raw / 10;
                     if (underTenAvg !== null && Math.abs(candidate - underTenAvg) < Math.abs(raw - underTenAvg)) {
                         finalPrice = candidate;
@@ -9105,7 +9166,7 @@ ${xmlRows.join('')}
         button.disabled = spectator;
         button.title = spectator
             ? '관전자 모드에서는 금액을 수정할 수 없습니다.'
-            : '낙찰 템플릿 금액의 소수점을 넣거나 뺍니다.';
+            : '낙찰 템플릿 금액의 소수점을 전환하거나 고가 금액을 복구합니다.';
         button.setAttribute('aria-label', button.title);
         button.style.opacity = spectator ? '.45' : '1';
         button.style.cursor = spectator ? 'not-allowed' : 'pointer';
@@ -9118,11 +9179,18 @@ ${xmlRows.join('')}
 
         // 자동 낙찰 템플릿의 금액만 양방향으로 변환한다.
         // 예: "65만" ↔ "6.5만", "275만" ↔ "27.5만"
+        // 단, 네 자리 원 단위 오인값은 "0.2223만" → "2223만"으로 복구한다.
         return message.replace(
             /(\d+)(?:\.(\d+))?만(?=\s*낙찰입니다\.)/,
             (fullMatch, whole, decimal) => {
                 // 소수점이 있으면 점을 빼서 축약 표기로 되돌린다.
                 if (decimal !== undefined) {
+                    // "2223"이 원 단위로 오인된 경우에만 고가 금액으로 바로 복구한다.
+                    // 정상 소액인 "0.5만", "0.35만" 등은 변경하지 않는다.
+                    if (whole === '0' && decimal.length === 4) {
+                        return `${decimal}만`;
+                    }
+
                     return whole === '0'
                         ? fullMatch
                         : `${whole}${decimal}만`;
