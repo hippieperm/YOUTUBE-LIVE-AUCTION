@@ -9602,6 +9602,49 @@ ${xmlRows.join('')}
         return true;
     }
 
+    function reconcileEnglishPhysicalInput(input) {
+        if (!input || !_isEnglishInputEnabled || !input.__auctionExpectedEnglishText) {
+            return false;
+        }
+
+        const expectedText = input.__auctionExpectedEnglishText;
+        const currentText = getRawChatInputText(input);
+
+        if (currentText === expectedText) {
+            input.__auctionExpectedEnglishText = '';
+            return false;
+        }
+
+        const extraText = currentText.startsWith(expectedText)
+            ? currentText.slice(expectedText.length)
+            : '';
+        if (!extraText || !/^[ㄱ-ㅎㅏ-ㅣ가-힣]+$/.test(extraText)) {
+            return false;
+        }
+
+        input.__auctionKoreanMappingUpdating = true;
+        try {
+            input.textContent = expectedText;
+            setChatInputCaretOffset(input, expectedText.length);
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType: 'insertText',
+                    data: expectedText
+                }));
+            } catch (e) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+        } finally {
+            input.__auctionKoreanMappingUpdating = false;
+            input.__auctionLastRenderedText = expectedText;
+            input.__auctionExpectedEnglishText = '';
+        }
+
+        return true;
+    }
+
     function bindEnglishPhysicalKeyboard(input) {
         if (!input || input.__auctionEnglishKeydownHandler) return;
 
@@ -9614,7 +9657,14 @@ ${xmlRows.join('')}
 
             event.preventDefault();
             event.stopPropagation();
-            insertChatInputText(input, character);
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+
+            if (insertChatInputText(input, character)) {
+                input.__auctionExpectedEnglishText = getRawChatInputText(input);
+                setTimeout(() => reconcileEnglishPhysicalInput(input), 0);
+            }
         };
 
         input.addEventListener('keydown', handler, true);
@@ -9657,6 +9707,9 @@ ${xmlRows.join('')}
         bindEnglishPhysicalKeyboard(input);
         bindChatSendButton(input);
         const handler = event => {
+            if (_isEnglishInputEnabled && reconcileEnglishPhysicalInput(input)) {
+                return;
+            }
             if ((event && event.isComposing) || input.__auctionKoreanInputComposing) return;
 
             if (input.__auctionHideAccessoriesAfterSend && getChatInputText(input)) {
