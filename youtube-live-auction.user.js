@@ -9159,10 +9159,38 @@ ${xmlRows.join('')}
     // 채팅 입력 보조 버튼
     // =========================================================
 
+    function getDecimalButtonInput(button) {
+        if (button && button.parentElement) {
+            const input = button.parentElement.querySelector(
+                'yt-live-chat-text-input-field-renderer #input, #input[contenteditable="true"]'
+            );
+            if (input) return input;
+        }
+
+        return findChatInput();
+    }
+
     function updateDecimalButtonState(button) {
         if (!button) return;
 
+        const input = getDecimalButtonInput(button);
         const spectator = isSpectatorMode();
+        const hasInputText = !!getChatInputText(input);
+
+        if (input && button.__auctionDecimalInput !== input) {
+            if (button.__auctionDecimalInput && button.__auctionDecimalInputHandler) {
+                button.__auctionDecimalInput.removeEventListener(
+                    'input',
+                    button.__auctionDecimalInputHandler
+                );
+            }
+
+            const inputHandler = () => updateDecimalButtonState(button);
+            input.addEventListener('input', inputHandler);
+            button.__auctionDecimalInput = input;
+            button.__auctionDecimalInputHandler = inputHandler;
+        }
+
         button.disabled = spectator;
         button.title = spectator
             ? '관전자 모드에서는 금액을 수정할 수 없습니다.'
@@ -9170,6 +9198,7 @@ ${xmlRows.join('')}
         button.setAttribute('aria-label', button.title);
         button.style.opacity = spectator ? '.45' : '1';
         button.style.cursor = spectator ? 'not-allowed' : 'pointer';
+        button.style.setProperty('display', hasInputText ? 'inline-flex' : 'none', 'important');
     }
 
     function toggleTemplateAmountDecimal(message) {
@@ -9270,10 +9299,13 @@ ${xmlRows.join('')}
                         background:rgba(59,130,246,.15) !important;
                         color:#bfdbfe !important;
                         cursor:pointer !important;
+                        display:inline-flex !important;
+                        align-items:center !important;
+                        justify-content:center !important;
                         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif !important;
                         font-size:11px !important;
                         font-weight:700 !important;
-                        line-height:32px !important;
+                        line-height:1 !important;
                         text-align:center !important;
                         white-space:nowrap !important;
                         transition:background .15s ease,border-color .15s ease,color .15s ease,transform .08s ease !important;
