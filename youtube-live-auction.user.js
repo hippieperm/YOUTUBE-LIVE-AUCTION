@@ -38,6 +38,7 @@
     }
 
     let _isSpectatorMode = loadSpectatorMode();
+    let _isEnglishInputEnabled = false;
 
     function isSpectatorMode() {
         return _isSpectatorMode;
@@ -8826,6 +8827,9 @@ ${xmlRows.join('')}
             const separatorButton = doc.getElementById('__auction_separator_button');
             if (separatorButton) updateSeparatorButtonState(separatorButton);
 
+            const englishButton = doc.getElementById('__auction_english_button');
+            if (englishButton) updateEnglishButtonState(englishButton);
+
             const decimalButton = doc.getElementById('__auction_decimal_button');
             if (decimalButton) updateDecimalButtonState(decimalButton);
         });
@@ -9043,6 +9047,25 @@ ${xmlRows.join('')}
             `
         });
 
+        const moreTopRow = createElement('div', {
+            style: `
+                width:100% !important;
+                display:flex !important;
+                align-items:center !important;
+                gap:5px !important;
+            `
+        });
+
+        const moreEnglishRow = createElement('div', {
+            id: '__auction_more_english_row',
+            style: `
+                width:100% !important;
+                display:flex !important;
+                align-items:center !important;
+                gap:5px !important;
+            `
+        });
+
         // 기타 영역 내 8종 안내 버튼 (클릭 시 메시지 주입 + 자동으로 기타 닫힘)
         const moreButtons = [
             { label: '👤 회원등록', msg: GUIDE_MESSAGES.member },
@@ -9055,16 +9078,25 @@ ${xmlRows.join('')}
             { label: '💰 호가 안내', msg: GUIDE_MESSAGES.price }
         ];
 
-        moreButtons.forEach(b => {
+        moreButtons.forEach((b, index) => {
             const btn = createGuideButton(
                 b.label,
                 b.msg,
                 null,
                 !_isAlwaysExpandedGuidePanel
             );
-            btn.style.flex = '1 1 calc(25% - 4px)';
-            moreContainer.appendChild(btn);
+            btn.style.setProperty('flex', '1 1 0', 'important');
+            btn.style.setProperty('min-width', '0', 'important');
+
+            if (index < 4) {
+                moreTopRow.appendChild(btn);
+            } else {
+                moreEnglishRow.appendChild(btn);
+            }
         });
+
+        moreContainer.appendChild(moreTopRow);
+        moreContainer.appendChild(moreEnglishRow);
 
         // 📁 정사각형 토글 버튼 (텍스트 없이 아이콘만)
         const moreBtn = createGuideButton(
@@ -9159,7 +9191,469 @@ ${xmlRows.join('')}
     // 채팅 입력 보조 버튼
     // =========================================================
 
-    function getDecimalButtonInput(button) {
+    const ENGLISH_TO_KOREAN_JAMO = Object.freeze({
+        r: 'ㄱ', R: 'ㄲ', s: 'ㄴ', e: 'ㄷ', E: 'ㄸ', f: 'ㄹ',
+        a: 'ㅁ', q: 'ㅂ', Q: 'ㅃ', t: 'ㅅ', T: 'ㅆ', d: 'ㅇ',
+        w: 'ㅈ', W: 'ㅉ', c: 'ㅊ', z: 'ㅋ', x: 'ㅌ', v: 'ㅍ', g: 'ㅎ',
+        k: 'ㅏ', K: 'ㅏ', o: 'ㅐ', O: 'ㅒ', i: 'ㅑ', I: 'ㅑ',
+        j: 'ㅓ', J: 'ㅓ', p: 'ㅔ', P: 'ㅖ', u: 'ㅕ', U: 'ㅕ',
+        h: 'ㅗ', H: 'ㅗ', y: 'ㅛ', Y: 'ㅛ', n: 'ㅜ', N: 'ㅜ',
+        b: 'ㅠ', B: 'ㅠ', m: 'ㅡ', M: 'ㅡ', l: 'ㅣ', L: 'ㅣ'
+    });
+
+    const KOREAN_JAMO_TO_ENGLISH = Object.freeze({
+        'ㄱ': 'r', 'ㄲ': 'R', 'ㄴ': 's', 'ㄷ': 'e', 'ㄸ': 'E', 'ㄹ': 'f',
+        'ㅁ': 'a', 'ㅂ': 'q', 'ㅃ': 'Q', 'ㅅ': 't', 'ㅆ': 'T', 'ㅇ': 'd',
+        'ㅈ': 'w', 'ㅉ': 'W', 'ㅊ': 'c', 'ㅋ': 'z', 'ㅌ': 'x', 'ㅍ': 'v', 'ㅎ': 'g',
+        'ㅏ': 'k', 'ㅐ': 'o', 'ㅑ': 'i', 'ㅒ': 'O', 'ㅓ': 'j', 'ㅔ': 'p',
+        'ㅕ': 'u', 'ㅖ': 'P', 'ㅗ': 'h', 'ㅘ': 'hk', 'ㅙ': 'ho', 'ㅚ': 'hl',
+        'ㅛ': 'y', 'ㅜ': 'n', 'ㅝ': 'nj', 'ㅞ': 'np', 'ㅟ': 'nl', 'ㅠ': 'b',
+        'ㅡ': 'm', 'ㅢ': 'ml', 'ㅣ': 'l',
+        'ㄳ': 'rt', 'ㄵ': 'sw', 'ㄶ': 'sg', 'ㄺ': 'fr', 'ㄻ': 'fa',
+        'ㄼ': 'fq', 'ㄽ': 'ft', 'ㄾ': 'fx', 'ㄿ': 'fv', 'ㅀ': 'fg', 'ㅄ': 'qt'
+    });
+
+    const HANGUL_INITIALS = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+    const HANGUL_VOWELS = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ';
+    const HANGUL_FINALS = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+
+    const HANGUL_COMBINED_VOWELS = Object.freeze({
+        'ㅗㅏ': 'ㅘ', 'ㅗㅐ': 'ㅙ', 'ㅗㅣ': 'ㅚ',
+        'ㅜㅓ': 'ㅝ', 'ㅜㅔ': 'ㅞ', 'ㅜㅣ': 'ㅟ',
+        'ㅡㅣ': 'ㅢ'
+    });
+
+    const HANGUL_COMBINED_FINALS = Object.freeze({
+        'ㄱㅅ': 'ㄳ', 'ㄴㅈ': 'ㄵ', 'ㄴㅎ': 'ㄶ',
+        'ㄹㄱ': 'ㄺ', 'ㄹㅁ': 'ㄻ', 'ㄹㅂ': 'ㄼ', 'ㄹㅅ': 'ㄽ',
+        'ㄹㅌ': 'ㄾ', 'ㄹㅍ': 'ㄿ', 'ㄹㅎ': 'ㅀ',
+        'ㅂㅅ': 'ㅄ'
+    });
+
+    const HANGUL_SPLIT_FINALS = Object.freeze({
+        'ㄳ': ['ㄱ', 'ㅅ'], 'ㄵ': ['ㄴ', 'ㅈ'], 'ㄶ': ['ㄴ', 'ㅎ'],
+        'ㄺ': ['ㄹ', 'ㄱ'], 'ㄻ': ['ㄹ', 'ㅁ'], 'ㄼ': ['ㄹ', 'ㅂ'],
+        'ㄽ': ['ㄹ', 'ㅅ'], 'ㄾ': ['ㄹ', 'ㅌ'], 'ㄿ': ['ㄹ', 'ㅍ'],
+        'ㅀ': ['ㄹ', 'ㅎ'], 'ㅄ': ['ㅂ', 'ㅅ']
+    });
+
+    function isHangulConsonant(jamo) {
+        return typeof jamo === 'string' && /^[ㄱ-ㅎ]$/.test(jamo);
+    }
+
+    function isHangulVowel(jamo) {
+        return typeof jamo === 'string' && /^[ㅏ-ㅣ]$/.test(jamo);
+    }
+
+    function composeHangulSyllable(initial, vowel, final = '') {
+        const initialIndex = HANGUL_INITIALS.indexOf(initial);
+        const vowelIndex = HANGUL_VOWELS.indexOf(vowel);
+        const finalIndex = HANGUL_FINALS.indexOf(final);
+
+        if (initialIndex < 0 || vowelIndex < 0 || finalIndex < 0) {
+            return `${initial || ''}${vowel || ''}${final || ''}`;
+        }
+
+        return String.fromCharCode(
+            0xac00 + ((initialIndex * 21) + vowelIndex) * 28 + finalIndex
+        );
+    }
+
+    function composeHangulJamoSequence(sequence) {
+        let result = '';
+        let initial = '';
+        let vowel = '';
+        let final = '';
+
+        const flushSyllable = () => {
+            if (initial && vowel) {
+                result += composeHangulSyllable(initial, vowel, final);
+            } else {
+                result += `${initial}${vowel}${final}`;
+            }
+            initial = '';
+            vowel = '';
+            final = '';
+        };
+
+        for (let index = 0; index < sequence.length; index++) {
+            const current = sequence[index];
+            const next = sequence[index + 1] || '';
+
+            if (isHangulConsonant(current)) {
+                if (!initial) {
+                    initial = current;
+                } else if (!vowel) {
+                    result += initial;
+                    initial = current;
+                } else if (!final) {
+                    if (isHangulVowel(next)) {
+                        result += composeHangulSyllable(initial, vowel);
+                        initial = current;
+                        vowel = '';
+                    } else {
+                        final = current;
+                    }
+                } else {
+                    const combinedFinal = HANGUL_COMBINED_FINALS[final + current];
+                    if (combinedFinal) {
+                        final = combinedFinal;
+                    } else {
+                        result += composeHangulSyllable(initial, vowel, final);
+                        initial = current;
+                        vowel = '';
+                        final = '';
+                    }
+                }
+                continue;
+            }
+
+            if (!initial) {
+                result += current;
+            } else if (!vowel) {
+                vowel = current;
+            } else {
+                const combinedVowel = HANGUL_COMBINED_VOWELS[vowel + current];
+                if (combinedVowel) {
+                    vowel = combinedVowel;
+                } else if (final) {
+                    const splitFinal = HANGUL_SPLIT_FINALS[final] || ['', final];
+                    result += composeHangulSyllable(initial, vowel, splitFinal[0]);
+                    initial = splitFinal[1];
+                    vowel = current;
+                    final = '';
+                } else {
+                    result += composeHangulSyllable(initial, vowel);
+                    result += current;
+                    initial = '';
+                    vowel = '';
+                }
+            }
+        }
+
+        flushSyllable();
+        return result;
+    }
+
+    function decomposeHangulSyllables(text) {
+        return Array.from(String(text || ''))
+            .map(character => {
+                const code = character.charCodeAt(0);
+                if (code < 0xac00 || code > 0xd7a3) return character;
+
+                const syllableIndex = code - 0xac00;
+                const initial = Math.floor(syllableIndex / (21 * 28));
+                const vowel = Math.floor((syllableIndex % (21 * 28)) / 28);
+                const final = syllableIndex % 28;
+
+                return HANGUL_INITIALS[initial] + HANGUL_VOWELS[vowel] + (final ? HANGUL_FINALS[final] : '');
+            })
+            .join('');
+    }
+
+    function convertKoreanToEnglishText(text) {
+        return Array.from(decomposeHangulSyllables(text))
+            .map(character => KOREAN_JAMO_TO_ENGLISH[character] || character)
+            .join('');
+    }
+
+    function getRawChatInputText(input) {
+        if (!input) return '';
+        return String(input.textContent || input.innerText || input.value || '');
+    }
+
+    function getChatInputCaretOffset(input) {
+        if (!input) return null;
+
+        try {
+            const ownerDocument = input.ownerDocument || document;
+            const selection = ownerDocument.defaultView
+                ? ownerDocument.defaultView.getSelection()
+                : window.getSelection();
+            if (!selection || !selection.rangeCount || !input.contains(selection.anchorNode)) {
+                return null;
+            }
+
+            const range = ownerDocument.createRange();
+            range.selectNodeContents(input);
+            range.setEnd(selection.anchorNode, selection.anchorOffset);
+            return range.toString().length;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setChatInputCaretOffset(input, offset) {
+        if (!input || offset === null || offset === undefined) return;
+
+        try {
+            const ownerDocument = input.ownerDocument || document;
+            const selection = ownerDocument.defaultView
+                ? ownerDocument.defaultView.getSelection()
+                : window.getSelection();
+            const range = ownerDocument.createRange();
+            const walker = ownerDocument.createTreeWalker(input, 4);
+            let textNode = walker.nextNode();
+            let remaining = Math.max(0, offset);
+
+            while (textNode) {
+                if (remaining <= textNode.nodeValue.length) {
+                    range.setStart(textNode, remaining);
+                    range.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    return;
+                }
+                remaining -= textNode.nodeValue.length;
+                textNode = walker.nextNode();
+            }
+
+            range.selectNodeContents(input);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        } catch (e) {}
+    }
+
+    function isHangulInputCharacter(character) {
+        if (!character) return false;
+        const code = character.charCodeAt(0);
+        return (
+            (code >= 0xac00 && code <= 0xd7a3) ||
+            (code >= 0x3131 && code <= 0x314e) ||
+            (code >= 0x314f && code <= 0x3163)
+        );
+    }
+
+    function composeChangedKoreanRegion(text, changedStart, changedEnd) {
+        let regionStart = changedStart;
+        let regionEnd = changedEnd;
+
+        while (regionStart > 0 && isHangulInputCharacter(text[regionStart - 1])) {
+            regionStart--;
+        }
+        while (regionEnd < text.length && isHangulInputCharacter(text[regionEnd])) {
+            regionEnd++;
+        }
+
+        const region = decomposeHangulSyllables(text.slice(regionStart, regionEnd));
+        const composedRegion = region.replace(
+            /[ㄱ-ㅎㅏ-ㅣ]+/g,
+            composeHangulJamoSequence
+        );
+
+        return text.slice(0, regionStart) + composedRegion + text.slice(regionEnd);
+    }
+
+    function getChatInputChange(input, currentText) {
+        const previousText = typeof input.__auctionLastRenderedText === 'string'
+            ? input.__auctionLastRenderedText
+            : currentText;
+
+        let prefixLength = 0;
+        while (
+            prefixLength < previousText.length &&
+            prefixLength < currentText.length &&
+            previousText[prefixLength] === currentText[prefixLength]
+        ) {
+            prefixLength++;
+        }
+
+        let suffixLength = 0;
+        while (
+            suffixLength < previousText.length - prefixLength &&
+            suffixLength < currentText.length - prefixLength &&
+            previousText[previousText.length - 1 - suffixLength] === currentText[currentText.length - 1 - suffixLength]
+        ) {
+            suffixLength++;
+        }
+
+        const currentChangeEnd = currentText.length - suffixLength;
+        const insertedText = currentText.slice(prefixLength, currentChangeEnd);
+        const changed = previousText !== currentText;
+
+        return {
+            changed,
+            currentText,
+            start: prefixLength,
+            end: currentChangeEnd,
+            insertedText
+        };
+    }
+
+    function applyInputMapping(input, direction) {
+        if (!input || isSpectatorMode() || input.__auctionKoreanMappingUpdating) {
+            return false;
+        }
+
+        const currentText = getRawChatInputText(input);
+        const change = getChatInputChange(input, currentText);
+        if (!change.changed || !change.insertedText) {
+            input.__auctionLastRenderedText = currentText;
+            return false;
+        }
+
+        const mappedInsertedText = direction === 'english'
+            ? convertKoreanToEnglishText(change.insertedText)
+            : Array.from(change.insertedText)
+                .map(character => ENGLISH_TO_KOREAN_JAMO[character] || character)
+                .join('');
+
+        let convertedText = currentText.slice(0, change.start) + mappedInsertedText + currentText.slice(change.end);
+        if (direction === 'korean') {
+            convertedText = composeChangedKoreanRegion(
+                convertedText,
+                change.start,
+                change.start + mappedInsertedText.length
+            );
+        }
+
+        if (convertedText === currentText) {
+            input.__auctionLastRenderedText = currentText;
+            return false;
+        }
+
+        const caretOffset = getChatInputCaretOffset(input);
+        const replacementDelta = convertedText.length - currentText.length;
+        let convertedCaretOffset = null;
+        if (caretOffset !== null) {
+            if (caretOffset <= change.start) {
+                convertedCaretOffset = caretOffset;
+            } else if (caretOffset >= change.end) {
+                convertedCaretOffset = caretOffset + replacementDelta;
+            } else {
+                convertedCaretOffset = convertedText.length;
+            }
+        }
+
+        input.__auctionKoreanMappingUpdating = true;
+        try {
+            input.textContent = convertedText;
+            setChatInputCaretOffset(input, convertedCaretOffset);
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType: 'insertText',
+                    data: mappedInsertedText
+                }));
+            } catch (e) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+        } finally {
+            input.__auctionKoreanMappingUpdating = false;
+            input.__auctionLastRenderedText = convertedText;
+        }
+
+        return true;
+    }
+
+    function applyKoreanInputMapping(input) {
+        if (!input || _isEnglishInputEnabled) return false;
+        return applyInputMapping(input, 'korean');
+    }
+
+    function applyEnglishInputMapping(input) {
+        if (!input || !_isEnglishInputEnabled) return false;
+        return applyInputMapping(input, 'english');
+    }
+
+    function getPhysicalEnglishCharacter(event) {
+        if (!event || !/^Key[A-Z]$/.test(event.code)) return '';
+
+        const isCapsLock = typeof event.getModifierState === 'function'
+            ? event.getModifierState('CapsLock')
+            : false;
+        const isUpperCase = !!event.shiftKey !== !!isCapsLock;
+        const character = event.code.slice(3).toLowerCase();
+        return isUpperCase ? character.toUpperCase() : character;
+    }
+
+    function insertChatInputText(input, text) {
+        if (!input || !text) return false;
+
+        const ownerDocument = input.ownerDocument || document;
+        input.focus();
+
+        try {
+            if (ownerDocument.execCommand('insertText', false, text)) {
+                return true;
+            }
+        } catch (e) {}
+
+        const currentText = getRawChatInputText(input);
+        const caretOffset = getChatInputCaretOffset(input);
+        const insertionOffset = caretOffset === null ? currentText.length : caretOffset;
+        const nextText = currentText.slice(0, insertionOffset) + text + currentText.slice(insertionOffset);
+        input.textContent = nextText;
+        setChatInputCaretOffset(input, insertionOffset + text.length);
+
+        try {
+            input.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                composed: true,
+                inputType: 'insertText',
+                data: text
+            }));
+        } catch (e) {
+            input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        }
+
+        return true;
+    }
+
+    function bindEnglishPhysicalKeyboard(input) {
+        if (!input || input.__auctionEnglishKeydownHandler) return;
+
+        const handler = event => {
+            if (!_isEnglishInputEnabled || isSpectatorMode()) return;
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+            const character = getPhysicalEnglishCharacter(event);
+            if (!character) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            insertChatInputText(input, character);
+        };
+
+        input.addEventListener('keydown', handler, true);
+        input.__auctionEnglishKeydownHandler = handler;
+    }
+
+    function bindKoreanInputMapping(input) {
+        if (!input || input.__auctionKoreanInputHandler) return;
+
+        input.__auctionLastRenderedText = getRawChatInputText(input);
+        bindEnglishPhysicalKeyboard(input);
+        const handler = event => {
+            if ((event && event.isComposing) || input.__auctionKoreanInputComposing) return;
+
+            if (_isEnglishInputEnabled) {
+                applyEnglishInputMapping(input);
+            } else {
+                applyKoreanInputMapping(input);
+            }
+
+            const ownerDocument = input.ownerDocument || document;
+            const englishButton = ownerDocument.getElementById('__auction_english_button');
+            if (englishButton) updateEnglishButtonState(englishButton);
+
+            const decimalButton = ownerDocument.getElementById('__auction_decimal_button');
+            if (decimalButton) updateDecimalButtonState(decimalButton);
+        };
+        input.addEventListener('compositionstart', () => {
+            input.__auctionKoreanInputComposing = true;
+        });
+        input.addEventListener('compositionend', () => {
+            input.__auctionKoreanInputComposing = false;
+            setTimeout(() => handler(null), 0);
+        });
+        input.addEventListener('input', handler);
+        input.__auctionKoreanInputHandler = handler;
+    }
+
+    function getChatInputForButton(button) {
         if (button && button.parentElement) {
             const input = button.parentElement.querySelector(
                 'yt-live-chat-text-input-field-renderer #input, #input[contenteditable="true"]'
@@ -9173,7 +9667,7 @@ ${xmlRows.join('')}
     function updateDecimalButtonState(button) {
         if (!button) return;
 
-        const input = getDecimalButtonInput(button);
+        const input = getChatInputForButton(button);
         const spectator = isSpectatorMode();
         const hasInputText = !!getChatInputText(input);
 
@@ -9233,6 +9727,139 @@ ${xmlRows.join('')}
                 return `${whole.slice(0, -1)}.${whole.slice(-1)}만`;
             }
         );
+    }
+
+    function updateEnglishButtonState(button) {
+        if (!button) return;
+
+        const input = getChatInputForButton(button);
+        const spectator = isSpectatorMode();
+        if (input) bindKoreanInputMapping(input);
+
+        button.textContent = 'E';
+        button.disabled = spectator;
+        button.title = _isEnglishInputEnabled
+            ? '영어 입력 모드 (한글 자판 입력도 영어로 변환)'
+            : '영어 키를 한글로 자동 변환 중 (누르면 영어 입력 허용)';
+        button.setAttribute('aria-label', button.title);
+        button.setAttribute('aria-pressed', _isEnglishInputEnabled ? 'true' : 'false');
+        button.style.setProperty(
+            'background',
+            _isEnglishInputEnabled ? 'rgba(220,38,38,.24)' : 'rgba(148,163,184,.16)',
+            'important'
+        );
+        button.style.setProperty(
+            'border-color',
+            _isEnglishInputEnabled ? 'rgba(248,113,113,.72)' : 'rgba(148,163,184,.42)',
+            'important'
+        );
+        button.style.setProperty(
+            'color',
+            _isEnglishInputEnabled ? '#fecaca' : '#cbd5e1',
+            'important'
+        );
+        button.style.opacity = spectator ? '.45' : '1';
+        button.style.cursor = spectator ? 'not-allowed' : 'pointer';
+        button.style.setProperty('display', 'inline-flex', 'important');
+    }
+
+    function createEnglishInputButton() {
+        const input = findChatInput();
+        if (!input) return;
+
+        const targetDoc = input.ownerDocument || document;
+        const existingButtons = targetDoc.querySelectorAll('#__auction_english_button');
+        const guideRow = targetDoc.getElementById('__auction_more_english_row');
+
+        if (existingButtons.length > 0) {
+            for (let index = 1; index < existingButtons.length; index++) {
+                existingButtons[index].remove();
+            }
+
+            const existingButton = existingButtons[0];
+            if (guideRow) {
+                existingButton.style.setProperty('margin', '0', 'important');
+                existingButton.style.setProperty('flex', '0 0 28px', 'important');
+                const reference = Array.from(guideRow.querySelectorAll('button'))
+                    .find(button => button.textContent.includes('응원문구'));
+                guideRow.insertBefore(existingButton, reference || null);
+            } else if (input.parentElement) {
+                const decimalButton = targetDoc.getElementById('__auction_decimal_button');
+                const reference = decimalButton && decimalButton.parentElement === input.parentElement
+                    ? decimalButton
+                    : input;
+                input.parentElement.insertBefore(existingButton, reference);
+            }
+            updateEnglishButtonState(existingButton);
+            return;
+        }
+
+        const parent = guideRow || input.parentElement;
+        if (!parent) return;
+
+        const button = createElement('button', {
+            id: '__auction_english_button',
+            type: 'button',
+            text: 'E',
+            style: `
+                flex-shrink:0 !important;
+                width:28px !important;
+                min-width:28px !important;
+                height:32px !important;
+                padding:0 !important;
+                margin:0 4px 0 0 !important;
+                box-sizing:border-box !important;
+                border:1px solid rgba(148,163,184,.42) !important;
+                border-radius:8px !important;
+                background:rgba(148,163,184,.16) !important;
+                color:#cbd5e1 !important;
+                cursor:pointer !important;
+                display:inline-flex !important;
+                align-items:center !important;
+                justify-content:center !important;
+                font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif !important;
+                font-size:12px !important;
+                font-weight:800 !important;
+                line-height:1 !important;
+                text-align:center !important;
+                white-space:nowrap !important;
+                transition:background .15s ease,border-color .15s ease,color .15s ease,transform .08s ease !important;
+            `
+        });
+
+        button.addEventListener('mousedown', () => {
+            if (!button.disabled) button.style.transform = 'scale(.97)';
+        });
+        button.addEventListener('mouseup', () => {
+            button.style.transform = 'scale(1)';
+        });
+        button.addEventListener('mouseleave', () => {
+            button.style.transform = 'scale(1)';
+        });
+        button.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (isSpectatorMode()) return;
+
+            _isEnglishInputEnabled = !_isEnglishInputEnabled;
+            const currentInput = getChatInputForButton(button);
+            updateEnglishButtonState(button);
+            if (currentInput) currentInput.focus();
+        });
+
+        if (guideRow) {
+            button.style.setProperty('margin', '0', 'important');
+            button.style.setProperty('flex', '0 0 28px', 'important');
+            const reference = Array.from(guideRow.querySelectorAll('button'))
+                .find(guideButton => guideButton.textContent.includes('응원문구'));
+            guideRow.insertBefore(button, reference || null);
+        } else {
+            parent.insertBefore(button, input);
+        }
+        updateEnglishButtonState(button);
+
+        console.log(PREFIX, '영어 입력 토글 버튼 생성 완료');
     }
 
     function createDecimalButton() {
@@ -9710,6 +10337,17 @@ ${xmlRows.join('')}
             }
         }
 
+        const existingEnglishButtons =
+            targetDoc.querySelectorAll(
+                '#__auction_english_button'
+            );
+
+        if (existingEnglishButtons.length > 1) {
+            for (let i = 1; i < existingEnglishButtons.length; i++) {
+                existingEnglishButtons[i].remove();
+            }
+        }
+
         const guidePanel =
             targetDoc.getElementById(
                 '__auction_guide_panel'
@@ -9725,10 +10363,16 @@ ${xmlRows.join('')}
                 '__auction_decimal_button'
             );
 
+        const englishButton =
+            targetDoc.getElementById(
+                '__auction_english_button'
+            );
+
         if (
             guidePanel &&
             separatorButton &&
-            decimalButton
+            decimalButton &&
+            englishButton
         ) {
             return;
         }
@@ -9739,6 +10383,10 @@ ${xmlRows.join('')}
 
         if (!separatorButton) {
             createSeparatorButton();
+        }
+
+        if (!englishButton) {
+            createEnglishInputButton();
         }
 
         if (!decimalButton) {
