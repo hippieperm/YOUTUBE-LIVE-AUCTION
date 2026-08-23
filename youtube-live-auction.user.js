@@ -6742,6 +6742,8 @@ ${xmlRows.join('')}
             }
         }
 
+        // 새 자동 입력 문구가 들어오면 전송 직후 숨김 상태를 해제한다.
+        input.__auctionHideDecimalAfterSend = false;
 
         try {
 
@@ -9720,11 +9722,38 @@ ${xmlRows.join('')}
         input.__auctionEnglishKeydownDocument = ownerDocument;
     }
 
+    function bindChatSendButton(input) {
+        if (!input) return;
+
+        const ownerDocument = input.ownerDocument || document;
+        const sendButton = ownerDocument.querySelector('#send-button');
+        if (!sendButton || input.__auctionSendButton === sendButton) return;
+
+        if (input.__auctionSendButton && input.__auctionSendButtonHandler) {
+            input.__auctionSendButton.removeEventListener(
+                'click',
+                input.__auctionSendButtonHandler,
+                true
+            );
+        }
+
+        const handler = () => {
+            input.__auctionHideDecimalAfterSend = true;
+            const decimalButton = ownerDocument.getElementById('__auction_decimal_button');
+            if (decimalButton) updateDecimalButtonState(decimalButton);
+        };
+
+        sendButton.addEventListener('click', handler, true);
+        input.__auctionSendButton = sendButton;
+        input.__auctionSendButtonHandler = handler;
+    }
+
     function bindKoreanInputMapping(input) {
         if (!input || input.__auctionKoreanInputHandler) return;
 
         input.__auctionLastRenderedText = getRawChatInputText(input);
         bindEnglishPhysicalKeyboard(input);
+        bindChatSendButton(input);
         const handler = event => {
             if (input.__auctionSkipKeyboardMapping) {
                 input.__auctionLastRenderedText = getRawChatInputText(input);
@@ -9745,6 +9774,10 @@ ${xmlRows.join('')}
                 ((event && event.isComposing) || input.__auctionKoreanInputComposing)
             ) {
                 return;
+            }
+
+            if (input.__auctionHideDecimalAfterSend && getChatInputText(input)) {
+                input.__auctionHideDecimalAfterSend = false;
             }
 
             if (_isEnglishInputEnabled) {
@@ -9788,6 +9821,7 @@ ${xmlRows.join('')}
         const input = getChatInputForButton(button);
         const spectator = isSpectatorMode();
         const hasInputText = !!getChatInputText(input);
+        bindChatSendButton(input);
 
         if (input && button.__auctionDecimalInput !== input) {
             if (button.__auctionDecimalInput && button.__auctionDecimalInputHandler) {
@@ -9810,7 +9844,13 @@ ${xmlRows.join('')}
         button.setAttribute('aria-label', button.title);
         button.style.opacity = spectator ? '.45' : '1';
         button.style.cursor = spectator ? 'not-allowed' : 'pointer';
-        button.style.setProperty('display', hasInputText ? 'inline-flex' : 'none', 'important');
+        button.style.setProperty(
+            'display',
+            input && input.__auctionHideDecimalAfterSend
+                ? 'none'
+                : (hasInputText ? 'inline-flex' : 'none'),
+            'important'
+        );
     }
 
     function toggleTemplateAmountDecimal(message) {
