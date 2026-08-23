@@ -9445,11 +9445,7 @@ ${xmlRows.join('')}
         return text.slice(0, regionStart) + composedRegion + text.slice(regionEnd);
     }
 
-    function getChatInputChange(input, currentText) {
-        const previousText = typeof input.__auctionLastRenderedText === 'string'
-            ? input.__auctionLastRenderedText
-            : currentText;
-
+    function getTextChange(previousText, currentText) {
         let prefixLength = 0;
         while (
             prefixLength < previousText.length &&
@@ -9479,6 +9475,13 @@ ${xmlRows.join('')}
             end: currentChangeEnd,
             insertedText
         };
+    }
+
+    function getChatInputChange(input, currentText) {
+        const previousText = typeof input.__auctionLastRenderedText === 'string'
+            ? input.__auctionLastRenderedText
+            : currentText;
+        return getTextChange(previousText, currentText);
     }
 
     function applyInputMapping(input, direction) {
@@ -9574,16 +9577,20 @@ ${xmlRows.join('')}
 
         const ownerDocument = input.ownerDocument || document;
         input.focus();
+        const currentTextBeforeInsert = getRawChatInputText(input);
+        const caretOffsetBeforeInsert = getChatInputCaretOffset(input);
+        const insertionOffset = caretOffsetBeforeInsert === null
+            ? currentTextBeforeInsert.length
+            : caretOffsetBeforeInsert;
 
         try {
             if (ownerDocument.execCommand('insertText', false, text)) {
+                setChatInputCaretOffset(input, insertionOffset + text.length);
                 return true;
             }
         } catch (e) {}
 
-        const currentText = getRawChatInputText(input);
-        const caretOffset = getChatInputCaretOffset(input);
-        const insertionOffset = caretOffset === null ? currentText.length : caretOffset;
+        const currentText = currentTextBeforeInsert;
         const nextText = currentText.slice(0, insertionOffset) + text + currentText.slice(insertionOffset);
         input.textContent = nextText;
         setChatInputCaretOffset(input, insertionOffset + text.length);
@@ -9611,21 +9618,33 @@ ${xmlRows.join('')}
         const currentText = getRawChatInputText(input);
 
         if (currentText === expectedText) {
+            if (input.__auctionExpectedEnglishCaretOffset !== undefined) {
+                setChatInputCaretOffset(input, input.__auctionExpectedEnglishCaretOffset);
+            }
             input.__auctionExpectedEnglishText = '';
+            input.__auctionExpectedEnglishCaretOffset = undefined;
             return false;
         }
 
-        const extraText = currentText.startsWith(expectedText)
-            ? currentText.slice(expectedText.length)
-            : '';
-        if (!extraText || !/^[ㄱ-ㅎㅏ-ㅣ가-힣]+$/.test(extraText)) {
+        const change = getTextChange(expectedText, currentText);
+        if (!change.insertedText || !/^[ㄱ-ㅎㅏ-ㅣ가-힣]+$/.test(change.insertedText)) {
+            return false;
+        }
+
+        const restoredText = currentText.slice(0, change.start) + currentText.slice(change.end);
+        if (restoredText !== expectedText) {
             return false;
         }
 
         input.__auctionKoreanMappingUpdating = true;
         try {
             input.textContent = expectedText;
-            setChatInputCaretOffset(input, expectedText.length);
+            setChatInputCaretOffset(
+                input,
+                input.__auctionExpectedEnglishCaretOffset === undefined
+                    ? expectedText.length
+                    : input.__auctionExpectedEnglishCaretOffset
+            );
             try {
                 input.dispatchEvent(new InputEvent('input', {
                     bubbles: true,
@@ -9640,17 +9659,38 @@ ${xmlRows.join('')}
             input.__auctionKoreanMappingUpdating = false;
             input.__auctionLastRenderedText = expectedText;
             input.__auctionExpectedEnglishText = '';
+            input.__auctionExpectedEnglishCaretOffset = undefined;
         }
 
         return true;
     }
 
     function bindEnglishPhysicalKeyboard(input) {
-        if (!input || input.__auctionEnglishKeydownHandler) return;
+        if (!input) return;
+
+        const ownerDocument = input.ownerDocument || document;
+        if (input.__auctionEnglishKeydownHandler && input.__auctionEnglishKeydownDocument === ownerDocument) {
+            return;
+        }
+
+        if (input.__auctionEnglishKeydownHandler && input.__auctionEnglishKeydownDocument) {
+            input.__auctionEnglishKeydownDocument.removeEventListener(
+                'keydown',
+                input.__auctionEnglishKeydownHandler,
+                true
+            );
+        }
 
         const handler = event => {
             if (!_isEnglishInputEnabled || isSpectatorMode()) return;
             if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+            const path = typeof event.composedPath === 'function'
+                ? event.composedPath()
+                : [event.target];
+            if (!path.includes(input)) return;
+
+            reconcileEnglishPhysicalInput(input);
 
             const character = getPhysicalEnglishCharacter(event);
             if (!character) return;
@@ -9661,14 +9701,19 @@ ${xmlRows.join('')}
                 event.stopImmediatePropagation();
             }
 
+            const currentText = getRawChatInputText(input);
+            const caretOffset = getChatInputCaretOffset(input);
+            const expectedCaretOffset = (caretOffset === null ? currentText.length : caretOffset) + character.length;
             if (insertChatInputText(input, character)) {
                 input.__auctionExpectedEnglishText = getRawChatInputText(input);
+                input.__auctionExpectedEnglishCaretOffset = expectedCaretOffset;
                 setTimeout(() => reconcileEnglishPhysicalInput(input), 0);
             }
         };
 
-        input.addEventListener('keydown', handler, true);
+        ownerDocument.addEventListener('keydown', handler, true);
         input.__auctionEnglishKeydownHandler = handler;
+        input.__auctionEnglishKeydownDocument = ownerDocument;
     }
 
     function bindChatSendButton(input) {
@@ -9710,7 +9755,12 @@ ${xmlRows.join('')}
             if (_isEnglishInputEnabled && reconcileEnglishPhysicalInput(input)) {
                 return;
             }
-            if ((event && event.isComposing) || input.__auctionKoreanInputComposing) return;
+            if (
+                !_isEnglishInputEnabled &&
+                ((event && event.isComposing) || input.__auctionKoreanInputComposing)
+            ) {
+                return;
+            }
 
             if (input.__auctionHideAccessoriesAfterSend && getChatInputText(input)) {
                 input.__auctionHideAccessoriesAfterSend = false;
