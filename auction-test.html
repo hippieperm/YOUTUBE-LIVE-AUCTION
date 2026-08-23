@@ -335,6 +335,55 @@
             color: #fecaca;
         }
 
+        /* E 버튼 회귀 테스트 */
+        .english-test-result {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border: 1px solid #34384d;
+            border-radius: 8px;
+            background: #11131b;
+            color: #9ca3af;
+            font-size: 11px;
+            line-height: 1.55;
+            white-space: pre-wrap;
+        }
+
+        .english-test-result.running {
+            border-color: rgba(56, 189, 248, 0.5);
+            background: rgba(14, 165, 233, 0.1);
+            color: #bae6fd;
+        }
+
+        .english-test-result.pass {
+            border-color: rgba(74, 222, 128, 0.5);
+            background: rgba(34, 197, 94, 0.1);
+            color: #bbf7d0;
+        }
+
+        .english-test-result.fail {
+            border-color: rgba(248, 113, 113, 0.55);
+            background: rgba(239, 68, 68, 0.1);
+            color: #fecaca;
+        }
+
+        .english-test-log {
+            margin-top: 8px;
+            max-height: 260px;
+            overflow-y: auto;
+            padding-left: 18px;
+            color: #cbd5e1;
+            font-size: 10.5px;
+            line-height: 1.55;
+        }
+
+        .english-test-log li.pass {
+            color: #86efac;
+        }
+
+        .english-test-log li.fail {
+            color: #fca5a5;
+        }
+
         /* =========================================================
            우측: 실제 YouTube 라이브 채팅 UI (100% 모사)
            ========================================================= */
@@ -721,6 +770,33 @@
                 </div>
             </div>
 
+            <!-- E 버튼 회귀 + 추가 위험 시뮬레이션 -->
+            <div class="section-card" id="english-input-test-card">
+                <div class="section-title">⌨️ E 버튼 회귀 & 위험 시뮬레이션</div>
+                <div class="section-desc">
+                    현재 프로젝트의 e버튼 관련 수정 이력을 실제 입력창·키보드 이벤트·전송 경로로 재현합니다.
+                    과거 버그뿐 아니라 중간 커서, 빠른 연타, 대소문자, 조합 상태, 입력창 재생성까지 검사합니다.
+                </div>
+                <div class="btn-group single-col" style="gap: 7px;">
+                    <button class="sim-btn green" onclick="runEnglishInputTestSuite()">
+                        <span>✅ 전체 회귀 + 추가 위험 테스트 실행</span>
+                    </button>
+                    <button class="sim-btn primary" onclick="runEnglishInputTestGroup('history')">
+                        <span>🧾 과거에 실제로 고친 버그만 재검증</span>
+                    </button>
+                    <button class="sim-btn gold" onclick="runEnglishInputTestGroup('risk')">
+                        <span>⚠️ 추가로 일어날 법한 상황 시뮬레이션</span>
+                    </button>
+                    <button class="sim-btn" onclick="runEnglishInputTestGroup('lifecycle')">
+                        <span>🔄 입력창·전송·중복 주입 수명주기 테스트</span>
+                    </button>
+                </div>
+                <div id="english-input-test-result" class="english-test-result">
+                    엔진 로드 후 테스트를 실행하면 각 항목별 통과/실패와 실제 결과를 표시합니다.
+                </div>
+                <ol id="english-input-test-log" class="english-test-log"></ol>
+            </div>
+
             <!-- [미사용 주석 처리] 낙찰 내역 & 더미데이터 관리
             <div class="section-card">
                 <div class="section-title">📋 낙찰 내역 & 더미데이터 관리</div>
@@ -1018,6 +1094,456 @@
             return input
                 ? (input.innerText || input.textContent || '').trim()
                 : '';
+        }
+
+        /* =========================================================
+           E 버튼 회귀 테스트 + 추가 위험 시뮬레이션
+           ========================================================= */
+        let englishTestRunning = false;
+
+        const ENGLISH_INPUT_TEST_GROUPS = {
+            history: [
+                {
+                    id: 'history-button-always-visible',
+                    label: 'E 버튼은 입력창이 비어도 항상 표시됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const button = getEnglishTestButton();
+                        return {
+                            pass: !!button && getComputedStyle(button).display !== 'none' && button.getAttribute('aria-pressed') === 'false',
+                            actual: button ? `display=${getComputedStyle(button).display}, aria-pressed=${button.getAttribute('aria-pressed')}` : '버튼 없음'
+                        };
+                    }
+                },
+                {
+                    id: 'history-toggle-preserves-mode',
+                    label: 'E 토글 ON/OFF가 정확히 전환되고 기존 입력을 보존함',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '기존문구');
+                        const input = getEnglishTestInput();
+                        const button = getEnglishTestButton();
+                        button.click();
+                        const enabled = button.getAttribute('aria-pressed') === 'true' && getEnglishTestInputText(input) === '기존문구';
+                        button.click();
+                        const disabled = button.getAttribute('aria-pressed') === 'false' && getEnglishTestInputText(input) === '기존문구';
+                        return { pass: enabled && disabled, actual: `${enabled ? 'ON 보존' : 'ON 실패'} → ${disabled ? 'OFF 보존' : 'OFF 실패'}` };
+                    }
+                },
+                {
+                    id: 'history-korean-composition',
+                    label: 'E OFF: 영문 물리 키보드가 두벌식 한글로 조합됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestKeys(input, 'dkssud');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '안녕', actual: `dkssud → ${actual}` };
+                    }
+                },
+                {
+                    id: 'history-english-mode',
+                    label: 'E ON: 영문 키가 한글 잔여 조각 없이 그대로 입력됨',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestKeys(input, 'dkssud');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'dkssud' && !/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(actual), actual: `dkssud → ${actual}` };
+                    }
+                },
+                {
+                    id: 'history-no-duplicate-character',
+                    label: 'E ON: 한 번 누른 키가 중복 입력되지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '');
+                        const input = getEnglishTestInput();
+                        const event = dispatchEnglishTestKey(input, 'r');
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'r' && event.defaultPrevented, actual: `결과=${actual}, defaultPrevented=${event.defaultPrevented}` };
+                    }
+                },
+                {
+                    id: 'history-middle-caret',
+                    label: 'E ON: 기존 문장 중간 위치에도 영문이 정확히 삽입됨',
+                    run: async () => {
+                        await prepareEnglishTestState(true, 'ABCD');
+                        const input = getEnglishTestInput();
+                        setEnglishTestCaret(input, 2);
+                        await typeEnglishTestKeys(input, 'r');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'ABrCD', actual: `AB|CD + r → ${actual}` };
+                    }
+                },
+                {
+                    id: 'history-fast-ime-residue',
+                    label: 'E ON: 빠른 연속 입력에도 한글 IME 잔여 조각이 남지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '');
+                        const input = getEnglishTestInput();
+                        for (const key of 'rksk') dispatchEnglishTestKey(input, key);
+                        await waitForEnglishTest(80);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'rksk', actual: `빠른 rksk → ${actual}` };
+                    }
+                },
+                {
+                    id: 'history-toggle-resets-composition',
+                    label: 'E 전환 시 이전 한글 조합 상태가 초기화됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        input.__auctionKoreanInputComposing = true;
+                        getEnglishTestButton().click();
+                        const actual = `mode=${getEnglishTestButton().getAttribute('aria-pressed')}, composing=${String(input.__auctionKoreanInputComposing)}`;
+                        return { pass: getEnglishTestButton().getAttribute('aria-pressed') === 'true' && input.__auctionKoreanInputComposing === false, actual };
+                    }
+                }
+            ],
+            risk: [
+                {
+                    id: 'risk-shift-uppercase',
+                    label: 'Shift 조합 대문자가 영문 모드에서 그대로 유지됨',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestKey(input, 'r', { shiftKey: true, key: 'R' });
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'R', actual: `Shift+R → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-caps-lock',
+                    label: 'Caps Lock 상태의 물리 키 대소문자 계산이 맞음',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestKey(input, 'r', {
+                            getModifierState: modifier => modifier === 'CapsLock'
+                        });
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'R', actual: `CapsLock+R → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-modifier-guard',
+                    label: 'Ctrl/⌘/Alt 조합은 단축키 입력을 가로채지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(true, 'seed');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestKey(input, 'r', { ctrlKey: true });
+                        dispatchEnglishTestKey(input, 's', { metaKey: true });
+                        dispatchEnglishTestKey(input, 't', { altKey: true });
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'seed', actual: `seed 유지 → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-non-letter-guard',
+                    label: '숫자·기호·기능 키는 E가 임의 변환하지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(true, 'seed');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestKey(input, '1', { code: 'Digit1', key: '1' });
+                        dispatchEnglishTestKey(input, ';', { code: 'Semicolon', key: ';' });
+                        dispatchEnglishTestKey(input, 'F1', { code: 'F1', key: 'F1' });
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'seed', actual: `seed 유지 → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-outside-input-guard',
+                    label: '입력창 밖에서 누른 영문 키가 채팅 입력을 바꾸지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '');
+                        const input = getEnglishTestInput();
+                        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', code: 'KeyR', bubbles: true, cancelable: true }));
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '', actual: `입력창 밖 keydown 후 → ${actual || '(비어 있음)'}` };
+                    }
+                },
+                {
+                    id: 'risk-mixed-middle-insert',
+                    label: '한글·영문이 섞인 문장 중간 삽입도 순서를 보존함',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '안AB녕');
+                        const input = getEnglishTestInput();
+                        setEnglishTestCaret(input, 1);
+                        await typeEnglishTestKeys(input, 'rksk');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '안rkskAB녕', actual: `안|AB녕 + rksk → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-rapid-toggle',
+                    label: 'E 버튼 빠른 연타가 중복 버튼·중복 리스너를 만들지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const button = getEnglishTestButton();
+                        for (let index = 0; index < 20; index++) button.click();
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestKey(input, 'r');
+                        await waitForEnglishTest(50);
+                        const actual = getEnglishTestInputText(input);
+                        const buttons = document.querySelectorAll('#__auction_english_button').length;
+                        return { pass: actual === 'ㄱ' && buttons === 1, actual: `r → ${actual}, E 버튼 ${buttons}개` };
+                    }
+                }
+            ],
+            lifecycle: [
+                {
+                    id: 'lifecycle-decimal-separation',
+                    label: '입력창이 비어도 E는 보이고 소수점 버튼만 숨겨짐',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const englishButton = getEnglishTestButton();
+                        const decimalButton = document.getElementById('__auction_decimal_button');
+                        const actual = `E=${getComputedStyle(englishButton).display}, 소수점=${decimalButton ? getComputedStyle(decimalButton).display : '없음'}`;
+                        return { pass: getComputedStyle(englishButton).display !== 'none' && (!decimalButton || getComputedStyle(decimalButton).display === 'none'), actual };
+                    }
+                },
+                {
+                    id: 'lifecycle-send-and-retype',
+                    label: '전송 직후 소수점만 숨고, 다음 입력에서 다시 나타남',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '15만');
+                        const englishButton = getEnglishTestButton();
+                        const decimalButton = document.getElementById('__auction_decimal_button');
+                        const sendButton = document.getElementById('send-button');
+                        const visibleBefore = decimalButton && getComputedStyle(decimalButton).display !== 'none';
+                        sendButton.click();
+                        await waitForEnglishTest(80);
+                        const hiddenAfterSend = !decimalButton || getComputedStyle(decimalButton).display === 'none';
+                        const englishStillVisible = getComputedStyle(englishButton).display !== 'none';
+                        setEnglishTestInput('15');
+                        await waitForEnglishTest(50);
+                        const visibleAfterRetype = decimalButton && getComputedStyle(decimalButton).display !== 'none';
+                        const actual = `전송 전=${visibleBefore}, 전송 직후=${getComputedStyle(decimalButton).display}, 재입력 후=${getComputedStyle(decimalButton).display}`;
+                        return { pass: !!visibleBefore && hiddenAfterSend && englishStillVisible && !!visibleAfterRetype, actual };
+                    }
+                },
+                {
+                    id: 'lifecycle-input-recreated',
+                    label: 'YouTube식 입력창 재생성 뒤 E가 하나만 재부착되고 동작함',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const oldInput = getEnglishTestInput();
+                        const replacement = document.createElement('div');
+                        replacement.id = 'input';
+                        replacement.contentEditable = 'true';
+                        replacement.setAttribute('role', 'textbox');
+                        replacement.setAttribute('aria-multiline', 'true');
+                        oldInput.replaceWith(replacement);
+                        await waitForEnglishTest(500);
+                        const newInput = getEnglishTestInput();
+                        const buttonCount = document.querySelectorAll('#__auction_english_button').length;
+                        dispatchEnglishTestKey(newInput, 'r');
+                        await waitForEnglishTest(60);
+                        const actual = getEnglishTestInputText(newInput);
+                        const passed = newInput !== oldInput && buttonCount === 1 && actual === 'ㄱ';
+                        // 다음 수명주기 테스트가 시뮬레이터의 초기 Enter 핸들러를
+                        // 사용할 수 있도록 테스트용 교체만 원상 복구한다.
+                        newInput.replaceWith(oldInput);
+                        await waitForEnglishTest(120);
+                        return { pass: passed, actual: `새 입력창 r → ${actual || '(빈값)'}, E 버튼 ${buttonCount}개` };
+                    }
+                },
+                {
+                    id: 'lifecycle-enter-send',
+                    label: 'Enter 전송 뒤 입력은 비워지고 E는 계속 표시됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '15만');
+                        const input = getEnglishTestInput();
+                        const englishButton = getEnglishTestButton();
+                        dispatchEnglishTestKey(input, 'Enter', { code: 'Enter', key: 'Enter' });
+                        await waitForEnglishTest(80);
+                        const actual = getEnglishTestInputText(input);
+                        const englishVisible = getComputedStyle(englishButton).display !== 'none';
+                        return { pass: actual === '' && englishVisible, actual: `Enter 후 입력=${actual || '(비어 있음)'}, E=${englishVisible ? '표시' : '숨김'}` };
+                    }
+                },
+                {
+                    id: 'lifecycle-observer-no-duplicates',
+                    label: '채팅 DOM 갱신을 여러 번 해도 E 버튼이 중복 생성되지 않음',
+                    run: async () => {
+                        const inputRenderer = document.getElementById('input-renderer');
+                        for (let index = 0; index < 5; index++) {
+                            const marker = document.createElement('span');
+                            marker.textContent = `test-${index}`;
+                            inputRenderer.appendChild(marker);
+                        }
+                        await waitForEnglishTest(500);
+                        const buttons = document.querySelectorAll('#__auction_english_button').length;
+                        const actual = `DOM 갱신 5회 후 E 버튼 ${buttons}개`;
+                        return { pass: buttons === 1, actual };
+                    }
+                }
+            ]
+        };
+
+        function waitForEnglishTest(milliseconds = 0) {
+            return new Promise(resolve => setTimeout(resolve, milliseconds));
+        }
+
+        function getEnglishTestInput() {
+            return document.getElementById('input');
+        }
+
+        function getEnglishTestButton() {
+            return document.getElementById('__auction_english_button');
+        }
+
+        function getEnglishTestInputText(input = getEnglishTestInput()) {
+            return input ? String(input.textContent || input.innerText || '').trim() : '';
+        }
+
+        function setEnglishTestInput(text) {
+            const input = getEnglishTestInput();
+            if (!input) return false;
+
+            // 테스트 픽스처 자체가 E 변환 대상이 되지 않도록 하되,
+            // 전송 후 새 입력이 시작됐다는 상태 갱신은 실제 입력과 동일하게 처리한다.
+            input.__auctionSkipKeyboardMapping = true;
+            input.__auctionHideDecimalAfterSend = false;
+            input.textContent = text;
+            input.innerText = text;
+            input.__auctionLastRenderedText = text;
+            input.__auctionExpectedEnglishText = '';
+            input.__auctionExpectedEnglishCaretOffset = undefined;
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType: 'insertText',
+                    data: text
+                }));
+            } catch (error) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            input.__auctionSkipKeyboardMapping = false;
+            input.focus();
+            setEnglishTestCaret(input, text.length);
+            return true;
+        }
+
+        async function prepareEnglishTestState(enabled, text) {
+            const renderer = document.querySelector('yt-live-chat-renderer');
+            if (renderer && renderer.hasAttribute('replay')) toggleReplayMode();
+
+            const input = getEnglishTestInput();
+            const button = getEnglishTestButton();
+            if (!input || !button) throw new Error('E 버튼 또는 채팅 입력창을 찾지 못했습니다.');
+
+            if ((button.getAttribute('aria-pressed') === 'true') !== enabled) button.click();
+            setEnglishTestInput(text);
+            await waitForEnglishTest(20);
+        }
+
+        function setEnglishTestCaret(input, offset) {
+            if (!input) return;
+            input.focus();
+            const selection = window.getSelection();
+            const range = document.createRange();
+            const textNode = input.firstChild;
+            if (!textNode) {
+                range.selectNodeContents(input);
+                range.collapse(false);
+            } else {
+                range.setStart(textNode, Math.max(0, Math.min(offset, textNode.length)));
+                range.collapse(true);
+            }
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
+        function dispatchEnglishTestKey(input, key, options = {}) {
+            const code = options.code || (/^[a-zA-Z]$/.test(key) ? `Key${key.toUpperCase()}` : key);
+            const event = new KeyboardEvent('keydown', {
+                key: options.key || key,
+                code,
+                shiftKey: !!options.shiftKey,
+                ctrlKey: !!options.ctrlKey,
+                metaKey: !!options.metaKey,
+                altKey: !!options.altKey,
+                bubbles: true,
+                cancelable: true,
+                composed: true
+            });
+            if (typeof options.getModifierState === 'function') {
+                Object.defineProperty(event, 'getModifierState', { value: options.getModifierState });
+            }
+            (options.target || input).dispatchEvent(event);
+            return event;
+        }
+
+        async function typeEnglishTestKeys(input, text) {
+            for (const key of text) dispatchEnglishTestKey(input, key);
+            await waitForEnglishTest(50);
+        }
+
+        function updateEnglishTestResult(state, message) {
+            const result = document.getElementById('english-input-test-result');
+            if (!result) return;
+            result.className = `english-test-result ${state || ''}`.trim();
+            result.textContent = message;
+        }
+
+        async function runEnglishInputTestGroup(groupName) {
+            if (englishTestRunning) return;
+
+            const tests = groupName === 'all'
+                ? [...ENGLISH_INPUT_TEST_GROUPS.history, ...ENGLISH_INPUT_TEST_GROUPS.risk, ...ENGLISH_INPUT_TEST_GROUPS.lifecycle]
+                : ENGLISH_INPUT_TEST_GROUPS[groupName];
+            if (!tests) return;
+
+            englishTestRunning = true;
+            const resultLog = document.getElementById('english-input-test-log');
+            if (resultLog) resultLog.innerHTML = '';
+            updateEnglishTestResult('running', `⏳ ${tests.length}개 테스트 실행 중… 실제 채팅 입력창 이벤트를 재현합니다.`);
+
+            const initialInput = getEnglishTestInput();
+            const initialButton = getEnglishTestButton();
+            const initialState = {
+                text: getEnglishTestInputText(initialInput),
+                enabled: initialButton ? initialButton.getAttribute('aria-pressed') === 'true' : false
+            };
+            let passed = 0;
+
+            try {
+                for (const test of tests) {
+                    let outcome;
+                    try {
+                        outcome = await test.run();
+                    } catch (error) {
+                        outcome = { pass: false, actual: `예외: ${error.message || error}` };
+                    }
+                    if (outcome.pass) passed++;
+                    const item = document.createElement('li');
+                    item.className = outcome.pass ? 'pass' : 'fail';
+                    item.textContent = `${outcome.pass ? '✅' : '❌'} ${test.label} — ${outcome.actual}`;
+                    if (resultLog) resultLog.appendChild(item);
+                }
+            } finally {
+                const currentButton = getEnglishTestButton();
+                if (currentButton && (currentButton.getAttribute('aria-pressed') === 'true') !== initialState.enabled) currentButton.click();
+                setEnglishTestInput(initialState.text);
+                englishTestRunning = false;
+            }
+
+            const allPassed = passed === tests.length;
+            updateEnglishTestResult(
+                allPassed ? 'pass' : 'fail',
+                `${allPassed ? '✅ 전체 통과' : '❌ 실패 항목 있음'}: ${passed}/${tests.length}개 통과\n과거 수정 버그와 추가 위험 상황을 실제 DOM 이벤트 기준으로 확인했습니다.`
+            );
+        }
+
+        function runEnglishInputTestSuite() {
+            return runEnglishInputTestGroup('all');
         }
 
         function updateDecimalButtonTestResult(state, message) {

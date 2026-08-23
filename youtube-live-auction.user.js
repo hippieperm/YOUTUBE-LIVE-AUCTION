@@ -10561,6 +10561,13 @@ ${xmlRows.join('')}
             decimalButton &&
             englishButton
         ) {
+            // YouTube가 입력창만 새 DOM으로 교체하는 경우에는
+            // 기존 보조 버튼이 남아 있어도 새 입력창에 키보드 리스너를
+            // 다시 연결해야 한다.
+            bindKoreanInputMapping(input);
+            updateEnglishButtonState(englishButton);
+            updateDecimalButtonState(decimalButton);
+            updateSeparatorButtonState(separatorButton);
             return;
         }
 
@@ -10743,13 +10750,29 @@ ${xmlRows.join('')}
                             ? (input.ownerDocument || document)
                             : document;
 
+                    const englishButton =
+                        targetDoc.getElementById(
+                            '__auction_english_button'
+                        );
+
+                    const decimalButton =
+                        targetDoc.getElementById(
+                            '__auction_decimal_button'
+                        );
+
+                    const inputNeedsKeyboardBinding =
+                        !!input &&
+                        (!input.__auctionKoreanInputHandler ||
+                            !input.__auctionEnglishKeydownHandler);
+
                     if (
                         targetDoc.getElementById(
                             '__auction_guide_panel'
                         ) &&
-                        targetDoc.getElementById(
-                            '__auction_separator_button'
-                        )
+                        targetDoc.getElementById('__auction_separator_button') &&
+                        englishButton &&
+                        decimalButton &&
+                        !inputNeedsKeyboardBinding
                     ) {
                         return;
                     }
