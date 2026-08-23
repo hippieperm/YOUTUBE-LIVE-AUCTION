@@ -2443,13 +2443,27 @@
     // 메시지 생성
     // =========================================================
 
+    /**
+     * YouTube 핸들(@이름-고유문자열)을 낙찰 안내문용 닉네임으로 정리한다.
+     * 예: @성근정-r5v -> 성근정, @초이스-x7i -> 초이스
+     */
+    function getTemplateNickname(nickname) {
+        return String(nickname || '')
+            .trim()
+            .replace(/^@+/, '')
+            .split('-')[0]
+            .trim();
+    }
+
     function createMessage(
         nickname,
         price
     ) {
 
+        const templateNickname = getTemplateNickname(nickname);
+
         return (
-            `👉 @${nickname}님 ` +
+            `👉 ${templateNickname}님 ` +
             `${price}만 낙찰입니다. 감사합니다😄`
         );
     }
@@ -6318,8 +6332,8 @@ ${xmlRows.join('')}
             // 🛑 [같은 블록 내 낙찰자 변경 확인 (가상 키패드 제출)]
             const existingWinner = getExistingWinnerInBlock(targetChatItem, document);
             if (!winnerChangeConfirmed && existingWinner && (existingWinner.element !== targetChatItem || (nickname && existingWinner.nickname && existingWinner.nickname.trim() !== nickname.trim()))) {
-                const prevLabel = existingWinner.nickname ? `@${existingWinner.nickname}님${existingWinner.price ? ` (${existingWinner.price}만)` : ''}` : '기존 낙찰자';
-                const newLabel = nickname ? `@${nickname}님 (${price}만)` : `${price}만`;
+                const prevLabel = existingWinner.nickname ? `${getTemplateNickname(existingWinner.nickname)}님${existingWinner.price ? ` (${existingWinner.price}만)` : ''}` : '기존 낙찰자';
+                const newLabel = nickname ? `${getTemplateNickname(nickname)}님 (${price}만)` : `${price}만`;
                 const confirmed = await showWinnerActionConfirm(prevLabel, newLabel);
                 if (!confirmed) {
                     return;
@@ -7021,7 +7035,7 @@ ${xmlRows.join('')}
 
             const author = findAuthor(event.target, event) || messageItem.querySelector('#author-name');
             const nickname = author ? getNickname(author) : '';
-            const nickLabel = nickname ? `@${nickname}님` : '해당 낙찰자';
+            const nickLabel = nickname ? `${getTemplateNickname(nickname)}님` : '해당 낙찰자';
             const confirmed = await showWinnerActionConfirm(nickLabel, '', 'cancel');
             if (!confirmed) {
                 return;
@@ -7116,10 +7130,10 @@ ${xmlRows.join('')}
         const existingWinner = getExistingWinnerInBlock(chatItem, event.target.ownerDocument || document);
         let winnerChangeConfirmed = false;
         if (existingWinner && (existingWinner.element !== chatItem || (nickname && existingWinner.nickname && existingWinner.nickname.trim() !== nickname.trim()))) {
-            const prevLabel = existingWinner.nickname ? `@${existingWinner.nickname}님${existingWinner.price ? ` (${existingWinner.price}만)` : ''}` : '기존 낙찰자';
+            const prevLabel = existingWinner.nickname ? `${getTemplateNickname(existingWinner.nickname)}님${existingWinner.price ? ` (${existingWinner.price}만)` : ''}` : '기존 낙찰자';
             const newLabel = parsedPrice
-                ? (nickname ? `@${nickname}님 (${parsedPrice}만)` : `${parsedPrice}만`)
-                : (nickname ? `@${nickname}님` : '해당 입찰자');
+                ? (nickname ? `${getTemplateNickname(nickname)}님 (${parsedPrice}만)` : `${parsedPrice}만`)
+                : (nickname ? `${getTemplateNickname(nickname)}님` : '해당 입찰자');
             const confirmed = await showWinnerActionConfirm(prevLabel, newLabel);
             if (!confirmed) {
                 return;
