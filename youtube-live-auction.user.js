@@ -9578,6 +9578,15 @@ ${xmlRows.join('')}
         return isUpperCase ? character.toUpperCase() : character;
     }
 
+    function resetEnglishInputTransitionState(input) {
+        if (!input) return;
+
+        input.__auctionExpectedEnglishText = '';
+        input.__auctionExpectedEnglishCaretOffset = undefined;
+        input.__auctionKoreanInputComposing = false;
+        input.__auctionLastRenderedText = getRawChatInputText(input);
+    }
+
     function insertChatInputText(input, text) {
         if (!input || !text) return false;
 
@@ -9688,7 +9697,7 @@ ${xmlRows.join('')}
         }
 
         const handler = event => {
-            if (!_isEnglishInputEnabled || isSpectatorMode()) return;
+            if (isSpectatorMode()) return;
             if (event.ctrlKey || event.metaKey || event.altKey) return;
 
             const path = typeof event.composedPath === 'function'
@@ -9701,6 +9710,20 @@ ${xmlRows.join('')}
             const character = getPhysicalEnglishCharacter(event);
             if (!character) return;
 
+            // E가 꺼진 상태에서도 시스템 한/영 전환이 영어라면
+            // 브라우저의 영문 삽입을 먼저 막아 기존 한글 매핑으로 보낸다.
+            // 실제 한글 IME 조합 중에는 키다운을 건드리지 않는다.
+            if (
+                !_isEnglishInputEnabled &&
+                (
+                    event.isComposing ||
+                    input.__auctionKoreanInputComposing ||
+                    !/^[a-zA-Z]$/.test(event.key || '')
+                )
+            ) {
+                return;
+            }
+
             event.preventDefault();
             event.stopPropagation();
             if (typeof event.stopImmediatePropagation === 'function') {
@@ -9710,10 +9733,15 @@ ${xmlRows.join('')}
             const currentText = getRawChatInputText(input);
             const caretOffset = getChatInputCaretOffset(input);
             const expectedCaretOffset = (caretOffset === null ? currentText.length : caretOffset) + character.length;
-            if (insertChatInputText(input, character)) {
-                input.__auctionExpectedEnglishText = getRawChatInputText(input);
-                input.__auctionExpectedEnglishCaretOffset = expectedCaretOffset;
-                setTimeout(() => reconcileEnglishPhysicalInput(input), 0);
+            const insertedCharacter = _isEnglishInputEnabled
+                ? character
+                : (ENGLISH_TO_KOREAN_JAMO[character] || character);
+            if (insertChatInputText(input, insertedCharacter)) {
+                if (_isEnglishInputEnabled) {
+                    input.__auctionExpectedEnglishText = getRawChatInputText(input);
+                    input.__auctionExpectedEnglishCaretOffset = expectedCaretOffset;
+                    setTimeout(() => reconcileEnglishPhysicalInput(input), 0);
+                }
             }
         };
 
@@ -10002,6 +10030,7 @@ ${xmlRows.join('')}
 
             _isEnglishInputEnabled = !_isEnglishInputEnabled;
             const currentInput = getChatInputForButton(button);
+            resetEnglishInputTransitionState(currentInput);
             updateEnglishButtonState(button);
             if (currentInput) currentInput.focus();
         });
