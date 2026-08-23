@@ -6661,6 +6661,8 @@ ${xmlRows.join('')}
             return false;
         }
 
+        // 자동 낙찰 문구/안내 문구 입력은 사용자의 키보드 매핑 대상에서 제외한다.
+        input.__auctionSkipKeyboardMapping = true;
 
         input.focus();
 
@@ -6735,6 +6737,7 @@ ${xmlRows.join('')}
                     error
                 );
 
+                input.__auctionSkipKeyboardMapping = false;
                 return false;
             }
         }
@@ -6773,6 +6776,7 @@ ${xmlRows.join('')}
             );
         }
 
+        input.__auctionSkipKeyboardMapping = false;
 
         return true;
     }
@@ -9716,42 +9720,23 @@ ${xmlRows.join('')}
         input.__auctionEnglishKeydownDocument = ownerDocument;
     }
 
-    function bindChatSendButton(input) {
-        if (!input) return;
-
-        const ownerDocument = input.ownerDocument || document;
-        const sendButton = ownerDocument.querySelector('#send-button');
-        if (!sendButton || input.__auctionSendButton === sendButton) return;
-
-        if (input.__auctionSendButton && input.__auctionSendButtonHandler) {
-            input.__auctionSendButton.removeEventListener(
-                'click',
-                input.__auctionSendButtonHandler,
-                true
-            );
-        }
-
-        const handler = () => {
-            input.__auctionHideAccessoriesAfterSend = true;
-            const englishButton = ownerDocument.getElementById('__auction_english_button');
-            if (englishButton) updateEnglishButtonState(englishButton);
-
-            const decimalButton = ownerDocument.getElementById('__auction_decimal_button');
-            if (decimalButton) updateDecimalButtonState(decimalButton);
-        };
-
-        sendButton.addEventListener('click', handler, true);
-        input.__auctionSendButton = sendButton;
-        input.__auctionSendButtonHandler = handler;
-    }
-
     function bindKoreanInputMapping(input) {
         if (!input || input.__auctionKoreanInputHandler) return;
 
         input.__auctionLastRenderedText = getRawChatInputText(input);
         bindEnglishPhysicalKeyboard(input);
-        bindChatSendButton(input);
         const handler = event => {
+            if (input.__auctionSkipKeyboardMapping) {
+                input.__auctionLastRenderedText = getRawChatInputText(input);
+                const ownerDocument = input.ownerDocument || document;
+                const englishButton = ownerDocument.getElementById('__auction_english_button');
+                if (englishButton) updateEnglishButtonState(englishButton);
+
+                const decimalButton = ownerDocument.getElementById('__auction_decimal_button');
+                if (decimalButton) updateDecimalButtonState(decimalButton);
+                return;
+            }
+
             if (_isEnglishInputEnabled && reconcileEnglishPhysicalInput(input)) {
                 return;
             }
@@ -9760,10 +9745,6 @@ ${xmlRows.join('')}
                 ((event && event.isComposing) || input.__auctionKoreanInputComposing)
             ) {
                 return;
-            }
-
-            if (input.__auctionHideAccessoriesAfterSend && getChatInputText(input)) {
-                input.__auctionHideAccessoriesAfterSend = false;
             }
 
             if (_isEnglishInputEnabled) {
@@ -9807,7 +9788,6 @@ ${xmlRows.join('')}
         const input = getChatInputForButton(button);
         const spectator = isSpectatorMode();
         const hasInputText = !!getChatInputText(input);
-        bindChatSendButton(input);
 
         if (input && button.__auctionDecimalInput !== input) {
             if (button.__auctionDecimalInput && button.__auctionDecimalInputHandler) {
@@ -9830,13 +9810,7 @@ ${xmlRows.join('')}
         button.setAttribute('aria-label', button.title);
         button.style.opacity = spectator ? '.45' : '1';
         button.style.cursor = spectator ? 'not-allowed' : 'pointer';
-        button.style.setProperty(
-            'display',
-            input && input.__auctionHideAccessoriesAfterSend
-                ? 'none'
-                : (hasInputText ? 'inline-flex' : 'none'),
-            'important'
-        );
+        button.style.setProperty('display', hasInputText ? 'inline-flex' : 'none', 'important');
     }
 
     function toggleTemplateAmountDecimal(message) {
@@ -9879,7 +9853,6 @@ ${xmlRows.join('')}
         const input = getChatInputForButton(button);
         const spectator = isSpectatorMode();
         if (input) bindKoreanInputMapping(input);
-        bindChatSendButton(input);
 
         button.textContent = 'E';
         button.disabled = spectator;
@@ -9905,11 +9878,7 @@ ${xmlRows.join('')}
         );
         button.style.opacity = spectator ? '.45' : '1';
         button.style.cursor = spectator ? 'not-allowed' : 'pointer';
-        button.style.setProperty(
-            'display',
-            input && input.__auctionHideAccessoriesAfterSend ? 'none' : 'inline-flex',
-            'important'
-        );
+        button.style.setProperty('display', 'inline-flex', 'important');
     }
 
     function createEnglishInputButton() {
