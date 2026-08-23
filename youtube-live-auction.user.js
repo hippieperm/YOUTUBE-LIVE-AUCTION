@@ -9431,16 +9431,55 @@ ${xmlRows.join('')}
         );
     }
 
-    function composeChangedKoreanRegion(text, changedStart, changedEnd) {
+    function isHangulJamoCharacter(character) {
+        if (!character) return false;
+        const code = character.charCodeAt(0);
+        return (
+            (code >= 0x3131 && code <= 0x314e) ||
+            (code >= 0x314f && code <= 0x3163)
+        );
+    }
+
+    function getHangulJamoRegion(text, changedStart, changedEnd) {
         let regionStart = changedStart;
         let regionEnd = changedEnd;
 
-        while (regionStart > 0 && isHangulInputCharacter(text[regionStart - 1])) {
+        while (regionStart > 0 && isHangulJamoCharacter(text[regionStart - 1])) {
             regionStart--;
         }
-        while (regionEnd < text.length && isHangulInputCharacter(text[regionEnd])) {
+        while (regionEnd < text.length && isHangulJamoCharacter(text[regionEnd])) {
             regionEnd++;
         }
+
+        // 커서 바로 앞 완성형 음절은 입력 자모의 종류에 따라
+        // 받침을 이어 붙이거나(자음), 받침을 다음 초성으로 분리해야 한다(모음).
+        // 단, 이미 받침이 있는 음절 뒤의 새 자음은 별도 음절로 유지한다.
+        const firstJamo = text[regionStart];
+        const previousCharacter = text[regionStart - 1];
+        if (
+            firstJamo &&
+            previousCharacter &&
+            isHangulInputCharacter(previousCharacter) &&
+            !isHangulJamoCharacter(previousCharacter)
+        ) {
+            const previousDecomposed = decomposeHangulSyllables(previousCharacter);
+            const hasFinal = previousDecomposed.length > 2;
+            if (
+                (isHangulConsonant(firstJamo) && !hasFinal) ||
+                (isHangulVowel(firstJamo) && hasFinal)
+            ) {
+                regionStart--;
+            }
+        }
+
+        return { regionStart, regionEnd };
+    }
+
+    function composeChangedKoreanRegion(text, changedStart, changedEnd) {
+        // 기존 완성형 음절까지 다시 분해하면, 한글 음절 사이에 입력한
+        // 영문 자판 자모가 앞뒤 음절과 합쳐져 순서가 뒤틀릴 수 있다.
+        // 새로 입력된 호환 자모 구간만 조합하고 완성형 음절은 경계로 둔다.
+        const { regionStart, regionEnd } = getHangulJamoRegion(text, changedStart, changedEnd);
 
         const region = decomposeHangulSyllables(text.slice(regionStart, regionEnd));
         const composedRegion = region.replace(
@@ -9448,7 +9487,10 @@ ${xmlRows.join('')}
             composeHangulJamoSequence
         );
 
-        return text.slice(0, regionStart) + composedRegion + text.slice(regionEnd);
+        return {
+            text: text.slice(0, regionStart) + composedRegion + text.slice(regionEnd),
+            caretOffset: regionStart + composedRegion.length
+        };
     }
 
     function getTextChange(previousText, currentText) {
@@ -9509,12 +9551,15 @@ ${xmlRows.join('')}
                 .join('');
 
         let convertedText = currentText.slice(0, change.start) + mappedInsertedText + currentText.slice(change.end);
+        let koreanCompositionCaretOffset = null;
         if (direction === 'korean') {
-            convertedText = composeChangedKoreanRegion(
+            const composed = composeChangedKoreanRegion(
                 convertedText,
                 change.start,
                 change.start + mappedInsertedText.length
             );
+            convertedText = composed.text;
+            koreanCompositionCaretOffset = composed.caretOffset;
         }
 
         if (convertedText === currentText) {
@@ -9525,7 +9570,9 @@ ${xmlRows.join('')}
         const caretOffset = getChatInputCaretOffset(input);
         const replacementDelta = convertedText.length - currentText.length;
         let convertedCaretOffset = null;
-        if (caretOffset !== null) {
+        if (direction === 'korean' && koreanCompositionCaretOffset !== null) {
+            convertedCaretOffset = koreanCompositionCaretOffset;
+        } else if (caretOffset !== null) {
             if (caretOffset <= change.start) {
                 convertedCaretOffset = caretOffset;
             } else if (caretOffset >= change.end) {
@@ -9538,7 +9585,9 @@ ${xmlRows.join('')}
         input.__auctionKoreanMappingUpdating = true;
         try {
             input.textContent = convertedText;
-            setChatInputCaretOffset(input, convertedCaretOffset);
+            if (direction !== 'korean') {
+                setChatInputCaretOffset(input, convertedCaretOffset);
+            }
             try {
                 input.dispatchEvent(new InputEvent('input', {
                     bubbles: true,
@@ -9548,6 +9597,11 @@ ${xmlRows.join('')}
                 }));
             } catch (e) {
                 input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            if (direction === 'korean') {
+                // YouTube 입력 이벤트 리스너가 커서를 끝으로 이동시킬 수 있으므로
+                // 한글 조합 결과에 맞춘 위치를 이벤트 처리 뒤 복원한다.
+                setChatInputCaretOffset(input, convertedCaretOffset);
             }
         } finally {
             input.__auctionKoreanMappingUpdating = false;
@@ -9600,7 +9654,11 @@ ${xmlRows.join('')}
 
         try {
             if (ownerDocument.execCommand('insertText', false, text)) {
-                setChatInputCaretOffset(input, insertionOffset + text.length);
+                // E ON은 영문 원문을 그대로 삽입하므로 기존 커서 보정을 유지한다.
+                // E OFF는 input 이벤트의 한글 조합 결과가 커서 위치를 다시 계산한다.
+                if (_isEnglishInputEnabled) {
+                    setChatInputCaretOffset(input, insertionOffset + text.length);
+                }
                 return true;
             }
         } catch (e) {}
@@ -9608,7 +9666,6 @@ ${xmlRows.join('')}
         const currentText = currentTextBeforeInsert;
         const nextText = currentText.slice(0, insertionOffset) + text + currentText.slice(insertionOffset);
         input.textContent = nextText;
-        setChatInputCaretOffset(input, insertionOffset + text.length);
 
         try {
             input.dispatchEvent(new InputEvent('input', {
@@ -9620,6 +9677,7 @@ ${xmlRows.join('')}
         } catch (e) {
             input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         }
+        setChatInputCaretOffset(input, insertionOffset + text.length);
 
         return true;
     }

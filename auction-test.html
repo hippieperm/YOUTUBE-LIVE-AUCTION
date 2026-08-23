@@ -1172,7 +1172,8 @@
                         setEnglishTestCaret(input, 2);
                         await typeEnglishTestKeys(input, 'r');
                         const actual = getEnglishTestInputText(input);
-                        return { pass: actual === 'ABrCD', actual: `AB|CD + r → ${actual}` };
+                        const mode = getEnglishTestButton().getAttribute('aria-pressed');
+                        return { pass: actual === 'ABrCD', actual: `AB|CD + r → ${actual} (E=${mode})` };
                     }
                 },
                 {
@@ -1277,6 +1278,23 @@
                         await typeEnglishTestKeys(input, 'rksk');
                         const actual = getEnglishTestInputText(input);
                         return { pass: actual === '안rkskAB녕', actual: `안|AB녕 + rksk → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-korean-boundary-off',
+                    label: 'E OFF: 한글 음절 사이 영문 입력이 주변 한글을 깨뜨리지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '안녕');
+                        const input = getEnglishTestInput();
+                        setEnglishTestCaret(input, 1);
+                        const trace = [];
+                        for (const key of 'rksk') {
+                            dispatchEnglishTestKey(input, key);
+                            await waitForEnglishTest(40);
+                            trace.push(`${getEnglishTestInputText(input)}@${getEnglishTestCaretOffset(input)}`);
+                        }
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '안가나녕', actual: `안|녕 + rksk(가나) → ${actual} [${trace.join(' → ')}]` };
                     }
                 },
                 {
@@ -1415,6 +1433,8 @@
             input.__auctionLastRenderedText = text;
             input.__auctionExpectedEnglishText = '';
             input.__auctionExpectedEnglishCaretOffset = undefined;
+            input.__auctionKoreanInputComposing = false;
+            input.__auctionKoreanMappingUpdating = false;
             try {
                 input.dispatchEvent(new InputEvent('input', {
                     bubbles: true,
@@ -1461,6 +1481,16 @@
             selection.addRange(range);
         }
 
+        function getEnglishTestCaretOffset(input) {
+            if (!input) return null;
+            const selection = window.getSelection();
+            if (!selection || !selection.rangeCount || !input.contains(selection.anchorNode)) return null;
+            const range = document.createRange();
+            range.selectNodeContents(input);
+            range.setEnd(selection.anchorNode, selection.anchorOffset);
+            return range.toString().length;
+        }
+
         function dispatchEnglishTestKey(input, key, options = {}) {
             const code = options.code || (/^[a-zA-Z]$/.test(key) ? `Key${key.toUpperCase()}` : key);
             const event = new KeyboardEvent('keydown', {
@@ -1483,7 +1513,8 @@
 
         async function typeEnglishTestKeys(input, text) {
             for (const key of text) dispatchEnglishTestKey(input, key);
-            await waitForEnglishTest(50);
+            // 영문 물리 키 입력 후 IME 잔여 조각 보정 타이머까지 안정적으로 반영한다.
+            await waitForEnglishTest(120);
         }
 
         function updateEnglishTestResult(state, message) {
@@ -1527,6 +1558,7 @@
                     item.className = outcome.pass ? 'pass' : 'fail';
                     item.textContent = `${outcome.pass ? '✅' : '❌'} ${test.label} — ${outcome.actual}`;
                     if (resultLog) resultLog.appendChild(item);
+                    await waitForEnglishTest(40);
                 }
             } finally {
                 const currentButton = getEnglishTestButton();
