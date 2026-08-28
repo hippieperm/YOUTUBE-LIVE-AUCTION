@@ -16,6 +16,13 @@
 
     'use strict';
 
+    // 일반 라이브 페이지와 chatframe에 스크립트가 동시에 주입되면 서로의 UI를
+    // 다시 만들 수 있다. 실제 채팅 문서(iframe 또는 단독 채팅 팝아웃)만 담당한다.
+    const isStandaloneLiveChat = window.location.pathname.startsWith('/live_chat');
+    if (window.top === window && !isStandaloneLiveChat) {
+        return;
+    }
+
     // Tampermonkey 주입과 로컬 시뮬레이터 <script> 로드가 겹쳐도 한 번만 실행한다.
     const AUCTION_INSTANCE_GUARD = '__youtubeLiveAuctionInstanceActive';
     if (window[AUCTION_INSTANCE_GUARD]) {
@@ -63,9 +70,7 @@
             if (separatorState) separatorState.pending = null;
         });
 
-        removeCustomModals();
-        createAllUI();
-        applySpectatorUiState();
+        refreshSpectatorModeUi();
 
         showAuctionToast(
             _isSpectatorMode
@@ -73,6 +78,19 @@
                 : '🔓 관전자 모드를 해제했습니다. 일반 진행자 모드로 복구했습니다.',
             'success'
         );
+    }
+
+    function refreshSpectatorModeUi() {
+        removeCustomModals();
+        if (_isSpectatorMode) {
+            createAllUI();
+            applySpectatorUiState();
+        } else {
+            rebuildCurrentGuidePanel();
+            // YouTube가 모드 변경 직후 입력창 하위 DOM을 다시 그리는 경우에도
+            // 이전 패널이 되살아나지 않도록 다음 렌더링 턴에 한 번 더 확정한다.
+            setTimeout(rebuildCurrentGuidePanel, 0);
+        }
     }
 
     function loadAlwaysExpandedGuidePanelMode() {
@@ -2523,52 +2541,7 @@
     let _lastOpenBidListModalTime = 0;
 
     function getTargetDocs() {
-        const docs = [];
-        const addDoc = (d) => {
-            if (!d || docs.includes(d)) return;
-            try {
-                if (d.location && d.location.pathname.includes('live_chat_replay')) {
-                    return;
-                }
-            } catch (e) {}
-            docs.push(d);
-        };
-
-        addDoc(document);
-
-        try {
-            const input = findChatInput();
-            if (input && input.ownerDocument) {
-                addDoc(input.ownerDocument);
-            }
-        } catch (e) {}
-
-        try {
-            const iframe = document.querySelector('iframe#chatframe');
-            if (iframe && iframe.contentDocument) {
-                addDoc(iframe.contentDocument);
-            }
-        } catch (e) {}
-
-        try {
-            if (window.top && window.top.document) {
-                addDoc(window.top.document);
-                const topIframes = window.top.document.querySelectorAll('iframe');
-                topIframes.forEach(f => {
-                    try {
-                        if (f.contentDocument) addDoc(f.contentDocument);
-                    } catch (e) {}
-                });
-            }
-        } catch (e) {}
-
-        try {
-            if (window.parent && window.parent.document) {
-                addDoc(window.parent.document);
-            }
-        } catch (e) {}
-
-        return docs;
+        return [document];
     }
 
     /** 채팅창 내부 우선 마운트 타겟 획득 */
@@ -8612,14 +8585,17 @@ ${xmlRows.join('')}
                 button.style.setProperty('font-size', '12px', 'important');
                 button.style.setProperty('font-weight', '800', 'important');
                 button.style.setProperty('box-shadow', 'inset 0 1px 0 rgba(255,255,255,.12), 0 4px 10px rgba(0,0,0,.2)', 'important');
-                button.addEventListener('mouseenter', () => {
-                    button.style.setProperty('filter', 'brightness(1.18) saturate(1.12)', 'important');
-                    button.style.setProperty('transform', 'translateY(-2px)', 'important');
-                });
-                button.addEventListener('mouseleave', () => {
-                    button.style.setProperty('filter', 'none', 'important');
-                    button.style.setProperty('transform', 'translateY(0)', 'important');
-                });
+                if (!button.__auctionModernHoverBound) {
+                    button.addEventListener('mouseenter', () => {
+                        button.style.setProperty('filter', 'brightness(1.18) saturate(1.12)', 'important');
+                        button.style.setProperty('transform', 'translateY(-2px)', 'important');
+                    });
+                    button.addEventListener('mouseleave', () => {
+                        button.style.setProperty('filter', 'none', 'important');
+                        button.style.setProperty('transform', 'translateY(0)', 'important');
+                    });
+                    button.__auctionModernHoverBound = true;
+                }
             });
         }
 
@@ -8760,12 +8736,37 @@ ${xmlRows.join('')}
             });
     }
 
+    function restoreCurrentGuidePanelUi() {
+        if (isSpectatorMode()) return;
+
+        getTargetDocs().forEach(doc => {
+            if (!doc) return;
+            injectModernUiStyles(doc);
+            applyModernUiToElements(doc);
+        });
+    }
+
+    function rebuildCurrentGuidePanel() {
+        if (isSpectatorMode()) return;
+
+        getTargetDocs().forEach(doc => {
+            try {
+                doc.querySelectorAll('#__auction_guide_panel, #__auction_english_button')
+                    .forEach(element => element.remove());
+            } catch (e) {}
+        });
+
+        createAllUI();
+        restoreCurrentGuidePanelUi();
+    }
+
     function applySpectatorUiState() {
         const docs = getTargetDocs();
         docs.forEach(doc => {
             if (!doc) return;
 
-            if (isSpectatorMode()) {
+            const spectator = isSpectatorMode();
+            if (spectator) {
                 const panel = doc.getElementById('__auction_guide_panel');
                 if (panel) panel.remove();
             }
@@ -8774,10 +8775,20 @@ ${xmlRows.join('')}
             if (separatorButton) updateSeparatorButtonState(separatorButton);
 
             const englishButton = doc.getElementById('__auction_english_button');
-            if (englishButton) updateEnglishButtonState(englishButton);
+            if (englishButton) {
+                updateEnglishButtonState(englishButton);
+                if (spectator) {
+                    englishButton.style.setProperty('display', 'none', 'important');
+                }
+            }
 
             const decimalButton = doc.getElementById('__auction_decimal_button');
-            if (decimalButton) updateDecimalButtonState(decimalButton);
+            if (decimalButton) {
+                updateDecimalButtonState(decimalButton);
+                if (spectator) {
+                    decimalButton.style.setProperty('display', 'none', 'important');
+                }
+            }
         });
     }
 
@@ -9948,6 +9959,8 @@ ${xmlRows.join('')}
     }
 
     function createEnglishInputButton() {
+        if (isSpectatorMode()) return;
+
         const input = findChatInput();
         if (!input) return;
 
@@ -10048,6 +10061,7 @@ ${xmlRows.join('')}
     }
 
     function createDecimalButton() {
+        if (isSpectatorMode()) return;
 
         const input =
             findChatInput();
@@ -10566,6 +10580,8 @@ ${xmlRows.join('')}
             updateEnglishButtonState(englishButton);
             updateDecimalButtonState(decimalButton);
             updateSeparatorButtonState(separatorButton);
+            injectModernUiStyles(targetDoc);
+            applyModernUiToElements(targetDoc);
             return;
         }
 
@@ -10856,9 +10872,7 @@ ${xmlRows.join('')}
         window.addEventListener('storage', (e) => {
             if (e.key === SPECTATOR_MODE_STORAGE_KEY) {
                 _isSpectatorMode = e.newValue === '1';
-                removeCustomModals();
-                createAllUI();
-                applySpectatorUiState();
+                refreshSpectatorModeUi();
             }
             if (e.key === BID_STORAGE_KEY || e.key === '__auction_active_video_id') {
                 updateBidBadge();
