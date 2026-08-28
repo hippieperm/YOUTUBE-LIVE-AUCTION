@@ -9883,9 +9883,11 @@ ${xmlRows.join('')}
         button.style.cursor = spectator ? 'not-allowed' : 'pointer';
         button.style.setProperty(
             'display',
-            input && input.__auctionHideDecimalAfterSend
+            spectator
                 ? 'none'
-                : (hasInputText ? 'inline-flex' : 'none'),
+                : (input && input.__auctionHideDecimalAfterSend
+                    ? 'none'
+                    : (hasInputText ? 'inline-flex' : 'none')),
             'important'
         );
     }
@@ -9955,7 +9957,11 @@ ${xmlRows.join('')}
         );
         button.style.opacity = spectator ? '.45' : '1';
         button.style.cursor = spectator ? 'not-allowed' : 'pointer';
-        button.style.setProperty('display', 'inline-flex', 'important');
+        button.style.setProperty(
+            'display',
+            spectator ? 'none' : 'inline-flex',
+            'important'
+        );
     }
 
     function createEnglishInputButton() {
