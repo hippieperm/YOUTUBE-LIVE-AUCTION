@@ -9764,25 +9764,52 @@ ${xmlRows.join('')}
 
         const ownerDocument = input.ownerDocument || document;
         const sendButton = ownerDocument.querySelector('#send-button');
-        if (!sendButton || input.__auctionSendButton === sendButton) return;
-
-        if (input.__auctionSendButton && input.__auctionSendButtonHandler) {
-            input.__auctionSendButton.removeEventListener(
-                'click',
-                input.__auctionSendButtonHandler,
-                true
-            );
-        }
-
-        const handler = () => {
+        const hideDecimalAfterSend = () => {
             input.__auctionHideDecimalAfterSend = true;
             const decimalButton = ownerDocument.getElementById('__auction_decimal_button');
             if (decimalButton) updateDecimalButtonState(decimalButton);
+
+            // YouTube가 전송 후 입력창을 비우는 시점은 클릭 이벤트보다 늦을 수 있다.
+            // 다음 렌더링 턴에도 숨김 상태를 다시 적용해 버튼이 잠깐 남지 않게 한다.
+            setTimeout(() => {
+                const latestButton = ownerDocument.getElementById('__auction_decimal_button');
+                if (latestButton) updateDecimalButtonState(latestButton);
+            }, 0);
         };
 
-        sendButton.addEventListener('click', handler, true);
-        input.__auctionSendButton = sendButton;
-        input.__auctionSendButtonHandler = handler;
+        if (sendButton && input.__auctionSendButton !== sendButton) {
+            if (input.__auctionSendButton && input.__auctionSendButtonHandler) {
+                input.__auctionSendButton.removeEventListener(
+                    'click',
+                    input.__auctionSendButtonHandler,
+                    true
+                );
+            }
+
+            sendButton.addEventListener('click', hideDecimalAfterSend, true);
+            input.__auctionSendButton = sendButton;
+            input.__auctionSendButtonHandler = hideDecimalAfterSend;
+        }
+
+        // YouTube가 전송 버튼 내부 요소만 교체해도 놓치지 않도록 문서 캡처 단계에서도
+        // 실제 #send-button 클릭을 감지한다.
+        if (!input.__auctionSendDocumentHandler) {
+            const documentHandler = event => {
+                const path = typeof event.composedPath === 'function'
+                    ? event.composedPath()
+                    : [event.target];
+                const clickedSendButton = path.some(element => {
+                    if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+                    return element.id === 'send-button' ||
+                        (typeof element.closest === 'function' && !!element.closest('#send-button'));
+                });
+                if (clickedSendButton) hideDecimalAfterSend();
+            };
+
+            ownerDocument.addEventListener('click', documentHandler, true);
+            input.__auctionSendDocument = ownerDocument;
+            input.__auctionSendDocumentHandler = documentHandler;
+        }
     }
 
     function bindKoreanInputMapping(input) {
