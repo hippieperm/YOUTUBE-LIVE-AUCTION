@@ -29,6 +29,10 @@
         "https://127.0.0.1/*",
         "file:///*"
       ],
+      "exclude_matches": [
+        "https://www.youtube.com/live_chat_replay*",
+        "https://youtube.com/live_chat_replay*"
+      ],
       "js": ["youtube-live-auction.user.js"],
       "run_at": "document_start",
       "all_frames": true,

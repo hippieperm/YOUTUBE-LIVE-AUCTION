@@ -686,9 +686,6 @@
                     <button class="sim-btn red" onclick="runStrictUnderlineScenario()">
                         <span>🛑 7. 밑줄 버튼 + 전송 2단계 종합 테스트</span>
                     </button>
-                    <button class="sim-btn primary" onclick="runReplayFullCycleScenario()">
-                        <span>🎬 8. 다시보기(Replay) 환경 낙찰자 표시 & 가드 테스트</span>
-                    </button>
                 </div>
             </div>
 
@@ -850,9 +847,6 @@
                     <button class="sim-btn red" onclick="sendSeparatorFromHost()">
                         <span>🔴 진행자 밑줄 버튼 + 전송</span>
                     </button>
-                    <button class="sim-btn" id="btn-toggle-replay" onclick="toggleReplayMode()">
-                        <span>🎬 다시보기 모드 시뮬레이션 (ON/OFF)</span>
-                    </button>
                     <button class="sim-btn" onclick="clearChatMessages()">
                         <span>🧹 채팅창 비우기</span>
                     </button>
@@ -862,7 +856,7 @@
             <!-- 사용 방법 팁 -->
             <div class="guide-tip">
                 💡 <strong>주요 기능 테스트 포인트</strong><br>
-                1. <strong>⚡ 원클릭 시나리오 8종</strong>: 소수점 생략(255=25.5만), 20/30만원 오보정 방지, 동일가 선착순, 회차별 단일 낙찰자 하이라이트 유지, 밑줄 2단계 필수 조건, 다시보기 가드 등 완벽 검증<br>
+                1. <strong>⚡ 원클릭 시나리오</strong>: 소수점 생략(255=25.5만), 20/30만원 오보정 방지, 동일가 선착순, 회차별 단일 낙찰자 하이라이트 유지, 밑줄 2단계 필수 조건을 검증<br>
                 2. <strong>📐 규격입력</strong>: 수고·폭·높이·목대·근장 입력 후 📤 전송 클릭 (가운뎃점 조합 텍스트 입력창 자동 주입, 예: 폭12 · 높이12 · 근장12)<br>
                 3. <strong>💰 가격입력</strong>: 👑 최고가 / ⬆️ 이상(15만이상) / 📋 입력(34만) 즉시 입력 테스트<br>
                 4. <strong>📁 기타 안내 ▼</strong>: 접기/펼치기 토글로 추가 공지문구 버튼 확인<br>
@@ -1452,9 +1446,6 @@
         }
 
         async function prepareEnglishTestState(enabled, text) {
-            const renderer = document.querySelector('yt-live-chat-renderer');
-            if (renderer && renderer.hasAttribute('replay')) toggleReplayMode();
-
             const input = getEnglishTestInput();
             const button = getEnglishTestButton();
             if (!input || !button) throw new Error('E 버튼 또는 채팅 입력창을 찾지 못했습니다.');
@@ -1634,9 +1625,7 @@
 
         /** 일반 시나리오의 밑줄도 실제 2단계 경로를 사용 */
         function sendScenarioChatMessage(nickname, text, isHost = false) {
-            const renderer = document.querySelector('yt-live-chat-renderer');
-            const isReplay = !!(renderer && renderer.hasAttribute('replay'));
-            if (!isReplay && isHost && text.trim() === '===================') {
+            if (isHost && text.trim() === '===================') {
                 return sendSeparatorFromHost();
             }
             return addChatMessage(nickname, text, isHost);
@@ -1650,14 +1639,15 @@
         }
 
         function prepareSeparatorGateSimulation(callback) {
-            if (window.__youtubeLiveAuctionBuild !== '2.5-20260821-real-iframe-gate') {
+            let activeBuild = window.__youtubeLiveAuctionBuild;
+            try {
+                if (!activeBuild && window.top !== window) {
+                    activeBuild = window.top.__youtubeLiveAuctionBuild;
+                }
+            } catch (e) {}
+            if (activeBuild !== '2.5-20260828-lightweight-live-observer') {
                 updateSeparatorGateResult('fail', '❌ 현재 youtube-live-auction.user.js가 아닌 구버전 설치본이 실행 중입니다. Tampermonkey 스크립트를 업데이트한 뒤 페이지를 새로고침해주세요.');
                 return;
-            }
-
-            const renderer = document.querySelector('yt-live-chat-renderer');
-            if (renderer && renderer.hasAttribute('replay')) {
-                toggleReplayMode();
             }
 
             const separatorButton = document.getElementById('__auction_separator_button');
@@ -1724,7 +1714,7 @@
                             ? '✅ 통과: 밑줄은 입력창에만 준비됐고, 아직 낙찰 처리는 실행되지 않았습니다.'
                             : '❌ 실패: 전송 전에 낙찰 처리가 실행됐거나 밑줄 입력에 실패했습니다.';
                     } else {
-                        passed = !!winner && inputText.includes('@게이트낙찰자님') && inputText.includes('15만');
+                        passed = !!winner && inputText.includes('게이트낙찰자님') && inputText.includes('15만');
                         if (!passed && authorizedWaitCount < 40) {
                             authorizedWaitCount++;
                             setTimeout(evaluateResult, 100);
@@ -1882,43 +1872,6 @@
                 } catch (e) {}
             }
             addChatMessage('해담분재경매장', '🗑️ [시뮬레이터] 낙찰 내역이 모두 초기화되었습니다.', true);
-        }
-
-        /** 다시보기 모드 시뮬레이션 토글 */
-        function toggleReplayMode() {
-            const renderer = document.querySelector('yt-live-chat-renderer');
-            const badge = document.querySelector('.yt-live-badge');
-            const inputArea = document.getElementById('input-renderer');
-            const replayBtn = document.getElementById('btn-toggle-replay');
-
-            if (!renderer) return;
-
-            const isReplay = renderer.hasAttribute('replay');
-            if (isReplay) {
-                renderer.removeAttribute('replay');
-                if (badge) {
-                    badge.textContent = '실시간';
-                    badge.style.background = '#cc0000';
-                }
-                if (inputArea) inputArea.style.display = '';
-                if (replayBtn) {
-                    replayBtn.innerHTML = '<span>🎬 다시보기 모드 시뮬레이션 (ON/OFF)</span>';
-                    replayBtn.classList.remove('primary');
-                }
-                addChatMessage('해담분재경매장', '🔴 [모드 전환] 실시간 라이브 모드로 복귀했습니다.', true);
-            } else {
-                renderer.setAttribute('replay', '');
-                if (badge) {
-                    badge.textContent = '다시보기';
-                    badge.style.background = '#555';
-                }
-                if (inputArea) inputArea.style.display = 'none';
-                if (replayBtn) {
-                    replayBtn.innerHTML = '<span>🎬 다시보기 ON (라이브로 복귀)</span>';
-                    replayBtn.classList.add('primary');
-                }
-                addChatMessage('해담분재경매장', '🎬 [모드 전환] 다시보기(Replay) 모드로 전환되었습니다. (낙찰자 추가/수정 비활성화)', true);
-            }
         }
 
         /** 진행자 인풋창 메시지 전송 핸들러 */
@@ -2103,29 +2056,6 @@
                     );
                 }, 1100);
             }, 1100);
-        }
-
-        /** 8. 다시보기(Replay) 환경 낙찰자 표시 & 가드 테스트 시나리오 */
-        function runReplayFullCycleScenario() {
-            // 다시보기 모드로 강제 활성화
-            const renderer = document.querySelector('yt-live-chat-renderer');
-            if (renderer && !renderer.hasAttribute('replay')) {
-                toggleReplayMode();
-            }
-
-            addChatMessage('해담분재경매장', '📢 [다시보기 환경 시뮬레이션] 다시보기에서는 채팅 입력창이 없고, 밑줄(등호 3개 이상 포함) 감지 시 골드 하이라이트가 표시되며, 수동 낙찰 추가/수정은 가드로 보호됩니다.', true);
-
-            const steps = [
-                { nick: '다시보기시청자A', msg: '25만', delay: 600 },
-                { nick: '다시보기시청자B', msg: '30만', delay: 1300 },
-                { nick: '해담분재경매장', msg: '===================', delay: 2100, isHost: true }
-            ];
-
-            steps.forEach(step => {
-                setTimeout(() => {
-                    addChatMessage(step.nick, step.msg, step.isHost || false);
-                }, step.delay);
-            });
         }
 
         /** 초현실 실시간 가상 입찰 봇 엔진 */
@@ -2393,7 +2323,7 @@
          ========================================================= -->
     <script>
         (() => {
-            const expectedBuild = '2.5-20260821-real-iframe-gate';
+            const expectedBuild = '2.5-20260828-lightweight-live-observer';
             const params = new URLSearchParams(window.location.search);
             const isEmbeddedChat = params.get('embeddedChat') === '1';
 
@@ -2422,7 +2352,13 @@
             const updateEngineStatus = () => {
                 const status = document.getElementById('simulator-engine-status');
                 if (!status) return;
-                if (window.__youtubeLiveAuctionBuild === expectedBuild) {
+                let activeBuild = window.__youtubeLiveAuctionBuild;
+                try {
+                    if (!activeBuild && window.top !== window) {
+                        activeBuild = window.top.__youtubeLiveAuctionBuild;
+                    }
+                } catch (e) {}
+                if (activeBuild === expectedBuild) {
                     status.textContent = `✅ 현재 엔진 로드 완료: ${expectedBuild}`;
                     status.style.color = '#86efac';
                 } else {

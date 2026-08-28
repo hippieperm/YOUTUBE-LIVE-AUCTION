@@ -2,11 +2,12 @@
 // @name         해담분재경매 관리
 // @namespace    https://youtube.com/
 // @version      2.5
-// @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별 & 단일 낙찰자 채팅 하이라이터 + 스마트 입찰 금액 추출 + 가상 키패드 + 실시간 토스트 알림 + 안내 패널 + 낙찰 내역 관리 & 엑셀 다운로드 (다시보기 환경 낙찰자 추가/수정 방지)
+// @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별 & 단일 낙찰자 채팅 하이라이터 + 스마트 입찰 금액 추출 + 가상 키패드 + 실시간 토스트 알림 + 안내 패널 + 낙찰 내역 관리 & 엑셀 다운로드
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
+// @exclude      https://www.youtube.com/live_chat_replay*
+// @exclude      https://youtube.com/live_chat_replay*
 // @match        https://www.youtube.com/live_chat*
-// @match        https://www.youtube.com/live_chat_replay*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
@@ -22,7 +23,7 @@
         return;
     }
     window[AUCTION_INSTANCE_GUARD] = true;
-    window.__youtubeLiveAuctionBuild = '2.5-20260821-real-iframe-gate';
+    window.__youtubeLiveAuctionBuild = '2.5-20260828-lightweight-live-observer';
 
     const GUIDE_PANEL_MODE_STORAGE_KEY = '__auction_guide_panel_always_expanded';
     const GUIDE_PANEL_MODE_CHANGE_CODE = '123123123';
@@ -243,7 +244,7 @@
                 return pop;
             }
 
-            // 7) 🛑 iframe 내부에서 부모 창이 저장해 둔 활성 Video ID 동기화 (다시보기 완벽 연동)
+            // 7) iframe 내부에서 부모 창이 저장해 둔 활성 Video ID 동기화
             try {
                 const cachedVid = localStorage.getItem(ACTIVE_VIDEO_ID_KEY);
                 if (cachedVid && cachedVid !== 'unknown' && cachedVid !== 'live_chat' && cachedVid !== 'live_chat_replay' && !cachedVid.includes('.')) {
@@ -259,75 +260,6 @@
             } catch (err) {}
             return 'unknown';
         }
-    }
-
-
-    /** 다시보기 (YouTube Live Replay / VOD) 환경 여부 판별 */
-    function isReplayMode() {
-        try {
-            // 0) 실시간 채팅 입력창이 존재하면 100% 실시간 라이브 환경 (다시보기 아님!)
-            const chatInput = findChatInput();
-            if (chatInput) {
-                return false;
-            }
-
-            // 1) 현재 창 URL 확인 (live_chat_replay 명시된 경우)
-            const url = new URL(window.location.href);
-            if (url.pathname.includes('live_chat_replay') || url.href.includes('live_chat_replay')) {
-                return true;
-            }
-
-            // 2) 부모/최상위 창 URL 확인
-            try {
-                if (window.top && window.top !== window && window.top.location.href) {
-                    const topHref = window.top.location.href || '';
-                    if (topHref.includes('live_chat_replay')) return true;
-                }
-            } catch (e) {}
-
-            try {
-                if (window.parent && window.parent !== window && window.parent.location.href) {
-                    const parentHref = window.parent.location.href || '';
-                    if (parentHref.includes('live_chat_replay')) return true;
-                }
-            } catch (e) {}
-
-            // 3) Referrer 확인
-            if (document.referrer && document.referrer.includes('live_chat_replay')) {
-                return true;
-            }
-
-            // 4) iframe#chatframe src 확인
-            const checkIframe = (doc) => {
-                try {
-                    const iframe = doc.querySelector('iframe#chatframe');
-                    if (iframe && iframe.src && iframe.src.includes('live_chat_replay')) {
-                        return true;
-                    }
-                } catch (e) {}
-                return false;
-            };
-            if (checkIframe(document)) return true;
-            try {
-                if (window.top && checkIframe(window.top.document)) return true;
-            } catch (e) {}
-
-            // 5) 다시보기 전용 DOM 요소 확인 (실시간 채팅에는 없는 명확한 다시보기 전용 요소)
-            const checkDom = (doc) => {
-                try {
-                    if (doc.querySelector('yt-live-chat-replay-header-renderer')) return true;
-                    if (doc.querySelector('ytd-live-chat-frame[is-replay]')) return true;
-                } catch (e) {}
-                return false;
-            };
-            if (checkDom(document)) return true;
-            try {
-                if (window.top && checkDom(window.top.document)) return true;
-            } catch (e) {}
-
-        } catch (e) {}
-
-        return false;
     }
 
 
@@ -592,7 +524,7 @@
 
         const filtered = records.filter(r => {
             if (!r) return false;
-            // 1) 현재 방송/다시보기의 videoId가 명확히 확인된 경우
+            // 1) 현재 방송의 videoId가 명확히 확인된 경우
             if (
                 videoId && videoId !== 'unknown' && videoId !== 'live_chat' && videoId !== 'live_chat_replay'
             ) {
@@ -1637,7 +1569,6 @@
     // =========================================================
     // 밑줄(구분선) 메시지 감지
     // - 실시간 라이브: [밑줄] 버튼으로 등호 19개를 입력한 뒤 [전송] 버튼을 누른 경우에만 낙찰 처리
-    // - 다시보기(Replay): 등호 19개 또는 등호 3개 이상(===...) 모두 지원
     // =========================================================
 
     const EXACT_AUCTION_SEPARATOR = '==================='; // 등호 19개
@@ -1721,11 +1652,6 @@
 
         // 1) 정확히 등호 19개 일치 (표준 밑줄 버튼)
         if (clean === EXACT_AUCTION_SEPARATOR) {
-            return true;
-        }
-
-        // 2) 등호, 하이픈, 물결, 언더바 3개 이상 연속된 구분선 (실시간 라이브 & 다시보기 공통 지원)
-        if (/^={3,}$/.test(clean) || /^-{3,}$/.test(clean) || /^~{3,}$/.test(clean) || /^__{3,}$/.test(clean)) {
             return true;
         }
 
@@ -2405,8 +2331,8 @@
             '(원문:', consistentWinner.originalChat + ')'
         );
 
-        // 🛑 관전자/다시보기 환경: 하이라이트만 적용하고 입력창·낙찰내역은 건드리지 않는다.
-        if (isSpectatorMode() || isReplayMode()) {
+        // 🛑 관전자 환경: 하이라이트만 적용하고 입력창·낙찰내역은 건드리지 않는다.
+        if (isSpectatorMode()) {
             highlightWinnerChatMessage(consistentWinner.element, consistentWinner, targetDoc);
             return;
         }
@@ -2597,12 +2523,18 @@
     let _lastOpenBidListModalTime = 0;
 
     function getTargetDocs() {
-        const docs = [document];
+        const docs = [];
         const addDoc = (d) => {
-            if (d && !docs.includes(d)) {
-                docs.push(d);
-            }
+            if (!d || docs.includes(d)) return;
+            try {
+                if (d.location && d.location.pathname.includes('live_chat_replay')) {
+                    return;
+                }
+            } catch (e) {}
+            docs.push(d);
         };
+
+        addDoc(document);
 
         try {
             const input = findChatInput();
@@ -2639,7 +2571,7 @@
         return docs;
     }
 
-    /** 채팅창 내부 우선 마운트 타겟 획득 (라이브 및 다시보기/일반 영상 대응) */
+    /** 채팅창 내부 우선 마운트 타겟 획득 */
     function getChatMountTarget() {
         if (window.location.pathname.startsWith('/live_chat')) {
             return document.body || document.documentElement;
@@ -5278,12 +5210,6 @@ ${xmlRows.join('')}
         winnerChangeConfirmed = false
     ) {
 
-        // 🛑 다시보기 환경: 낙찰 모달 팝업 및 낙찰자 추가/수정 완전 차단
-        if (isReplayMode()) {
-            console.log(PREFIX, '🛑 다시보기 환경에서는 낙찰 모달이 지원되지 않습니다.');
-            return;
-        }
-
         console.log(
             PREFIX,
             'openAuctionModal:',
@@ -6365,7 +6291,7 @@ ${xmlRows.join('')}
             } else {
                 console.log(
                     PREFIX,
-                    '가상 키패드 -> 채팅 입력창 없음 (다시보기 환경): 낙찰 기록 및 하이라이트 진행'
+                    '가상 키패드 -> 채팅 입력창 없음: 낙찰 기록 및 하이라이트 진행'
                 );
             }
 
@@ -7168,7 +7094,7 @@ ${xmlRows.join('')}
             } else {
                 console.log(
                     PREFIX,
-                    '숫자 감지 -> 채팅 입력창 없음 (다시보기 환경/입력창 숨김): 낙찰 기록 및 하이라이트 진행'
+                    '숫자 감지 -> 채팅 입력창 없음: 낙찰 기록 및 하이라이트 진행'
                 );
             }
 
@@ -10701,6 +10627,44 @@ ${xmlRows.join('')}
         return Array.from(items);
     }
 
+    function processObservedChatItems(items, targetDoc) {
+        items.forEach(chatItem => {
+            if (!chatItem || chatItem.dataset.auctionProcessed === 'true') {
+                return;
+            }
+
+            const msgEl = chatItem.querySelector('#message');
+            const text = msgEl ? msgEl.textContent.trim() : '';
+
+            if (!text || !isSeparatorMessage(text)) {
+                return;
+            }
+
+            if (!isSpectatorMode()) {
+                const alreadyAuthorized = chatItem.dataset.auctionSeparatorAuthorized === 'true';
+                if (!alreadyAuthorized) {
+                    if (!consumeAuthorizedSeparatorSubmission(text, targetDoc)) {
+                        chatItem.dataset.auctionProcessed = 'true';
+                        console.log(PREFIX, '밑줄 버튼 + 전송 조건 불충족으로 자동 낙찰 처리 무시:', text);
+                        return;
+                    }
+                    chatItem.dataset.auctionSeparatorAuthorized = 'true';
+                }
+            }
+
+            if (chatItem.dataset.auctionProcessingScheduled === 'true') {
+                return;
+            }
+            chatItem.dataset.auctionProcessingScheduled = 'true';
+            console.log(PREFIX, '실시간 새 밑줄 감지:', text);
+
+            // YouTube가 작성자/메시지 텍스트를 비동기로 채우는 경우까지 기다린다.
+            setTimeout(() => {
+                processSeparatorElement(chatItem, targetDoc);
+            }, 120);
+        });
+    }
+
     function setupChatObserver() {
         const docs = getTargetDocs();
 
@@ -10719,6 +10683,12 @@ ${xmlRows.join('')}
                     return;
                 }
 
+                const state = {
+                    observer: null,
+                    pendingItems: new Set(),
+                    flushTimer: null
+                };
+
                 const observer = new MutationObserver(mutations => {
                     // 채팅 iframe 자체에 유저스크립트 인스턴스가 있으면,
                     // top 페이지 인스턴스는 cross-realm DOM 처리를 iframe 인스턴스에게 양보한다.
@@ -10728,42 +10698,18 @@ ${xmlRows.join('')}
                     }
 
                     mutations.forEach(mutation => {
-                        collectChatItemsFromMutation(mutation).forEach(chatItem => {
-                            if (!chatItem || chatItem.dataset.auctionProcessed === 'true') {
-                                return;
-                            }
-
-                            const msgEl = chatItem.querySelector('#message');
-                            const text = msgEl ? msgEl.textContent.trim() : '';
-
-                            if (!text || !isSeparatorMessage(text)) {
-                                return;
-                            }
-
-                            if (!isReplayMode() && !isSpectatorMode()) {
-                                const alreadyAuthorized = chatItem.dataset.auctionSeparatorAuthorized === 'true';
-                                if (!alreadyAuthorized) {
-                                    if (!consumeAuthorizedSeparatorSubmission(text, doc)) {
-                                        chatItem.dataset.auctionProcessed = 'true';
-                                        console.log(PREFIX, '밑줄 버튼 + 전송 조건 불충족으로 자동 낙찰 처리 무시:', text);
-                                        return;
-                                    }
-                                    // top 페이지와 채팅 iframe의 복수 감시자가 동일한 승인 결과를 공유한다.
-                                    chatItem.dataset.auctionSeparatorAuthorized = 'true';
-                                }
-                            }
-
-                            if (chatItem.dataset.auctionProcessingScheduled === 'true') {
-                                return;
-                            }
-                            chatItem.dataset.auctionProcessingScheduled = 'true';
-                            console.log(PREFIX, isReplayMode() ? '다시보기 밑줄 감지:' : '실시간 새 밑줄 감지:', text);
-                            // YouTube가 작성자/메시지 텍스트를 비동기로 채우는 경우까지 기다린다.
-                            setTimeout(() => {
-                                processSeparatorElement(chatItem, doc);
-                            }, 120);
-                        });
+                        collectChatItemsFromMutation(mutation).forEach(item => state.pendingItems.add(item));
                     });
+
+                    // 채팅 한 줄은 renderer 삽입·텍스트 채움 등 여러 mutation으로 완성된다.
+                    // 묶어서 한 번만 검사해 라이브 채팅 폭주 시 DOM 탐색을 제한한다.
+                    if (state.flushTimer) return;
+                    state.flushTimer = setTimeout(() => {
+                        state.flushTimer = null;
+                        const items = Array.from(state.pendingItems);
+                        state.pendingItems.clear();
+                        processObservedChatItems(items, doc);
+                    }, 50);
                 });
 
                 observer.observe(container, {
@@ -10772,149 +10718,30 @@ ${xmlRows.join('')}
                     characterData: true
                 });
 
-                _activeChatObservers.set(container, observer);
+                state.observer = observer;
+                _activeChatObservers.set(container, state);
                 console.log(PREFIX, '실시간 채팅 감시 옵저버 부착 완료');
 
-                // 다시보기 환경: 이미 DOM에 렌더링되어 있던 미처리 밑줄 메시지 초기 선별 및 하이라이트
-                if (isReplayMode()) {
-                    try {
-                        const existingItems = container.querySelectorAll(
-                            'yt-live-chat-text-message-renderer, ' +
-                            'yt-live-chat-paid-message-renderer, ' +
-                            'yt-live-chat-membership-item-renderer'
-                        );
-                        existingItems.forEach(item => {
-                            if (item && !item.dataset.auctionProcessed) {
-                                const msgEl = item.querySelector('#message');
-                                const text = msgEl ? msgEl.textContent.trim() : '';
-                                if (text && isSeparatorMessage(text)) {
-                                    processSeparatorElement(item, doc);
-                                }
-                            }
-                        });
-                    } catch (e) {}
-                }
             });
         });
     }
 
 
     // =========================================================
-    // UI 감시 (쓰로틀링/디바운스 적용)
+    // UI 초기화 (한정 재시도)
     // =========================================================
 
     function startUIObserver() {
-
-        createAllUI();
-        setupChatObserver();
-
-        let debounceTimer = null;
-
-        const observer =
-            new MutationObserver(
-                function () {
-
-                    const input =
-                        findChatInput();
-
-                    const targetDoc =
-                        input
-                            ? (input.ownerDocument || document)
-                            : document;
-
-                    const englishButton =
-                        targetDoc.getElementById(
-                            '__auction_english_button'
-                        );
-
-                    const decimalButton =
-                        targetDoc.getElementById(
-                            '__auction_decimal_button'
-                        );
-
-                    const inputNeedsKeyboardBinding =
-                        !!input &&
-                        (!input.__auctionKoreanInputHandler ||
-                            !input.__auctionEnglishKeydownHandler);
-
-                    if (
-                        targetDoc.getElementById(
-                            '__auction_guide_panel'
-                        ) &&
-                        targetDoc.getElementById('__auction_separator_button') &&
-                        englishButton &&
-                        decimalButton &&
-                        !inputNeedsKeyboardBinding
-                    ) {
-                        return;
-                    }
-
-                    if (debounceTimer) {
-                        clearTimeout(debounceTimer);
-                    }
-
-                    debounceTimer =
-                        setTimeout(
-                            function () {
-
-                                createAllUI();
-                                setupChatObserver();
-
-                                debounceTimer = null;
-
-                            },
-                            250
-                        );
-                }
-            );
-
-
-        function startObserve() {
-
-            if (!document.body) {
-                return;
-            }
-
-            observer.observe(
-                document.body,
-                {
-                    childList:true,
-                    subtree:true
-                }
-            );
-
-            setupChatObserver();
-        }
-
-
-        if (document.body) {
-            startObserve();
-        } else {
-            document.addEventListener(
-                'DOMContentLoaded',
-                startObserve,
-                {
-                    once:true
-                }
-            );
-        }
-
-
-        // -----------------------------------------------------
-        // YouTube 채팅 재생성 및 프레임 감지
-        // -----------------------------------------------------
-
-        setInterval(
-            function () {
-
+        // document.body 전체를 영구 감시하거나 2초마다 폴링하면 라이브 채팅의
+        // 잦은 렌더링과 충돌한다. YouTube 초기 비동기 렌더링만 짧게 재시도한다.
+        const retryDelays = [0, 250, 1000, 2500, 5000];
+        retryDelays.forEach(delay => {
+            setTimeout(() => {
                 createAllUI();
                 setupChatObserver();
-
                 attachChatFrameListener();
-
-            },
-            2000
-        );
+            }, delay);
+        });
     }
 
 
@@ -10958,6 +10785,32 @@ ${xmlRows.join('')}
                 iframe.contentDocument
             ) {
 
+                if (!iframe.__auctionFrameLoadHandler) {
+                    iframe.__auctionFrameLoadHandler = () => {
+                        // 채팅 iframe이 재생성되면 해당 시점에만 다시 연결한다.
+                        setTimeout(() => {
+                            createAllUI();
+                            setupChatObserver();
+                            attachChatFrameListener();
+                        }, 0);
+                    };
+                    iframe.addEventListener('load', iframe.__auctionFrameLoadHandler);
+                }
+
+                const previousDoc = iframe.__auctionClickListenerDocument;
+                if (previousDoc === iframe.contentDocument) {
+                    setupChatObserver();
+                    return;
+                }
+
+                if (previousDoc) {
+                    previousDoc.removeEventListener(
+                        'click',
+                        handleGlobalClick,
+                        true
+                    );
+                }
+
                 iframe.contentDocument.removeEventListener(
                     'click',
                     handleGlobalClick,
@@ -10969,6 +10822,8 @@ ${xmlRows.join('')}
                     handleGlobalClick,
                     true
                 );
+
+                iframe.__auctionClickListenerDocument = iframe.contentDocument;
 
                 setupChatObserver();
             }
