@@ -1292,6 +1292,17 @@
                     }
                 },
                 {
+                    id: 'risk-korean-vowel-composition-off',
+                    label: 'E OFF: 완성 중인 한글 음절 뒤 모음이 분리되지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestKeys(input, 'cnl');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '취', actual: `cnl(취) → ${actual}` };
+                    }
+                },
+                {
                     id: 'risk-rapid-toggle',
                     label: 'E 버튼 빠른 연타가 중복 버튼·중복 리스너를 만들지 않음',
                     run: async () => {
@@ -2373,7 +2384,7 @@
                 return;
             }
             const script = document.createElement('script');
-            script.src = './youtube-live-auction.user.js';
+            script.src = `./youtube-live-auction.user.js?testCacheBust=${Date.now()}`;
             script.dataset.auctionSimulatorEngine = 'true';
             script.addEventListener('load', updateEngineStatus, { once: true });
             script.addEventListener('error', updateEngineStatus, { once: true });

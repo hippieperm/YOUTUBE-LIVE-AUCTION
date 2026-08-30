@@ -9148,6 +9148,8 @@ ${xmlRows.join('')}
     // 채팅 입력 보조 버튼
     // =========================================================
 
+    const _chatInputRendererObservers = new WeakMap();
+
     const ENGLISH_TO_KOREAN_JAMO = Object.freeze({
         r: 'ㄱ', R: 'ㄲ', s: 'ㄴ', e: 'ㄷ', E: 'ㄸ', f: 'ㄹ',
         a: 'ㅁ', q: 'ㅂ', Q: 'ㅃ', t: 'ㅅ', T: 'ㅆ', d: 'ㅇ',
@@ -9372,6 +9374,28 @@ ${xmlRows.join('')}
         } catch (e) {}
     }
 
+    function observeChatInputRenderer(input) {
+        if (!input) return;
+
+        const renderer = input.closest('yt-live-chat-message-input-renderer') || input.parentElement;
+        if (!renderer || _chatInputRendererObservers.has(renderer)) return;
+
+        const state = { input };
+        const observer = new MutationObserver(() => {
+            const currentInput = renderer.querySelector(
+                'yt-live-chat-text-input-field-renderer #input, #input[contenteditable="true"]'
+            );
+            if (!currentInput || currentInput === state.input) return;
+
+            state.input = currentInput;
+            setTimeout(() => createAllUI(), 0);
+        });
+
+        observer.observe(renderer, { childList: true, subtree: true });
+        state.observer = observer;
+        _chatInputRendererObservers.set(renderer, state);
+    }
+
     function isHangulInputCharacter(character) {
         if (!character) return false;
         const code = character.charCodeAt(0);
@@ -9391,7 +9415,7 @@ ${xmlRows.join('')}
         );
     }
 
-    function getHangulJamoRegion(text, changedStart, changedEnd) {
+    function getHangulJamoRegion(text, changedStart, changedEnd, activeCompositionStart = null) {
         let regionStart = changedStart;
         let regionEnd = changedEnd;
 
@@ -9417,7 +9441,11 @@ ${xmlRows.join('')}
             const hasFinal = previousDecomposed.length > 2;
             if (
                 (isHangulConsonant(firstJamo) && !hasFinal) ||
-                (isHangulVowel(firstJamo) && hasFinal)
+                (
+                    isHangulVowel(firstJamo) &&
+                    Number.isInteger(activeCompositionStart) &&
+                    activeCompositionStart < regionStart
+                )
             ) {
                 regionStart--;
             }
@@ -9426,11 +9454,16 @@ ${xmlRows.join('')}
         return { regionStart, regionEnd };
     }
 
-    function composeChangedKoreanRegion(text, changedStart, changedEnd) {
+    function composeChangedKoreanRegion(text, changedStart, changedEnd, activeCompositionStart = null) {
         // 기존 완성형 음절까지 다시 분해하면, 한글 음절 사이에 입력한
         // 영문 자판 자모가 앞뒤 음절과 합쳐져 순서가 뒤틀릴 수 있다.
         // 새로 입력된 호환 자모 구간만 조합하고 완성형 음절은 경계로 둔다.
-        const { regionStart, regionEnd } = getHangulJamoRegion(text, changedStart, changedEnd);
+        const { regionStart, regionEnd } = getHangulJamoRegion(
+            text,
+            changedStart,
+            changedEnd,
+            activeCompositionStart
+        );
 
         const region = decomposeHangulSyllables(text.slice(regionStart, regionEnd));
         const composedRegion = region.replace(
@@ -9507,7 +9540,8 @@ ${xmlRows.join('')}
             const composed = composeChangedKoreanRegion(
                 convertedText,
                 change.start,
-                change.start + mappedInsertedText.length
+                change.start + mappedInsertedText.length,
+                input.__auctionKoreanCompositionStart ?? null
             );
             convertedText = composed.text;
             koreanCompositionCaretOffset = composed.caretOffset;
@@ -9557,6 +9591,12 @@ ${xmlRows.join('')}
         } finally {
             input.__auctionKoreanMappingUpdating = false;
             input.__auctionLastRenderedText = convertedText;
+            if (
+                direction === 'korean' &&
+                Number.isInteger(input.__auctionKoreanCompositionStart)
+            ) {
+                input.__auctionKoreanCompositionEnd = convertedCaretOffset;
+            }
         }
 
         return true;
@@ -9589,6 +9629,8 @@ ${xmlRows.join('')}
         input.__auctionExpectedEnglishText = '';
         input.__auctionExpectedEnglishCaretOffset = undefined;
         input.__auctionKoreanInputComposing = false;
+        input.__auctionKoreanCompositionStart = null;
+        input.__auctionKoreanCompositionEnd = null;
         input.__auctionLastRenderedText = getRawChatInputText(input);
     }
 
@@ -9741,6 +9783,15 @@ ${xmlRows.join('')}
 
             const currentText = getRawChatInputText(input);
             const caretOffset = getChatInputCaretOffset(input);
+            const insertionOffset = caretOffset === null ? currentText.length : caretOffset;
+            if (
+                !_isEnglishInputEnabled &&
+                (!Number.isInteger(input.__auctionKoreanCompositionStart) ||
+                    input.__auctionKoreanCompositionEnd !== insertionOffset)
+            ) {
+                input.__auctionKoreanCompositionStart = insertionOffset;
+                input.__auctionKoreanCompositionEnd = insertionOffset;
+            }
             const expectedCaretOffset = (caretOffset === null ? currentText.length : caretOffset) + character.length;
             const insertedCharacter = _isEnglishInputEnabled
                 ? character
@@ -9750,6 +9801,11 @@ ${xmlRows.join('')}
                     input.__auctionExpectedEnglishText = getRawChatInputText(input);
                     input.__auctionExpectedEnglishCaretOffset = expectedCaretOffset;
                     setTimeout(() => reconcileEnglishPhysicalInput(input), 0);
+                } else {
+                    const mappedCaretOffset = getChatInputCaretOffset(input);
+                    input.__auctionKoreanCompositionEnd = mappedCaretOffset === null
+                        ? getRawChatInputText(input).length
+                        : mappedCaretOffset;
                 }
             }
         };
@@ -9816,6 +9872,9 @@ ${xmlRows.join('')}
         if (!input || input.__auctionKoreanInputHandler) return;
 
         input.__auctionLastRenderedText = getRawChatInputText(input);
+        input.__auctionKoreanCompositionStart = null;
+        input.__auctionKoreanCompositionEnd = null;
+        observeChatInputRenderer(input);
         bindEnglishPhysicalKeyboard(input);
         bindChatSendButton(input);
         const handler = event => {
