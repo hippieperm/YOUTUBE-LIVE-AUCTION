@@ -1427,6 +1427,112 @@
                     }
                 },
                 {
+                    id: 'risk-ime-composing-guard',
+                    label: 'IME 조합 중 keydown은 중복 한글 입력으로 가로채지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        const event = dispatchEnglishTestKey(input, 'r', { isComposing: true });
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '' && !event.defaultPrevented, actual: `IME 조합 중 r → ${actual || '(비어 있음)'}, defaultPrevented=${event.defaultPrevented}` };
+                    }
+                },
+                {
+                    id: 'risk-composition-event-reset',
+                    label: 'compositionstart/end 뒤 새 입력이 조합 잠금에 걸리지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, composed: true }));
+                        const composingEvent = dispatchEnglishTestKey(input, 'r');
+                        input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, composed: true }));
+                        await waitForEnglishTest(30);
+                        const nextEvent = dispatchEnglishTestKey(input, 'k');
+                        await waitForEnglishTest(50);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'ㅏ' && !composingEvent.defaultPrevented && nextEvent.defaultPrevented, actual: `조합 중 r + 종료 후 k → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-non-ascii-key-guard',
+                    label: '영문 물리 코드여도 실제 key가 비영문이면 임의 변환하지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        const event = dispatchEnglishTestKey(input, 'r', { key: 'あ', code: 'KeyR' });
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '' && !event.defaultPrevented, actual: `key=あ/code=KeyR → ${actual || '(비어 있음)'}` };
+                    }
+                },
+                {
+                    id: 'risk-repeat-key-single-insert',
+                    label: '키 반복 이벤트 1회도 문자 중복 없이 한 번만 반영됨',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '');
+                        const input = getEnglishTestInput();
+                        const event = dispatchEnglishTestKey(input, 'r', { repeat: true });
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'r' && event.defaultPrevented, actual: `repeat=true r → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-selection-replace-english',
+                    label: '선택 영역 위에 영문 입력 시 선택된 문자열만 교체됨',
+                    run: async () => {
+                        await prepareEnglishTestState(true, 'ABCD');
+                        const input = getEnglishTestInput();
+                        setEnglishTestSelection(input, 1, 3);
+                        dispatchEnglishTestKey(input, 'r');
+                        await waitForEnglishTest(40);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'ArD', actual: `A[BC]D + r → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-emoji-caret-english',
+                    label: '이모지 포함 문장에서 커서 기준 영문 삽입 위치가 유지됨',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '🌳AB');
+                        const input = getEnglishTestInput();
+                        setEnglishTestCaret(input, 2);
+                        dispatchEnglishTestKey(input, 'r');
+                        await waitForEnglishTest(40);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '🌳rAB', actual: `🌳|AB + r → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-descendant-target-bubble',
+                    label: '입력창 내부 하위 노드에서 발생한 keydown도 한 번만 처리됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        const child = document.createElement('span');
+                        input.appendChild(child);
+                        setEnglishTestCaret(input, 0);
+                        const event = dispatchEnglishTestKey(input, 'r', { target: child });
+                        await waitForEnglishTest(40);
+                        const actual = getEnglishTestInputText(input);
+                        child.remove();
+                        return { pass: actual === 'ㄱ' && event.defaultPrevented, actual: `하위 span 대상 r → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-paste-input-english',
+                    label: 'E ON: 붙여넣기 한글 입력이 영문 자판 문자열로 정확히 변환됨',
+                    run: async () => {
+                        await prepareEnglishTestState(true, '');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestInput(input, '한글');
+                        await waitForEnglishTest(50);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'gksrmf', actual: `한글 붙여넣기 → ${actual}` };
+                    }
+                },
+                {
                     id: 'risk-rapid-toggle',
                     label: 'E 버튼 빠른 연타가 중복 버튼·중복 리스너를 만들지 않음',
                     run: async () => {
@@ -1609,6 +1715,24 @@
             selection.addRange(range);
         }
 
+        function setEnglishTestSelection(input, start, end) {
+            if (!input) return;
+            input.focus();
+            const selection = window.getSelection();
+            const range = document.createRange();
+            const textNode = input.firstChild;
+            if (!textNode) {
+                range.selectNodeContents(input);
+            } else {
+                const safeStart = Math.max(0, Math.min(start, textNode.length));
+                const safeEnd = Math.max(safeStart, Math.min(end, textNode.length));
+                range.setStart(textNode, safeStart);
+                range.setEnd(textNode, safeEnd);
+            }
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
         function getEnglishTestCaretOffset(input) {
             if (!input) return null;
             const selection = window.getSelection();
@@ -1635,8 +1759,31 @@
             if (typeof options.getModifierState === 'function') {
                 Object.defineProperty(event, 'getModifierState', { value: options.getModifierState });
             }
+            if (typeof options.isComposing === 'boolean') {
+                Object.defineProperty(event, 'isComposing', { value: options.isComposing });
+            }
+            if (typeof options.repeat === 'boolean') {
+                Object.defineProperty(event, 'repeat', { value: options.repeat });
+            }
             (options.target || input).dispatchEvent(event);
             return event;
+        }
+
+        function dispatchEnglishTestInput(input, text, inputType = 'insertFromPaste') {
+            if (!input) return false;
+            input.textContent = text;
+            input.innerText = text;
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType,
+                    data: text
+                }));
+            } catch (error) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            return true;
         }
 
         async function typeEnglishTestKeys(input, text) {
