@@ -1134,6 +1134,24 @@
            ========================================================= */
         let englishTestRunning = false;
 
+        const KOREAN_COMPOSITION_EDGE_CASES = Object.freeze([
+            { id: 'compound-vowel-wae', keys: 'rho', expected: '괘', label: '복합 모음 ㅙ' },
+            { id: 'compound-vowel-oe', keys: 'rhl', expected: '괴', label: '복합 모음 ㅚ' },
+            { id: 'compound-vowel-weo', keys: 'rnj', expected: '궈', label: '복합 모음 ㅝ' },
+            { id: 'compound-vowel-we', keys: 'rnp', expected: '궤', label: '복합 모음 ㅞ' },
+            { id: 'compound-vowel-wi', keys: 'rnl', expected: '귀', label: '복합 모음 ㅟ' },
+            { id: 'compound-vowel-ui', keys: 'rml', expected: '긔', label: '복합 모음 ㅢ' },
+            { id: 'compound-final-nj-to-vowel', keys: 'dkswdk', expected: '앉아', label: '겹받침 ㄵ 뒤 모음' },
+            { id: 'compound-final-nh-to-vowel', keys: 'aksgdk', expected: '많아', label: '겹받침 ㄶ 뒤 모음' },
+            { id: 'compound-final-lg-to-vowel', keys: 'dlfrdj', expected: '읽어', label: '겹받침 ㄺ 뒤 모음' },
+            { id: 'compound-final-lm-to-vowel', keys: 'tkfadk', expected: '삶아', label: '겹받침 ㄻ 뒤 모음' },
+            { id: 'compound-final-lb-to-vowel', keys: 'sjfqdj', expected: '넓어', label: '겹받침 ㄼ 뒤 모음' },
+            { id: 'compound-final-lt-to-vowel', keys: 'gkfxdk', expected: '핥아', label: '겹받침 ㄾ 뒤 모음' },
+            { id: 'compound-final-lp-to-vowel', keys: 'dmfvdj', expected: '읊어', label: '겹받침 ㄿ 뒤 모음' },
+            { id: 'compound-final-lh-to-vowel', keys: 'tlfgdj', expected: '싫어', label: '겹받침 ㅀ 뒤 모음' },
+            { id: 'compound-final-bs-to-vowel', keys: 'rkqtdj', expected: '값어', label: '겹받침 ㅄ 뒤 모음' }
+        ]);
+
         const ENGLISH_INPUT_TEST_GROUPS = {
             history: [
                 {
@@ -1426,6 +1444,28 @@
                         return { pass: actual === '안녕하세요', actual: `dkssudgktpdy → ${actual}` };
                     }
                 },
+                {
+                    id: 'risk-korean-final-to-next-syllable-off',
+                    label: 'E OFF: 받침 뒤 다음 초성 입력이 겹받침으로 잘못 합쳐지지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestKeys(input, 'dnjsgud');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '원형', actual: `dnjsgud(원형) → ${actual}` };
+                    }
+                },
+                ...KOREAN_COMPOSITION_EDGE_CASES.map(testCase => ({
+                    id: `risk-korean-${testCase.id}-off`,
+                    label: `E OFF: ${testCase.label} 조합 경계가 유지됨`,
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestKeys(input, testCase.keys);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === testCase.expected, actual: `${testCase.keys}(${testCase.expected}) → ${actual}` };
+                    }
+                })),
                 {
                     id: 'risk-ime-composing-guard',
                     label: 'IME 조합 중 keydown은 중복 한글 입력으로 가로채지 않음',
@@ -1918,8 +1958,14 @@
 
         async function runMasterScenario(definition) {
             clearChatMessages();
+            // 이전 시나리오의 MutationObserver flush와 예약된 DOM 정리가
+            // 새 경매 메시지와 섞이지 않도록 초기화 턴을 먼저 보장한다.
+            await waitForEnglishTest(120);
             definition.run();
             await waitForEnglishTest(definition.waitMs);
+            // 마지막 밑줄 메시지는 삽입 직후가 아니라 observer flush 이후에
+            // 처리될 수 있으므로 고정 대기만으로 바로 판정하지 않는다.
+            await waitForEnglishTest(180);
             const outcome = definition.check();
             return {
                 passed: !!outcome.passed,
@@ -2004,19 +2050,19 @@
                     {
                         label: '시나리오 4: 한자리 소수점 문맥 보정',
                         run: runContextAwareScenario,
-                        waitMs: 5700,
+                        waitMs: 6000,
                         check: () => masterWinnerCheck(['아리까리-w4y'])
                     },
                     {
                         label: '시나리오 5: 고가 금액 스케일 보정',
                         run: runHighValueScaleScenario,
-                        waitMs: 5300,
+                        waitMs: 5800,
                         check: () => masterWinnerCheck(['낙찰희망자'])
                     },
                     {
                         label: '시나리오 6: 연속 회차별 낙찰자 유지',
                         run: runSequentialRoundsScenario,
-                        waitMs: 6500,
+                        waitMs: 7200,
                         check: () => masterWinnerCheck(['회원B', '회원E'])
                     },
                     {

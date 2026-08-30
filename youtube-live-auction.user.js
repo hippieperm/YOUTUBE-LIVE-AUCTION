@@ -9246,7 +9246,12 @@ ${xmlRows.join('')}
                     result += initial;
                     initial = current;
                 } else if (!final) {
-                    if (isHangulVowel(next)) {
+                    // 겹받침 자모(예: ㄶ)는 완성형 음절에서 분해된
+                    // 받침이므로 뒤에 모음이 와도 새 초성으로 취급하지 않는다.
+                    // 단일 받침만 다음 초성으로 넘겨야 "원형" 같은 입력이
+                    // "워ㄶㅕㅇ"으로 깨지지 않는다.
+                    const isCompoundFinal = !!HANGUL_SPLIT_FINALS[current];
+                    if (isHangulVowel(next) && !isCompoundFinal) {
                         result += composeHangulSyllable(initial, vowel);
                         initial = current;
                         vowel = '';
