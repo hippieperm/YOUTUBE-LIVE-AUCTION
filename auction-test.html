@@ -133,6 +133,29 @@
             border-color: #3b3f5c;
         }
 
+        .master-test-card {
+            border-color: rgba(74, 222, 128, 0.55);
+            background: linear-gradient(145deg, rgba(22, 101, 52, 0.2), rgba(15, 23, 42, 0.86));
+            box-shadow: 0 8px 24px rgba(22, 101, 52, 0.12);
+        }
+
+        .master-test-card .section-title {
+            color: #bbf7d0;
+        }
+
+        .master-test-button {
+            width: 100%;
+            justify-content: center;
+            text-align: center;
+            font-size: 13px;
+            padding: 13px 14px;
+        }
+
+        .master-test-summary {
+            max-height: 230px;
+            overflow-y: auto;
+        }
+
         .section-title {
             font-size: 13px;
             font-weight: 700;
@@ -650,6 +673,22 @@
         </div>
 
         <div class="sidebar-content">
+            <!-- 전체 테스트 원클릭 실행 -->
+            <div class="section-card master-test-card" id="master-test-card">
+                <div class="section-title">🧪 전체 테스트 원클릭 실행</div>
+                <div class="section-desc" style="color:#bbf7d0;">
+                    현재 등록된 <strong>입력 조합 위험·E 버튼 회귀·소수점·밑줄 2단계·경매 시나리오</strong>를 순서대로 전부 실행합니다.
+                    봇 시작·수동 채팅·기록 삭제처럼 종료 조건이 없거나 데이터를 지우는 버튼은 자동 실행에서 제외합니다.
+                </div>
+                <button class="sim-btn green master-test-button" id="master-test-button" onclick="runAllTestsFromTop()">
+                    🚀 현재까지 모든 자동 테스트 한 번에 실행
+                </button>
+                <div id="master-test-result" class="english-test-result master-test-summary">
+                    위 버튼을 누르면 전체 테스트가 순차 실행됩니다.
+                </div>
+                <ol id="master-test-log" class="english-test-log"></ol>
+            </div>
+
             <div class="section-card" style="border-color: rgba(56,189,248,.45); background: rgba(14,165,233,.08);">
                 <div class="section-title" style="color:#7dd3fc;">🌐 실제 YouTube 구조 검증 모드</div>
                 <div class="section-desc" style="margin-bottom:0; color:#bae6fd;">
@@ -1303,6 +1342,91 @@
                     }
                 },
                 {
+                    id: 'risk-korean-compound-vowel-off',
+                    label: 'E OFF: 복합 모음이 분해되지 않고 한 음절로 조합됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestKeys(input, 'rhk');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '과', actual: `rhk(과) → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-korean-compound-final-off',
+                    label: 'E OFF: 겹받침 입력이 앞뒤 음절을 깨뜨리지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestKeys(input, 'rkrt');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '갃', actual: `rkrt(갃) → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-korean-boundary-vowel-off',
+                    label: 'E OFF: 기존 한글 음절 뒤 새 모음은 임의로 합치지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '안녕');
+                        const input = getEnglishTestInput();
+                        setEnglishTestCaret(input, 1);
+                        dispatchEnglishTestKey(input, 'k');
+                        await waitForEnglishTest(50);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '안ㅏ녕', actual: `안|녕 + k → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-korean-existing-syllable-vowel-off',
+                    label: 'E OFF: 기존 완성형 음절 끝의 모음은 별도 자모로 유지됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '추');
+                        const input = getEnglishTestInput();
+                        setEnglishTestCaret(input, 1);
+                        dispatchEnglishTestKey(input, 'l');
+                        await waitForEnglishTest(50);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '추ㅣ', actual: `추| + l → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-korean-start-caret-off',
+                    label: 'E OFF: 문장 맨 앞 입력 시 기존 문장 순서를 보존함',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '안녕');
+                        const input = getEnglishTestInput();
+                        setEnglishTestCaret(input, 0);
+                        await typeEnglishTestKeys(input, 'rksk');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '가나안녕', actual: `|안녕 + rksk → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-korean-reset-after-delete-off',
+                    label: 'E OFF: 삭제 후 새 입력이 이전 조합 상태를 재사용하지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestKey(input, 'r');
+                        setEnglishTestInput('');
+                        dispatchEnglishTestKey(input, 'k');
+                        await waitForEnglishTest(50);
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === 'ㅏ', actual: `r 입력 후 삭제 + k → ${actual}` };
+                    }
+                },
+                {
+                    id: 'risk-korean-long-composition-off',
+                    label: 'E OFF: 긴 연속 한글 입력에서도 음절 경계가 유지됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestKeys(input, 'dkssudgktpdy');
+                        const actual = getEnglishTestInputText(input);
+                        return { pass: actual === '안녕하세요', actual: `dkssudgktpdy → ${actual}` };
+                    }
+                },
+                {
                     id: 'risk-rapid-toggle',
                     label: 'E 버튼 빠른 연타가 중복 버튼·중복 리스너를 만들지 않음',
                     run: async () => {
@@ -1439,6 +1563,8 @@
             input.__auctionExpectedEnglishText = '';
             input.__auctionExpectedEnglishCaretOffset = undefined;
             input.__auctionKoreanInputComposing = false;
+            input.__auctionKoreanCompositionStart = null;
+            input.__auctionKoreanCompositionEnd = null;
             input.__auctionKoreanMappingUpdating = false;
             try {
                 input.dispatchEvent(new InputEvent('input', {
@@ -1574,10 +1700,210 @@
                 allPassed ? 'pass' : 'fail',
                 `${allPassed ? '✅ 전체 통과' : '❌ 실패 항목 있음'}: ${passed}/${tests.length}개 통과\n과거 수정 버그와 추가 위험 상황을 실제 DOM 이벤트 기준으로 확인했습니다.`
             );
+
+            return { passed, total: tests.length, allPassed };
         }
 
         function runEnglishInputTestSuite() {
             return runEnglishInputTestGroup('all');
+        }
+
+        let allTestsRunning = false;
+
+        function updateMasterTestResult(state, message) {
+            const result = document.getElementById('master-test-result');
+            if (!result) return;
+            result.className = `english-test-result master-test-summary ${state || ''}`.trim();
+            result.textContent = message;
+        }
+
+        function appendMasterTestLog(label, passed, detail) {
+            const log = document.getElementById('master-test-log');
+            if (!log) return;
+            const item = document.createElement('li');
+            item.className = passed ? 'pass' : 'fail';
+            item.textContent = `${passed ? '✅' : '❌'} ${label} — ${detail}`;
+            log.appendChild(item);
+            item.scrollIntoView({ block: 'nearest' });
+        }
+
+        function waitForMasterTestResult(selector, timeoutMs = 5000) {
+            return new Promise(resolve => {
+                const startedAt = Date.now();
+                const check = () => {
+                    const result = document.querySelector(selector);
+                    const isPassed = !!result && result.classList.contains('pass');
+                    const isFailed = !!result && result.classList.contains('fail');
+                    if (isPassed || isFailed) {
+                        resolve({
+                            passed: isPassed,
+                            detail: result.textContent.replace(/\s+/g, ' ').trim()
+                        });
+                        return;
+                    }
+                    if (Date.now() - startedAt >= timeoutMs) {
+                        resolve({ passed: false, detail: '결과 대기 시간 초과' });
+                        return;
+                    }
+                    setTimeout(check, 50);
+                };
+                check();
+            });
+        }
+
+        function getSimulatorWinnerNames() {
+            return Array.from(document.querySelectorAll('.auction-winner-highlight'))
+                .map(element => {
+                    const author = element.querySelector('#author-name');
+                    return (author ? author.textContent : '').replace('진행자', '').trim();
+                })
+                .filter(Boolean);
+        }
+
+        function masterWinnerCheck(expectedNames) {
+            const names = getSimulatorWinnerNames();
+            const passed = expectedNames.every(name => names.some(actual => actual.includes(name)));
+            return {
+                passed,
+                detail: `하이라이트=${names.join(', ') || '(없음)'}`
+            };
+        }
+
+        async function runMasterScenario(definition) {
+            clearChatMessages();
+            definition.run();
+            await waitForEnglishTest(definition.waitMs);
+            const outcome = definition.check();
+            return {
+                passed: !!outcome.passed,
+                detail: outcome.detail
+            };
+        }
+
+        async function runAllTestsFromTop() {
+            if (allTestsRunning) return;
+
+            const button = document.getElementById('master-test-button');
+            const log = document.getElementById('master-test-log');
+            allTestsRunning = true;
+            if (button) {
+                button.disabled = true;
+                button.style.opacity = '0.65';
+                button.textContent = '⏳ 전체 테스트 실행 중…';
+            }
+            if (log) log.innerHTML = '';
+            updateMasterTestResult('running', '⏳ 입력 위험·회귀·소수점·밑줄·시나리오를 순서대로 실행 중…');
+
+            let passed = 0;
+            let total = 0;
+            const record = (label, outcome) => {
+                const testPassed = !!outcome.passed;
+                const testTotal = Number.isFinite(outcome.total) ? outcome.total : 1;
+                const testPassedCount = Number.isFinite(outcome.passedCount)
+                    ? outcome.passedCount
+                    : (testPassed ? testTotal : 0);
+                passed += testPassedCount;
+                total += testTotal;
+                appendMasterTestLog(label, testPassedCount === testTotal, outcome.detail || `${testPassedCount}/${testTotal}개 통과`);
+            };
+
+            try {
+                clearChatMessages();
+
+                const english = await runEnglishInputTestSuite();
+                record('E 버튼·한글 입력 전체 회귀 및 위험 테스트', {
+                    passed: english.allPassed,
+                    passedCount: english.passed,
+                    total: english.total,
+                    detail: `${english.passed}/${english.total}개 통과`
+                });
+
+                for (const [testId, testCase] of Object.entries(DECIMAL_BUTTON_TEST_CASES)) {
+                    runDecimalButtonTest(testId);
+                    const outcome = await waitForMasterTestResult('#decimal-button-test-result', 3000);
+                    record(`소수점: ${testCase.label}`, outcome);
+                }
+
+                for (const mode of ['direct', 'buttonOnly', 'authorized']) {
+                    runSeparatorGateSimulation(mode);
+                    const outcome = await waitForMasterTestResult('#separator-gate-result', mode === 'authorized' ? 6000 : 3000);
+                    record(`밑줄 2단계: ${mode}`, outcome);
+                }
+
+                const scenarios = [
+                    {
+                        label: '시나리오 1: 표준 경매 최고가 선별',
+                        run: runStandardAuctionScenario,
+                        waitMs: 5800,
+                        check: () => masterWinnerCheck(['푸른언덕'])
+                    },
+                    {
+                        label: '시나리오 2: 다양한 금액 포맷 생성',
+                        run: runFormatTestScenario,
+                        waitMs: 2500,
+                        check: () => {
+                            const messages = Array.from(document.querySelectorAll('#items #message')).map(element => element.textContent);
+                            const expected = ['15만', '.5', '3,5', '15만 5천', '150,000원', '20', '저요'];
+                            const found = expected.filter(sample => messages.some(message => message.includes(sample)));
+                            return { passed: found.length === expected.length, detail: `${found.length}/${expected.length}개 포맷 메시지 생성` };
+                        }
+                    },
+                    {
+                        label: '시나리오 3: 동일 금액 선착순',
+                        run: runTieBreakerScenario,
+                        waitMs: 3400,
+                        check: () => masterWinnerCheck(['1등선착순'])
+                    },
+                    {
+                        label: '시나리오 4: 한자리 소수점 문맥 보정',
+                        run: runContextAwareScenario,
+                        waitMs: 5700,
+                        check: () => masterWinnerCheck(['아리까리-w4y'])
+                    },
+                    {
+                        label: '시나리오 5: 고가 금액 스케일 보정',
+                        run: runHighValueScaleScenario,
+                        waitMs: 5300,
+                        check: () => masterWinnerCheck(['낙찰희망자'])
+                    },
+                    {
+                        label: '시나리오 6: 연속 회차별 낙찰자 유지',
+                        run: runSequentialRoundsScenario,
+                        waitMs: 6500,
+                        check: () => masterWinnerCheck(['회원B', '회원E'])
+                    },
+                    {
+                        label: '시나리오 7: 밑줄 2단계 종합 경로',
+                        run: runStrictUnderlineScenario,
+                        waitMs: 2600,
+                        check: () => {
+                            const result = document.getElementById('separator-gate-result');
+                            return {
+                                passed: !!result && result.classList.contains('pass'),
+                                detail: result ? result.textContent.replace(/\s+/g, ' ').trim() : '결과 없음'
+                            };
+                        }
+                    }
+                ];
+
+                for (const scenario of scenarios) {
+                    const outcome = await runMasterScenario(scenario);
+                    record(scenario.label, outcome);
+                }
+            } catch (error) {
+                record('전체 테스트 실행기', { passed: false, detail: `예외: ${error.message || error}` });
+            } finally {
+                allTestsRunning = false;
+                if (button) {
+                    button.disabled = false;
+                    button.style.opacity = '1';
+                    button.textContent = '🚀 현재까지 모든 자동 테스트 한 번에 실행';
+                }
+                updateMasterTestResult(
+                    passed === total ? 'pass' : 'fail',
+                    `${passed === total ? '✅ 전체 통과' : '❌ 실패 항목 있음'}: ${passed}/${total}개 통과\n입력 위험·회귀·소수점·밑줄·경매 시나리오 검증 완료`
+                );
+            }
         }
 
         function updateDecimalButtonTestResult(state, message) {
