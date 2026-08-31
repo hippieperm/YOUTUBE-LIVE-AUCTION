@@ -7567,8 +7567,8 @@ ${xmlRows.join('')}
         const title = createElement('div', { text:'💰 가격 입력', style:'font-size:19px !important; font-weight:900 !important; color:#fde047 !important;' });
         const close = createElement('button', { type:'button', text:'✕', style:'width:40px !important; height:40px !important; border:0 !important; border-radius:12px !important; background:rgba(255,255,255,.05) !important; color:rgba(255,255,255,.7) !important; font-size:21px !important; cursor:pointer !important;' });
         close.addEventListener('click', () => removeCustomModals()); header.appendChild(title); header.appendChild(close); modal.appendChild(header);
-        const tabs = createElement('div', { style:'display:grid !important; grid-template-columns:repeat(3,1fr) !important; gap:6px !important; margin-top:16px !important;' });
-        [['👑 최고가','최고가','rgba(245,158,11,.18)','rgba(251,191,36,.7)','#fde68a'],['⬆️ 이상','이상','rgba(14,165,233,.18)','rgba(56,189,248,.7)','#bae6fd'],['📋 입력','일반','rgba(34,197,94,.18)','rgba(74,222,128,.7)','#bbf7d0']].forEach(([label,value,background,borderColor,color]) => { const tab=createElement('button',{type:'button',text:label,style:`width:100% !important; height:54px !important; border:1px solid ${borderColor} !important; border-radius:13px !important; background:${background} !important; color:${color} !important; font-size:14px !important; font-weight:900 !important; cursor:pointer !important;`}); tab.dataset.mode=value; tabs.appendChild(tab); });
+        const tabs = createElement('div', { style:'display:grid !important; grid-template-columns:repeat(4,1fr) !important; gap:6px !important; margin-top:16px !important;' });
+        [['👑 최고가','최고가','rgba(245,158,11,.18)','rgba(251,191,36,.7)','#fde68a'],['⬆️ 이상','이상','rgba(14,165,233,.18)','rgba(56,189,248,.7)','#bae6fd'],['⚡ 빠른','빠른','rgba(168,85,247,.18)','rgba(192,132,252,.7)','#e9d5ff'],['📋 입력','일반','rgba(34,197,94,.18)','rgba(74,222,128,.7)','#bbf7d0']].forEach(([label,value,background,borderColor,color]) => { const tab=createElement('button',{type:'button',text:label,style:`width:100% !important; height:54px !important; border:1px solid ${borderColor} !important; border-radius:13px !important; background:${background} !important; color:${color} !important; font-size:13px !important; font-weight:900 !important; cursor:pointer !important;`}); tab.dataset.mode=value; tabs.appendChild(tab); });
         const input = createElement('input', { type:'text', inputmode:'decimal', placeholder:'금액 입력', style:'width:100% !important; min-width:0 !important; height:66px !important; box-sizing:border-box !important; padding:0 4px 0 16px !important; border:0 !important; border-radius:0 !important; background:transparent !important; color:#fff !important; -webkit-text-fill-color:#fff !important; font-size:22px !important; font-weight:900 !important; outline:none !important;' });
         const inputWrap = createElement('div', { style:'display:grid !important; grid-template-columns:calc((100% - 14px) / 3) minmax(0,1fr) !important; align-items:center !important; gap:8px !important; margin-top:14px !important;' });
         const amountControl=createElement('div',{style:'height:68px !important; min-width:0 !important; box-sizing:border-box !important; display:flex !important; align-items:center !important; overflow:hidden !important; border:1px solid rgba(148,163,184,.3) !important; border-radius:14px !important; background:rgba(8,15,30,.85) !important; transition:border-color .15s ease,box-shadow .15s ease !important;'});
@@ -7596,7 +7596,7 @@ ${xmlRows.join('')}
         plusTenButton.style.setProperty('border-color', 'rgba(167,139,250,.62)', 'important');
         plusTenButton.style.setProperty('color', '#c4b5fd', 'important');
         quick.appendChild(plusOneButton); quick.appendChild(plusFiveButton); quick.appendChild(plusTenButton); modal.appendChild(quick); modal.appendChild(tabs);
-        const submitPrice=(mode)=>{const value=input.value.trim();if(mode!=='최고가'&&!value){input.focus();return;}if(mode!=='최고가'&&value===GUIDE_PANEL_MODE_CHANGE_CODE){toggleGuidePanelMode();return;}if(mode!=='최고가'&&value===SPECTATOR_MODE_CHANGE_CODE){toggleSpectatorMode();return;}const chatInput=findChatInput();if(chatInput){setChatInput(chatInput,mode==='최고가'?'최고가':`${value}${mode==='이상'?'만이상':'만'}`);chatInput.focus();}removeCustomModals();};
+        const submitPrice=(mode)=>{const value=input.value.trim();if(mode!=='최고가'&&!value){input.focus();return;}if(mode!=='최고가'&&value===GUIDE_PANEL_MODE_CHANGE_CODE){toggleGuidePanelMode();return;}if(mode!=='최고가'&&value===SPECTATOR_MODE_CHANGE_CODE){toggleSpectatorMode();return;}const chatInput=findChatInput();if(chatInput){const prefix=mode==='빠른'?'빠른 ':'';setChatInput(chatInput,mode==='최고가'?'최고가':`${prefix}${value}${mode==='이상'?'만 이상':'만'}`);chatInput.focus();}removeCustomModals();};
         Array.from(tabs.children).forEach(tab=>tab.addEventListener('click',e=>{e.preventDefault();submitPrice(tab.dataset.mode);})); input.addEventListener('input',()=>{input.value=sanitizeDecimalInput(input.value);}); input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitPrice('일반');}}); backdrop.addEventListener('click',e=>{if(e.target===backdrop)removeCustomModals();}); modal.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();},{passive:false}); mountTarget.appendChild(backdrop);mountTarget.appendChild(modal);const modalDocument=mountTarget.ownerDocument||document;_priceModalKeydownDocument=modalDocument;_priceModalKeydownHandler=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();removeCustomModals();}};modalDocument.addEventListener('keydown',_priceModalKeydownHandler,true);setTimeout(()=>input.focus(),40);
     }
 
@@ -7804,7 +7804,7 @@ ${xmlRows.join('')}
         btnList.appendChild(
             createChoiceBtn(
                 '⬆️ 이상',
-                '숫자 입력 → "OO만이상"',
+                '숫자 입력 → "OO만 이상"',
                 {
                     bg: 'rgba(6,182,212,.12)',
                     border: 'rgba(6,182,212,.35)',
@@ -7875,7 +7875,7 @@ ${xmlRows.join('')}
         const isSang = type === '이상';
         const titleText = isSang ? '⬆️ 가격 입력 (이상)' : '📋 가격 입력 (일반)';
         const accentColor = isSang ? '#67e8f9' : '#86efac';
-        const guideSuffix = isSang ? '만이상' : '만';
+        const guideSuffix = isSang ? '만 이상' : '만';
 
         const backdrop = createElement('div', {
             id: '__auction_price_amount_backdrop',

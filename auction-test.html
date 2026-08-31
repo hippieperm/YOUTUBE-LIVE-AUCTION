@@ -677,7 +677,7 @@
             <div class="section-card master-test-card" id="master-test-card">
                 <div class="section-title">🧪 전체 테스트 원클릭 실행</div>
                 <div class="section-desc" style="color:#bbf7d0;">
-                    현재 등록된 <strong>입력 조합 위험·E 버튼 회귀·소수점·밑줄 2단계·경매 시나리오</strong>를 순서대로 전부 실행합니다.
+                    현재 등록된 <strong>입력 조합 위험·E 버튼 회귀·가격입력(빠른)·소수점·밑줄 2단계·경매 시나리오</strong>를 순서대로 전부 실행합니다.
                     봇 시작·수동 채팅·기록 삭제처럼 종료 조건이 없거나 데이터를 지우는 버튼은 자동 실행에서 제외합니다.
                 </div>
                 <button class="sim-btn green master-test-button" id="master-test-button" onclick="runAllTestsFromTop()">
@@ -897,7 +897,7 @@
                 💡 <strong>주요 기능 테스트 포인트</strong><br>
                 1. <strong>⚡ 원클릭 시나리오</strong>: 소수점 생략(255=25.5만), 20/30만원 오보정 방지, 동일가 선착순, 회차별 단일 낙찰자 하이라이트 유지, 밑줄 2단계 필수 조건을 검증<br>
                 2. <strong>📐 규격입력</strong>: 수고·폭·높이·목대·근장 입력 후 📤 전송 클릭 (가운뎃점 조합 텍스트 입력창 자동 주입, 예: 폭12 · 높이12 · 근장12)<br>
-                3. <strong>💰 가격입력</strong>: 👑 최고가 / ⬆️ 이상(15만이상) / 📋 입력(34만) 즉시 입력 테스트<br>
+                3. <strong>💰 가격입력</strong>: 👑 최고가 / ⬆️ 이상(15만 이상) / ⚡ 빠른(빠른 15만) / 📋 입력(34만) 즉시 입력 테스트<br>
                 4. <strong>📁 기타 안내 ▼</strong>: 접기/펼치기 토글로 추가 공지문구 버튼 확인<br>
                 5. <strong>👑 낙찰자 하이라이터</strong>: 전용 밑줄 버튼으로 입력한 뒤 전송해야만 골드 하이라이트 & 👑 낙찰 뱃지 자동 부착<br>
                 6. <strong>실시간 낙찰 자동화</strong>: 채팅창 메시지 클릭 시 스마트 감지 / 가상 키패드 팝업<br>
@@ -1973,6 +1973,49 @@
             };
         }
 
+        async function runQuickPriceInputTest() {
+            const chatInput = document.getElementById('input');
+            const guidePanel = document.getElementById('__auction_guide_panel');
+            const priceButton = guidePanel
+                ? Array.from(guidePanel.querySelectorAll('button')).find(button => button.textContent.includes('가격입력'))
+                : null;
+
+            if (!chatInput || !priceButton) {
+                return { passed: false, detail: '가격입력 버튼 또는 채팅 입력창 없음' };
+            }
+
+            setSimulatorHostInput('');
+            priceButton.click();
+            await waitForEnglishTest(120);
+
+            const modal = document.getElementById('__auction_price_unified_modal');
+            const amountInput = modal ? modal.querySelector('input') : null;
+            const quickButton = modal
+                ? Array.from(modal.querySelectorAll('button')).find(button => button.textContent.includes('빠른'))
+                : null;
+
+            if (!modal || !amountInput || !quickButton) {
+                return { passed: false, detail: '가격입력 모달 또는 빠른 버튼 없음' };
+            }
+
+            amountInput.value = '15';
+            amountInput.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                composed: true,
+                inputType: 'insertText',
+                data: '15'
+            }));
+            quickButton.click();
+            await waitForEnglishTest(120);
+
+            const actual = (chatInput.innerText || chatInput.textContent || '').trim();
+            setSimulatorHostInput('');
+            return {
+                passed: actual === '빠른 15만',
+                detail: `15 + 빠른 → ${actual || '(비어 있음)'}`
+            };
+        }
+
         async function runAllTestsFromTop() {
             if (allTestsRunning) return;
 
@@ -1985,7 +2028,7 @@
                 button.textContent = '⏳ 전체 테스트 실행 중…';
             }
             if (log) log.innerHTML = '';
-            updateMasterTestResult('running', '⏳ 입력 위험·회귀·소수점·밑줄·시나리오를 순서대로 실행 중…');
+            updateMasterTestResult('running', '⏳ 입력 위험·회귀·가격입력·소수점·밑줄·시나리오를 순서대로 실행 중…');
 
             let passed = 0;
             let total = 0;
@@ -2010,6 +2053,9 @@
                     total: english.total,
                     detail: `${english.passed}/${english.total}개 통과`
                 });
+
+                const quickPrice = await runQuickPriceInputTest();
+                record('가격입력: 15 + 빠른 → 빠른 15만', quickPrice);
 
                 for (const [testId, testCase] of Object.entries(DECIMAL_BUTTON_TEST_CASES)) {
                     runDecimalButtonTest(testId);
@@ -2094,7 +2140,7 @@
                 }
                 updateMasterTestResult(
                     passed === total ? 'pass' : 'fail',
-                    `${passed === total ? '✅ 전체 통과' : '❌ 실패 항목 있음'}: ${passed}/${total}개 통과\n입력 위험·회귀·소수점·밑줄·경매 시나리오 검증 완료`
+                    `${passed === total ? '✅ 전체 통과' : '❌ 실패 항목 있음'}: ${passed}/${total}개 통과\n입력 위험·회귀·가격입력·소수점·밑줄·경매 시나리오 검증 완료`
                 );
             }
         }
