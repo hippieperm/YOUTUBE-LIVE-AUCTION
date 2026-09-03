@@ -121,9 +121,26 @@ YOUTUBE-LIVE-AUCTION/
 ## 🚀 Tampermonkey로 설치하기
 
 1. 브라우저 확장 프로그램 **Tampermonkey**(또는 Violentmonkey / Greasemonkey)를 설치합니다.
-2. Tampermonkey 대시보드에서 **새 스크립트 만들기(+)**를 클릭합니다.
-3. [`youtube-live-auction.user.js`](./youtube-live-auction.user.js) 파일의 전체 내용을 복사하여 붙여넣고 저장(`Ctrl+S` 또는 `⌘+S`)합니다.
+2. GitHub의 [`youtube-live-auction.user.js`](https://raw.githubusercontent.com/hippieperm/YOUTUBE-LIVE-AUCTION/main/youtube-live-auction.user.js) 원본 링크를 클릭합니다.
+3. Tampermonkey 설치 화면에서 **설치**를 누릅니다.
 4. YouTube 라이브 스트리밍/경매 방송 페이지로 이동하면 자동으로 활성화됩니다.
+
+### 🔄 GitHub 푸시 후 자동 업데이트
+
+- 이 유저스크립트에는 `@updateURL`과 `@downloadURL`이 GitHub Raw 주소로 등록되어 있습니다.
+- 설치된 사용자의 Tampermonkey가 주기적으로 해당 주소를 확인하고, 새 버전이면 자동 업데이트합니다.
+- **코드를 수정해 GitHub에 푸시할 때마다 `@version`도 반드시 올려야 합니다.** 같은 버전이면 Tampermonkey가 새 코드로 판단하지 않습니다.
+- 현재 업데이트 기준 브랜치는 `main`입니다. 다른 브랜치에만 푸시하면 사용자에게 반영되지 않습니다.
+- 업데이트 확인 주기는 Tampermonkey 설정의 **업데이트 확인 간격**을 따릅니다. 즉시 반영이 아니라 다음 확인 시점에 반영됩니다.
+- 기존에 파일을 복사해 설치한 사용자는 최초 1회 위 GitHub Raw 링크로 다시 설치해야 자동 업데이트가 활성화됩니다.
+
+예시:
+
+```javascript
+// @version      2.5.2
+```
+
+버전 변경 후 `main`에 푸시하면 기존 설치 사용자에게 새 스크립트가 배포됩니다.
 
 ---
 

@@ -1,7 +1,10 @@
 // ==UserScript==
 // @name         해담분재경매 관리
 // @namespace    https://youtube.com/
-// @version      2.5
+// @version      2.5.1
+// @homepageURL  https://github.com/hippieperm/YOUTUBE-LIVE-AUCTION
+// @updateURL    https://raw.githubusercontent.com/hippieperm/YOUTUBE-LIVE-AUCTION/main/youtube-live-auction.user.js
+// @downloadURL  https://raw.githubusercontent.com/hippieperm/YOUTUBE-LIVE-AUCTION/main/youtube-live-auction.user.js
 // @description  YouTube Live 낙찰 자동화 + 밑줄 감지 시 최고가 자동 선별 & 단일 낙찰자 채팅 하이라이터 + 스마트 입찰 금액 추출 + 가상 키패드 + 실시간 토스트 알림 + 안내 패널 + 낙찰 내역 관리 & 엑셀 다운로드
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
