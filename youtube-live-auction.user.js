@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         해담분재경매 관리
 // @namespace    https://youtube.com/
-// @version      2.5.1
+// @version      2.5.2
 // @homepageURL  https://github.com/hippieperm/YOUTUBE-LIVE-AUCTION
 // @updateURL    https://raw.githubusercontent.com/hippieperm/YOUTUBE-LIVE-AUCTION/main/youtube-live-auction.user.js
 // @downloadURL  https://raw.githubusercontent.com/hippieperm/YOUTUBE-LIVE-AUCTION/main/youtube-live-auction.user.js

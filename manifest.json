@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "해담분재경매 관리",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "YouTube 라이브 경매의 낙찰 처리, 안내 패널, 낙찰 내역 및 엑셀 다운로드를 자동화합니다.",
   "icons": {
     "16": "icons/icon16.png",
