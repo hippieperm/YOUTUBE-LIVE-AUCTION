@@ -677,7 +677,7 @@
             <div class="section-card master-test-card" id="master-test-card">
                 <div class="section-title">🧪 전체 테스트 원클릭 실행</div>
                 <div class="section-desc" style="color:#bbf7d0;">
-                    현재 등록된 <strong>입력 조합 위험·E 버튼 회귀·가격입력(빠른)·소수점·밑줄 2단계·경매 시나리오</strong>를 순서대로 전부 실행합니다.
+                    현재 등록된 <strong>한글 IME 확정(공백·Enter)·입력 조합 위험·E 버튼 회귀·가격입력(빠른)·소수점·밑줄 2단계·경매 시나리오</strong>를 순서대로 전부 실행합니다.
                     봇 시작·수동 채팅·기록 삭제처럼 종료 조건이 없거나 데이터를 지우는 버튼은 자동 실행에서 제외합니다.
                 </div>
                 <button class="sim-btn green master-test-button" id="master-test-button" onclick="runAllTestsFromTop()">
@@ -1152,6 +1152,55 @@
             { id: 'compound-final-bs-to-vowel', keys: 'rkqtdj', expected: '값어', label: '겹받침 ㅄ 뒤 모음' }
         ]);
 
+        // 운영체제 IME의 완성형 입력은 영문 물리키 매핑과 별개로 보존해야 한다.
+        // 과거 재조합 경로에서 실제로 변형된 받침·공백 문장뿐 아니라, 문장 경계와
+        // 숫자/기호 문맥, 기존 한글 뒤 입력, 복합 자모까지 같은 확정 경로로 검사한다.
+        const NATIVE_IME_COMMIT_EDGE_CASES = Object.freeze([
+            {
+                id: 'final-before-space',
+                label: '받침 뒤 Space',
+                steps: [{ ime: '녹산' }, { text: ' ' }],
+                expected: '녹산 '
+            },
+            {
+                id: 'single-final-word-boundary',
+                label: '단일 받침 단어와 다음 단어',
+                steps: [{ ime: '꽃' }, { text: ' ' }, { ime: '사세요' }, { text: ' ' }],
+                expected: '꽃 사세요 '
+            },
+            {
+                id: 'final-phrase-boundary',
+                label: '받침 포함 문장 경계',
+                steps: [{ ime: '한글' }, { text: ' ' }, { ime: '테스트' }, { text: ' ' }],
+                expected: '한글 테스트 '
+            },
+            {
+                id: 'price-number-context',
+                label: '가격·숫자·한글 단위',
+                steps: [{ ime: '가격' }, { text: ' 15' }, { ime: '만' }, { text: ' ' }],
+                expected: '가격 15만 '
+            },
+            {
+                id: 'existing-hangul-prefix',
+                label: '기존 한글 뒤 새 IME 확정',
+                initial: '초록',
+                steps: [{ ime: '나무' }, { text: ' ' }],
+                expected: '초록나무 '
+            },
+            {
+                id: 'compound-jamo-phrase',
+                label: '복합 모음·겹받침 문장',
+                steps: [{ ime: '괘' }, { text: ' ' }, { ime: '귀' }, { text: ' ' }, { ime: '앉아' }, { text: ' ' }, { ime: '읽어' }, { text: ' ' }],
+                expected: '괘 귀 앉아 읽어 '
+            },
+            {
+                id: 'symbol-and-price-context',
+                label: '기호·가격 문맥',
+                steps: [{ ime: '입찰가' }, { text: ': 15' }, { ime: '만' }, { text: '!' }],
+                expected: '입찰가: 15만!'
+            }
+        ]);
+
         const ENGLISH_INPUT_TEST_GROUPS = {
             history: [
                 {
@@ -1478,6 +1527,85 @@
                         return { pass: actual === '' && !event.defaultPrevented, actual: `IME 조합 중 r → ${actual || '(비어 있음)'}, defaultPrevented=${event.defaultPrevented}` };
                     }
                 },
+                ...NATIVE_IME_COMMIT_EDGE_CASES.map(testCase => ({
+                    id: `risk-ime-commit-${testCase.id}`,
+                    label: `한글 IME 확정: ${testCase.label} 원문 보존`,
+                    run: async () => {
+                        await prepareEnglishTestState(false, testCase.initial || '');
+                        const input = getEnglishTestInput();
+                        for (const step of testCase.steps) {
+                            if (step.ime) {
+                                dispatchEnglishTestImeCommit(input, step.ime);
+                            } else {
+                                appendEnglishTestPlainInput(input, step.text || '');
+                            }
+                        }
+                        await waitForEnglishTest(50);
+                        const actual = getEnglishTestRawInputText(input);
+                        return {
+                            pass: actual === testCase.expected,
+                            actual: `${testCase.expected} → ${JSON.stringify(actual)}`
+                        };
+                    }
+                })),
+                {
+                    id: 'risk-ime-commit-then-physical-korean',
+                    label: 'IME 확정 뒤 영문 물리키 한글 변환도 새 음절부터 정확히 시작됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestImeCommit(input, '녹산', ' ');
+                        await waitForEnglishTest(20);
+                        await typeEnglishTestKeys(input, 'rksk');
+                        const actual = getEnglishTestRawInputText(input);
+                        return { pass: actual === '녹산 가나', actual: `녹산 + Space + rksk → ${JSON.stringify(actual)}` };
+                    }
+                },
+                {
+                    id: 'risk-ime-final-input-after-compositionend',
+                    label: '브라우저가 compositionend 뒤 확정 input을 내도 원문을 보존함',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestImeCommitAfterEnd(input, '녹산');
+                        await waitForEnglishTest(50);
+                        const actual = getEnglishTestRawInputText(input);
+                        return { pass: actual === '녹산', actual: `end 뒤 확정 input → ${JSON.stringify(actual)}` };
+                    }
+                },
+                {
+                    id: 'risk-ime-commit-without-followup-input',
+                    label: '확정 뒤 후속 input이 없어도 다음 턴 상태가 원문으로 동기화됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestImeCommit(input, '녹산');
+                        await waitForEnglishTest(50);
+                        const actual = getEnglishTestRawInputText(input);
+                        const ignored = input.__auctionIgnoreNextCompositionCommitInput;
+                        return { pass: actual === '녹산' && ignored === false, actual: `원문=${JSON.stringify(actual)}, 후속확정대기=${String(ignored)}` };
+                    }
+                },
+                {
+                    id: 'risk-ime-commit-enter-sends-korean',
+                    label: '한글 IME 확정 뒤 Enter 전송이 원문을 유지함',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestImeCommit(input, '녹산');
+                        dispatchEnglishTestKey(input, 'Enter', { code: 'Enter', key: 'Enter' });
+                        await waitForEnglishTest(50);
+                        const messages = Array.from(document.querySelectorAll('#items #message'));
+                        const sentText = messages.length
+                            ? messages[messages.length - 1].textContent.trim()
+                            : '';
+                        const actual = getEnglishTestInputText(input);
+                        return {
+                            pass: actual === '' && sentText === '녹산',
+                            actual: `Enter 전송=${sentText || '(없음)'}, 입력=${actual || '(비어 있음)'}`
+                        };
+                    }
+                },
                 {
                     id: 'risk-composition-event-reset',
                     label: 'compositionstart/end 뒤 새 입력이 조합 잠금에 걸리지 않음',
@@ -1691,8 +1819,12 @@
             return document.getElementById('__auction_english_button');
         }
 
+        function getEnglishTestRawInputText(input = getEnglishTestInput()) {
+            return input ? String(input.textContent || input.innerText || '') : '';
+        }
+
         function getEnglishTestInputText(input = getEnglishTestInput()) {
-            return input ? String(input.textContent || input.innerText || '').trim() : '';
+            return getEnglishTestRawInputText(input).trim();
         }
 
         function setEnglishTestInput(text) {
@@ -1824,6 +1956,87 @@
                 input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
             }
             return true;
+        }
+
+        function appendEnglishTestPlainInput(input, text, inputType = 'insertText') {
+            if (!input) return false;
+            input.textContent = `${getEnglishTestRawInputText(input)}${text}`;
+            input.innerText = input.textContent;
+            setEnglishTestCaret(input, input.textContent.length);
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType,
+                    data: text
+                }));
+            } catch (error) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            return true;
+        }
+
+        function dispatchEnglishTestImeCommitAfterEnd(input, text) {
+            if (!input) return false;
+
+            // 일부 브라우저는 compositionend 뒤에 isComposing=false인 확정 input을
+            // 낸다. 이 순서에서도 완성형 한글을 변환기에 다시 넘기면 안 된다.
+            input.dispatchEvent(new CompositionEvent('compositionstart', {
+                bubbles: true,
+                composed: true
+            }));
+            input.textContent = `${getEnglishTestRawInputText(input)}${text}`;
+            input.innerText = input.textContent;
+            setEnglishTestCaret(input, input.textContent.length);
+            input.dispatchEvent(new CompositionEvent('compositionend', {
+                bubbles: true,
+                composed: true,
+                data: text
+            }));
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType: 'insertText',
+                    data: text
+                }));
+            } catch (error) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            return true;
+        }
+
+        function dispatchEnglishTestImeCommit(input, text, trailingText = '') {
+            if (!input) return false;
+
+            // 실제 한글 IME처럼 조합 중 입력 → compositionend → 확정 후 공백/Enter
+            // 순서를 만든다. 완성형 한글은 물리 영문키 변환으로 재조합되면 안 된다.
+            input.dispatchEvent(new CompositionEvent('compositionstart', {
+                bubbles: true,
+                composed: true
+            }));
+            input.textContent = `${getEnglishTestRawInputText(input)}${text}`;
+            input.innerText = input.textContent;
+            setEnglishTestCaret(input, input.textContent.length);
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType: 'insertCompositionText',
+                    data: text
+                }));
+            } catch (error) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            input.dispatchEvent(new CompositionEvent('compositionend', {
+                bubbles: true,
+                composed: true,
+                data: text
+            }));
+
+            if (!trailingText) return true;
+
+            return appendEnglishTestPlainInput(input, trailingText);
         }
 
         async function typeEnglishTestKeys(input, text) {

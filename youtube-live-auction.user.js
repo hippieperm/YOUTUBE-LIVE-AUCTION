@@ -9890,9 +9890,19 @@ ${xmlRows.join('')}
         input.__auctionLastRenderedText = getRawChatInputText(input);
         input.__auctionKoreanCompositionStart = null;
         input.__auctionKoreanCompositionEnd = null;
+        input.__auctionIgnoreNextCompositionCommitInput = false;
         observeChatInputRenderer(input);
         bindEnglishPhysicalKeyboard(input);
         bindChatSendButton(input);
+
+        // 운영체제 한글 IME가 완성한 문장은 이미 올바른 음절 경계를 가진다.
+        // 이를 E OFF의 영문 물리키 변환 경로로 다시 통과시키면 완성형 음절을
+        // 자모로 풀어 재조합하면서 "녹산"이 "놗ㄴ"처럼 뒤섞일 수 있다.
+        const preserveNativeImeCommit = () => {
+            input.__auctionLastRenderedText = getRawChatInputText(input);
+            input.__auctionKoreanCompositionStart = null;
+            input.__auctionKoreanCompositionEnd = null;
+        };
         const handler = event => {
             if (input.__auctionSkipKeyboardMapping) {
                 input.__auctionLastRenderedText = getRawChatInputText(input);
@@ -9912,6 +9922,18 @@ ${xmlRows.join('')}
                 !_isEnglishInputEnabled &&
                 ((event && event.isComposing) || input.__auctionKoreanInputComposing)
             ) {
+                preserveNativeImeCommit();
+                return;
+            }
+
+            // compositionend 직후 브라우저가 확정 입력 이벤트를 한 번 더 낼 수 있다.
+            // 그 이벤트와 공백 확정 입력도 원문으로 기록해 재조합하지 않는다.
+            if (
+                !_isEnglishInputEnabled &&
+                input.__auctionIgnoreNextCompositionCommitInput
+            ) {
+                input.__auctionIgnoreNextCompositionCommitInput = false;
+                preserveNativeImeCommit();
                 return;
             }
 
@@ -9934,10 +9956,19 @@ ${xmlRows.join('')}
         };
         input.addEventListener('compositionstart', () => {
             input.__auctionKoreanInputComposing = true;
+            input.__auctionIgnoreNextCompositionCommitInput = false;
+            preserveNativeImeCommit();
         });
         input.addEventListener('compositionend', () => {
             input.__auctionKoreanInputComposing = false;
-            setTimeout(() => handler(null), 0);
+            input.__auctionIgnoreNextCompositionCommitInput = true;
+            // 브라우저별 이벤트 순서 차이: 확정 input이 먼저 온 경우에도 다음 턴에
+            // 상태를 동기화하고, 아직 오지 않은 경우에는 handler가 이 플래그를 소비한다.
+            setTimeout(() => {
+                if (!input.__auctionIgnoreNextCompositionCommitInput) return;
+                input.__auctionIgnoreNextCompositionCommitInput = false;
+                preserveNativeImeCommit();
+            }, 0);
         });
         input.addEventListener('input', handler);
         input.__auctionKoreanInputHandler = handler;
