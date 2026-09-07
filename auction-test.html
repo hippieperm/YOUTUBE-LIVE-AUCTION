@@ -1193,6 +1193,60 @@
             }
         ]);
 
+        // E OFF 상태에서 운영체제 한글 IME로 확정한 문장 뒤에 영어 물리키를
+        // 두벌식 자모로 입력하는 전환 경로. 앞 완성형을 재조합하지 않고 새 입력만
+        // 조합하는지, 경계·커서·선택·삭제까지 함께 확인한다.
+        const IME_TO_PHYSICAL_KOREAN_EDGE_CASES = Object.freeze([
+            {
+                id: 'native-final-without-space',
+                label: '받침 단어 뒤 공백 없이 새 물리키 음절',
+                steps: [{ ime: '녹산' }, { keys: 'rksk' }],
+                expected: '녹산가나'
+            },
+            {
+                id: 'native-compound-vowel-without-space',
+                label: '복합 모음 완성형 뒤 새 물리키 음절',
+                steps: [{ ime: '괴' }, { keys: 'shrtks' }],
+                expected: '괴녹산'
+            },
+            {
+                id: 'native-simple-final-leading-vowel',
+                label: '단일 받침 완성형 뒤 첫 모음은 별도 자모',
+                steps: [{ ime: '각' }, { keys: 'k' }],
+                expected: '각ㅏ'
+            },
+            {
+                id: 'native-compound-final-leading-vowel',
+                label: '겹받침 완성형 뒤 첫 모음은 분해하지 않음',
+                steps: [{ ime: '읽' }, { keys: 'j' }],
+                expected: '읽ㅓ'
+            },
+            {
+                id: 'native-symbol-number-boundary',
+                label: '가격·숫자·기호 경계 뒤 새 물리키 음절',
+                steps: [{ ime: '가격' }, { text: ': 15만! ' }, { keys: 'rksk' }],
+                expected: '가격: 15만! 가나'
+            },
+            {
+                id: 'native-mid-sentence-caret',
+                label: 'IME 확정 한글 문장 중간 커서 삽입',
+                steps: [{ ime: '테스트' }, { caret: 1 }, { keys: 'rksk' }],
+                expected: '테가나스트'
+            },
+            {
+                id: 'native-selection-replace',
+                label: 'IME 확정 한글 선택 영역을 새 물리키 음절로 교체',
+                steps: [{ ime: '테스트' }, { selection: [1, 2] }, { keys: 'rksk' }],
+                expected: '테가나트'
+            },
+            {
+                id: 'native-delete-and-retype',
+                label: 'IME 확정 뒤 물리키 음절 삭제·재입력',
+                steps: [{ ime: '테스트' }, { keys: 'shrtks' }, { deleteBackward: 1 }, { keys: 'tks' }],
+                expected: '테스트녹산'
+            }
+        ]);
+
         // 운영체제 IME의 완성형 입력은 영문 물리키 매핑과 별개로 보존해야 한다.
         // 과거 재조합 경로에서 실제로 변형된 받침·공백 문장뿐 아니라, 문장 경계와
         // 숫자/기호 문맥, 기존 한글 뒤 입력, 복합 자모까지 같은 확정 경로로 검사한다.
@@ -1717,6 +1771,37 @@
                         };
                     }
                 },
+                ...IME_TO_PHYSICAL_KOREAN_EDGE_CASES.map(testCase => ({
+                    id: `risk-ime-to-physical-${testCase.id}`,
+                    label: `IME 확정 후 영어 물리키: ${testCase.label}`,
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestPhysicalSequence(input, testCase.steps);
+                        const actual = getEnglishTestRawInputText(input);
+                        return {
+                            pass: actual === testCase.expected,
+                            actual: `${testCase.expected} → ${JSON.stringify(actual)}`
+                        };
+                    }
+                })),
+                {
+                    id: 'risk-physical-ime-physical-transition',
+                    label: '물리키 조합 뒤 IME 확정·영어 물리키 재전환이 이전 조합을 재사용하지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestKeys(input, 'rks');
+                        dispatchEnglishTestImeCommit(input, '테스트');
+                        await waitForEnglishTest(20);
+                        await typeEnglishTestKeys(input, 'shrtks');
+                        const actual = getEnglishTestRawInputText(input);
+                        return {
+                            pass: actual === '간테스트녹산',
+                            actual: `rks(간) + IME 테스트 + shrtks(녹산) → ${JSON.stringify(actual)}`
+                        };
+                    }
+                },
                 {
                     id: 'risk-ime-final-input-after-compositionend',
                     label: '브라우저가 compositionend 뒤 확정 input을 내도 원문을 보존함',
@@ -2233,6 +2318,12 @@
                     if (step.freezeCaretOnNextJamo) {
                         if (releaseStaleCaretGuard) releaseStaleCaretGuard();
                         releaseStaleCaretGuard = armEnglishTestStaleCaretOnNextJamo(input);
+                    } else if (step.ime) {
+                        dispatchEnglishTestImeCommit(input, step.ime);
+                    } else if (Number.isInteger(step.caret)) {
+                        setEnglishTestCaret(input, step.caret);
+                    } else if (Array.isArray(step.selection)) {
+                        setEnglishTestSelection(input, step.selection[0], step.selection[1]);
                     } else if (step.keys) {
                         for (const key of step.keys) dispatchEnglishTestKey(input, key);
                     } else if (step.key) {
