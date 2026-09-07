@@ -1154,6 +1154,45 @@
             { id: 'final-before-compound-vowel', keys: 'Rhctk', expected: '꽃사', label: '받침 뒤 복합모음 후보 경계' }
         ]);
 
+        const E_OFF_PHYSICAL_INPUT_CASES = Object.freeze([
+            {
+                id: 'physical-space-between-words',
+                label: '영문키 한글 문장 사이 공백',
+                steps: [
+                    { keys: 'gksrmf' },
+                    { text: ' ' },
+                    { freezeCaretOnNextJamo: true },
+                    { keys: 'xptmxm' }
+                ],
+                expected: '한글 테스트'
+            },
+            {
+                id: 'physical-number-symbol-boundary',
+                label: '영문키 한글 뒤 숫자·기호 경계',
+                steps: [{ keys: 'rkrur' }, { text: ' 15' }, { keys: 'aks' }, { text: '!' }],
+                expected: '가격 15만!'
+            },
+            {
+                id: 'physical-existing-korean-prefix',
+                label: '기존 한글 뒤 영문키 입력',
+                initial: '초록',
+                steps: [{ keys: 'skan' }, { text: ' ' }],
+                expected: '초록나무 '
+            },
+            {
+                id: 'physical-delete-and-retype',
+                label: '완성형 음절 삭제 후 영문키 재입력',
+                steps: [{ keys: 'shrtks' }, { deleteBackward: 1 }, { keys: 'tks' }],
+                expected: '녹산'
+            },
+            {
+                id: 'physical-shift-compound-consonant',
+                label: 'Shift 영문키 된소리 조합',
+                steps: [{ key: 'R', shiftKey: true }, { keys: 'hk' }],
+                expected: '꽈'
+            }
+        ]);
+
         // 운영체제 IME의 완성형 입력은 영문 물리키 매핑과 별개로 보존해야 한다.
         // 과거 재조합 경로에서 실제로 변형된 받침·공백 문장뿐 아니라, 문장 경계와
         // 숫자/기호 문맥, 기존 한글 뒤 입력, 복합 자모까지 같은 확정 경로로 검사한다.
@@ -1517,6 +1556,98 @@
                         return { pass: actual === testCase.expected, actual: `${testCase.keys}(${testCase.expected}) → ${actual}` };
                     }
                 })),
+                ...E_OFF_PHYSICAL_INPUT_CASES.map(testCase => ({
+                    id: `risk-e-off-${testCase.id}`,
+                    label: `E OFF: ${testCase.label} 보존`,
+                    run: async () => {
+                        await prepareEnglishTestState(false, testCase.initial || '');
+                        const input = getEnglishTestInput();
+                        await typeEnglishTestPhysicalSequence(input, testCase.steps);
+                        const actual = getEnglishTestRawInputText(input);
+                        return {
+                            pass: actual === testCase.expected,
+                            actual: `${testCase.expected} → ${JSON.stringify(actual)}`
+                        };
+                    }
+                })),
+                {
+                    id: 'risk-e-off-modifier-guard',
+                    label: 'E OFF: Ctrl·Command·Alt 조합은 한글 변환을 가로채지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '안녕');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestKey(input, 'r', { ctrlKey: true });
+                        dispatchEnglishTestKey(input, 's', { metaKey: true });
+                        dispatchEnglishTestKey(input, 't', { altKey: true });
+                        await waitForEnglishTest(40);
+                        const actual = getEnglishTestRawInputText(input);
+                        return { pass: actual === '안녕', actual: `수식키 입력 후 → ${JSON.stringify(actual)}` };
+                    }
+                },
+                {
+                    id: 'risk-e-off-caps-lock-compound',
+                    label: 'E OFF: Caps Lock 영문키도 된소리 한글로 정확히 조합됨',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        dispatchEnglishTestKey(input, 'r', {
+                            getModifierState: modifier => modifier === 'CapsLock'
+                        });
+                        dispatchEnglishTestKey(input, 'h');
+                        dispatchEnglishTestKey(input, 'k');
+                        await waitForEnglishTest(60);
+                        const actual = getEnglishTestRawInputText(input);
+                        return { pass: actual === '꽈', actual: `CapsLock+Rhk → ${JSON.stringify(actual)}` };
+                    }
+                },
+                {
+                    id: 'risk-e-off-non-letter-guard',
+                    label: 'E OFF: 숫자·기호·기능키는 영문키 변환으로 가로채지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '안녕');
+                        const input = getEnglishTestInput();
+                        const numberEvent = dispatchEnglishTestKey(input, '1', { code: 'Digit1', key: '1' });
+                        const symbolEvent = dispatchEnglishTestKey(input, ';', { code: 'Semicolon', key: ';' });
+                        const functionEvent = dispatchEnglishTestKey(input, 'F1', { code: 'F1', key: 'F1' });
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestRawInputText(input);
+                        return {
+                            pass: actual === '안녕' && !numberEvent.defaultPrevented && !symbolEvent.defaultPrevented && !functionEvent.defaultPrevented,
+                            actual: `입력=${JSON.stringify(actual)}, preventDefault=${[numberEvent, symbolEvent, functionEvent].map(event => event.defaultPrevented).join('/')}`
+                        };
+                    }
+                },
+                {
+                    id: 'risk-e-off-outside-input-guard',
+                    label: 'E OFF: 입력창 밖 영문키가 채팅 입력을 바꾸지 않음',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        document.body.dispatchEvent(new KeyboardEvent('keydown', {
+                            key: 'r',
+                            code: 'KeyR',
+                            bubbles: true,
+                            cancelable: true,
+                            composed: true
+                        }));
+                        await waitForEnglishTest(30);
+                        const actual = getEnglishTestRawInputText(input);
+                        return { pass: actual === '', actual: `입력창 밖 keydown 후 → ${JSON.stringify(actual)}` };
+                    }
+                },
+                {
+                    id: 'risk-e-off-selection-replace',
+                    label: 'E OFF: 선택 문자열 교체도 한글 조합 경계를 유지함',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '안녕');
+                        const input = getEnglishTestInput();
+                        setEnglishTestSelection(input, 0, 1);
+                        dispatchEnglishTestKey(input, 'r');
+                        await waitForEnglishTest(60);
+                        const actual = getEnglishTestRawInputText(input);
+                        return { pass: actual === 'ㄱ녕', actual: `안[녕] 중 첫 음절 교체 → ${JSON.stringify(actual)}` };
+                    }
+                },
                 {
                     id: 'risk-ime-composing-guard',
                     label: 'IME 조합 중 keydown은 중복 한글 입력으로 가로채지 않음',
@@ -1558,7 +1689,14 @@
                         const input = getEnglishTestInput();
                         dispatchEnglishTestImeCommit(input, '녹산', ' ');
                         await waitForEnglishTest(20);
-                        await typeEnglishTestKeys(input, 'rksk');
+                        // 일부 Chromium 순서처럼 첫 자모 input 순간 selection이
+                        // 아직 공백 뒤 이전 위치를 가리켜도 새 음절을 조합해야 한다.
+                        const releaseStaleCaretGuard = armEnglishTestStaleCaretOnNextJamo(input);
+                        try {
+                            await typeEnglishTestKeys(input, 'rksk');
+                        } finally {
+                            releaseStaleCaretGuard();
+                        }
                         const actual = getEnglishTestRawInputText(input);
                         return { pass: actual === '녹산 가나', actual: `녹산 + Space + rksk → ${JSON.stringify(actual)}` };
                     }
@@ -2061,9 +2199,89 @@
         }
 
         async function typeEnglishTestKeys(input, text) {
-            for (const key of text) dispatchEnglishTestKey(input, key);
+            for (const key of text) {
+                const isShiftedLetter = /^[A-Z]$/.test(key);
+                dispatchEnglishTestKey(input, key, {
+                    key,
+                    shiftKey: isShiftedLetter
+                });
+            }
             // 영문 물리 키 입력 후 IME 잔여 조각 보정 타이머까지 안정적으로 반영한다.
             await waitForEnglishTest(120);
+        }
+
+        async function typeEnglishTestPhysicalSequence(input, steps) {
+            let releaseStaleCaretGuard = null;
+            try {
+                for (const step of steps) {
+                    if (step.freezeCaretOnNextJamo) {
+                        if (releaseStaleCaretGuard) releaseStaleCaretGuard();
+                        releaseStaleCaretGuard = armEnglishTestStaleCaretOnNextJamo(input);
+                    } else if (step.keys) {
+                        for (const key of step.keys) dispatchEnglishTestKey(input, key);
+                    } else if (step.key) {
+                        dispatchEnglishTestKey(input, step.key, {
+                            key: step.key,
+                            shiftKey: !!step.shiftKey
+                        });
+                    } else if (step.text) {
+                        appendEnglishTestPlainInput(input, step.text);
+                    } else if (step.deleteBackward) {
+                        deleteEnglishTestInputBackward(input, step.deleteBackward);
+                    }
+                    await waitForEnglishTest(20);
+                }
+                await waitForEnglishTest(80);
+            } finally {
+                if (releaseStaleCaretGuard) releaseStaleCaretGuard();
+            }
+        }
+
+        function armEnglishTestStaleCaretOnNextJamo(input) {
+            if (!input) return () => {};
+
+            // Chromium의 execCommand/input 경로에서는 input 이벤트 중 selection이
+            // 새 자모 앞 위치로 잠깐 남을 수 있다. 실제 실패 조건을 원클릭 테스트에서
+            // 재현해 조합 종료 위치가 selection에 의존하지 않는지 확인한다.
+            const ownerDocument = input.ownerDocument || document;
+            const previousText = getEnglishTestRawInputText(input);
+            const previousCaretOffset = getEnglishTestCaretOffset(input) ?? previousText.length;
+            let applied = false;
+            const handler = event => {
+                if (applied || event.target !== input) return;
+
+                const currentText = getEnglishTestRawInputText(input);
+                const appendedText = currentText.startsWith(previousText)
+                    ? currentText.slice(previousText.length)
+                    : '';
+                if (!/^[ㄱ-ㅎㅏ-ㅣ]+$/.test(appendedText)) return;
+
+                applied = true;
+                setEnglishTestCaret(input, previousCaretOffset);
+            };
+
+            ownerDocument.addEventListener('input', handler, true);
+            return () => ownerDocument.removeEventListener('input', handler, true);
+        }
+
+        function deleteEnglishTestInputBackward(input, count = 1) {
+            if (!input) return false;
+            const currentText = getEnglishTestRawInputText(input);
+            const nextText = currentText.slice(0, Math.max(0, currentText.length - count));
+            input.textContent = nextText;
+            input.innerText = nextText;
+            setEnglishTestCaret(input, nextText.length);
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType: 'deleteContentBackward',
+                    data: null
+                }));
+            } catch (error) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            return true;
         }
 
         function updateEnglishTestResult(state, message) {

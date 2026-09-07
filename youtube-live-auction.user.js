@@ -9362,6 +9362,40 @@ ${xmlRows.join('')}
         }
     }
 
+    function getChatInputSelectionOffsets(input) {
+        if (!input) return null;
+
+        try {
+            const ownerDocument = input.ownerDocument || document;
+            const selection = ownerDocument.defaultView
+                ? ownerDocument.defaultView.getSelection()
+                : window.getSelection();
+            if (!selection || !selection.rangeCount) return null;
+
+            const selectedRange = selection.getRangeAt(0);
+            if (
+                !input.contains(selectedRange.startContainer) ||
+                !input.contains(selectedRange.endContainer)
+            ) {
+                return null;
+            }
+
+            const getOffset = (container, offset) => {
+                const range = ownerDocument.createRange();
+                range.selectNodeContents(input);
+                range.setEnd(container, offset);
+                return range.toString().length;
+            };
+
+            return {
+                start: getOffset(selectedRange.startContainer, selectedRange.startOffset),
+                end: getOffset(selectedRange.endContainer, selectedRange.endOffset)
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
     function setChatInputCaretOffset(input, offset) {
         if (!input || offset === null || offset === undefined) return;
 
@@ -9553,6 +9587,12 @@ ${xmlRows.join('')}
         const change = getChatInputChange(input, currentText);
         if (!change.changed || !change.insertedText) {
             input.__auctionLastRenderedText = currentText;
+            if (direction === 'korean' && change.changed) {
+                // 삭제는 현재 조합 구간을 잘라낼 수 있으므로, 다음 키가
+                // 삭제 전 음절의 조합 상태를 재사용하지 않게 한다.
+                input.__auctionKoreanCompositionStart = null;
+                input.__auctionKoreanCompositionEnd = null;
+            }
             return false;
         }
 
@@ -9561,6 +9601,8 @@ ${xmlRows.join('')}
             : Array.from(change.insertedText)
                 .map(character => ENGLISH_TO_KOREAN_JAMO[character] || character)
                 .join('');
+        const hasKoreanCompositionBoundary = direction === 'korean' &&
+            /[^ㄱ-ㅎㅏ-ㅣ]/.test(mappedInsertedText);
 
         let convertedText = currentText.slice(0, change.start) + mappedInsertedText + currentText.slice(change.end);
         let koreanCompositionCaretOffset = null;
@@ -9577,6 +9619,21 @@ ${xmlRows.join('')}
 
         if (convertedText === currentText) {
             input.__auctionLastRenderedText = currentText;
+            if (hasKoreanCompositionBoundary) {
+                // 공백·숫자·기호·완성형 한글은 이전 물리키 조합의 경계다.
+                // 경계를 유지하지 않으면 다음 영문키가 앞 단어의 마지막 음절에
+                // 붙어 "한글테스트" 또는 "간ㅏ"처럼 재조합될 수 있다.
+                input.__auctionKoreanCompositionStart = null;
+                input.__auctionKoreanCompositionEnd = null;
+            } else if (direction === 'korean' && Number.isInteger(input.__auctionKoreanCompositionStart)) {
+                // execCommand/input 순서에서는 브라우저가 이 시점에 아직
+                // 삽입 전 selection을 돌려줄 수 있다. DOM selection을 믿으면
+                // 다음 키에서 조합 시작점이 다시 잡혀 "텟ㅡ트"·"간ㅏ"가 된다.
+                // 텍스트 diff가 가진 삽입 끝 위치가 유일하게 안정적인 기준이다.
+                const insertedEndOffset = change.start + mappedInsertedText.length;
+                input.__auctionKoreanCompositionEnd = insertedEndOffset;
+                setChatInputCaretOffset(input, insertedEndOffset);
+            }
             return false;
         }
 
@@ -9619,7 +9676,10 @@ ${xmlRows.join('')}
         } finally {
             input.__auctionKoreanMappingUpdating = false;
             input.__auctionLastRenderedText = convertedText;
-            if (
+            if (hasKoreanCompositionBoundary) {
+                input.__auctionKoreanCompositionStart = null;
+                input.__auctionKoreanCompositionEnd = null;
+            } else if (
                 direction === 'korean' &&
                 Number.isInteger(input.__auctionKoreanCompositionStart)
             ) {
@@ -9699,6 +9759,58 @@ ${xmlRows.join('')}
             input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         }
         setChatInputCaretOffset(input, insertionOffset + text.length);
+
+        return true;
+    }
+
+    function insertKoreanPhysicalCharacter(input, jamo) {
+        if (!input || !isHangulJamoCharacter(jamo)) return false;
+
+        const currentText = getRawChatInputText(input);
+        const selection = getChatInputSelectionOffsets(input);
+        const insertionStart = selection === null ? currentText.length : selection.start;
+        const insertionEnd = selection === null ? insertionStart : selection.end;
+        const canContinueComposition =
+            Number.isInteger(input.__auctionKoreanCompositionStart) &&
+            input.__auctionKoreanCompositionEnd === insertionStart &&
+            insertionStart === insertionEnd;
+        const activeCompositionStart = canContinueComposition
+            ? input.__auctionKoreanCompositionStart
+            : insertionStart;
+        const insertedText = currentText.slice(0, insertionStart) + jamo + currentText.slice(insertionEnd);
+        const composed = composeChangedKoreanRegion(
+            insertedText,
+            insertionStart,
+            insertionStart + jamo.length,
+            activeCompositionStart
+        );
+
+        // E OFF 물리 영문키는 execCommand가 낸 input의 selection 순서에 맡기지 않는다.
+        // 자모 삽입·음절 조합·커서 복구를 같은 동기 처리로 끝내야 공백 뒤 "테스트"나
+        // IME 확정 뒤 "가나"가 "텟ㅡ트"·"간ㅏ"로 분리되지 않는다.
+        input.__auctionKoreanMappingUpdating = true;
+        try {
+            input.textContent = composed.text;
+            setChatInputCaretOffset(input, composed.caretOffset);
+            try {
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    composed: true,
+                    inputType: 'insertText',
+                    data: jamo
+                }));
+            } catch (e) {
+                input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            // YouTube/브라우저 input 리스너가 selection을 바꿔도 다음 물리키가
+            // 이번 조합의 실제 끝에서 시작하도록 마지막에 한 번 더 복구한다.
+            setChatInputCaretOffset(input, composed.caretOffset);
+        } finally {
+            input.__auctionKoreanMappingUpdating = false;
+            input.__auctionLastRenderedText = composed.text;
+            input.__auctionKoreanCompositionStart = activeCompositionStart;
+            input.__auctionKoreanCompositionEnd = composed.caretOffset;
+        }
 
         return true;
     }
@@ -9809,32 +9921,21 @@ ${xmlRows.join('')}
                 event.stopImmediatePropagation();
             }
 
+            if (!_isEnglishInputEnabled) {
+                insertKoreanPhysicalCharacter(
+                    input,
+                    ENGLISH_TO_KOREAN_JAMO[character] || character
+                );
+                return;
+            }
+
             const currentText = getRawChatInputText(input);
             const caretOffset = getChatInputCaretOffset(input);
-            const insertionOffset = caretOffset === null ? currentText.length : caretOffset;
-            if (
-                !_isEnglishInputEnabled &&
-                (!Number.isInteger(input.__auctionKoreanCompositionStart) ||
-                    input.__auctionKoreanCompositionEnd !== insertionOffset)
-            ) {
-                input.__auctionKoreanCompositionStart = insertionOffset;
-                input.__auctionKoreanCompositionEnd = insertionOffset;
-            }
             const expectedCaretOffset = (caretOffset === null ? currentText.length : caretOffset) + character.length;
-            const insertedCharacter = _isEnglishInputEnabled
-                ? character
-                : (ENGLISH_TO_KOREAN_JAMO[character] || character);
-            if (insertChatInputText(input, insertedCharacter)) {
-                if (_isEnglishInputEnabled) {
-                    input.__auctionExpectedEnglishText = getRawChatInputText(input);
-                    input.__auctionExpectedEnglishCaretOffset = expectedCaretOffset;
-                    setTimeout(() => reconcileEnglishPhysicalInput(input), 0);
-                } else {
-                    const mappedCaretOffset = getChatInputCaretOffset(input);
-                    input.__auctionKoreanCompositionEnd = mappedCaretOffset === null
-                        ? getRawChatInputText(input).length
-                        : mappedCaretOffset;
-                }
+            if (insertChatInputText(input, character)) {
+                input.__auctionExpectedEnglishText = getRawChatInputText(input);
+                input.__auctionExpectedEnglishCaretOffset = expectedCaretOffset;
+                setTimeout(() => reconcileEnglishPhysicalInput(input), 0);
             }
         };
 
