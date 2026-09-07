@@ -9275,25 +9275,37 @@ ${xmlRows.join('')}
                 continue;
             }
 
+            // 공백·기호·숫자는 한글 조합 경계다. 이를 모음처럼 처리하면
+            // "녹산 "에서 마지막 ㄴ이 다음 경계 뒤로 밀릴 수 있다.
+            if (!isHangulVowel(current)) {
+                flushSyllable();
+                result += current;
+                continue;
+            }
+
             if (!initial) {
                 result += current;
             } else if (!vowel) {
                 vowel = current;
             } else {
-                const combinedVowel = HANGUL_COMBINED_VOWELS[vowel + current];
-                if (combinedVowel) {
-                    vowel = combinedVowel;
-                } else if (final) {
+                // 받침 뒤 모음은 복합 모음보다 먼저 받침을 다음 음절로 분리해야 한다.
+                // 예: ㄴㅗㄱㅅㅏㄴ은 ㅗ+ㅏ를 합치는 것이 아니라 녹+산이어야 한다.
+                if (final) {
                     const splitFinal = HANGUL_SPLIT_FINALS[final] || ['', final];
                     result += composeHangulSyllable(initial, vowel, splitFinal[0]);
                     initial = splitFinal[1];
                     vowel = current;
                     final = '';
                 } else {
-                    result += composeHangulSyllable(initial, vowel);
-                    result += current;
-                    initial = '';
-                    vowel = '';
+                    const combinedVowel = HANGUL_COMBINED_VOWELS[vowel + current];
+                    if (combinedVowel) {
+                        vowel = combinedVowel;
+                    } else {
+                        result += composeHangulSyllable(initial, vowel);
+                        result += current;
+                        initial = '';
+                        vowel = '';
+                    }
                 }
             }
         }

@@ -1149,7 +1149,9 @@
             { id: 'compound-final-lt-to-vowel', keys: 'gkfxdk', expected: '핥아', label: '겹받침 ㄾ 뒤 모음' },
             { id: 'compound-final-lp-to-vowel', keys: 'dmfvdj', expected: '읊어', label: '겹받침 ㄿ 뒤 모음' },
             { id: 'compound-final-lh-to-vowel', keys: 'tlfgdj', expected: '싫어', label: '겹받침 ㅀ 뒤 모음' },
-            { id: 'compound-final-bs-to-vowel', keys: 'rkqtdj', expected: '값어', label: '겹받침 ㅄ 뒤 모음' }
+            { id: 'compound-final-bs-to-vowel', keys: 'rkqtdj', expected: '값어', label: '겹받침 ㅄ 뒤 모음' },
+            { id: 'final-before-next-syllable-vowel', keys: 'shrtks', expected: '녹산', label: '받침 뒤 다음 음절 모음 경계' },
+            { id: 'final-before-compound-vowel', keys: 'Rhctk', expected: '꽃사', label: '받침 뒤 복합모음 후보 경계' }
         ]);
 
         // 운영체제 IME의 완성형 입력은 영문 물리키 매핑과 별개로 보존해야 한다.
@@ -1603,6 +1605,25 @@
                         return {
                             pass: actual === '' && sentText === '녹산',
                             actual: `Enter 전송=${sentText || '(없음)'}, 입력=${actual || '(비어 있음)'}`
+                        };
+                    }
+                },
+                {
+                    id: 'risk-korean-physical-enter-single-send',
+                    label: 'E OFF 영문키 녹산 입력 뒤 Enter가 한 번만 원문을 전송함',
+                    run: async () => {
+                        await prepareEnglishTestState(false, '');
+                        const input = getEnglishTestInput();
+                        const beforeMessages = document.querySelectorAll('#items #message').length;
+                        await typeEnglishTestKeys(input, 'shrtks');
+                        dispatchEnglishTestKey(input, 'Enter', { code: 'Enter', key: 'Enter' });
+                        await waitForEnglishTest(80);
+                        const messages = Array.from(document.querySelectorAll('#items #message'));
+                        const appendedMessages = messages.slice(beforeMessages).map(message => message.textContent.trim());
+                        const actual = getEnglishTestRawInputText(input);
+                        return {
+                            pass: actual === '' && appendedMessages.length === 1 && appendedMessages[0] === '녹산',
+                            actual: `전송 ${JSON.stringify(appendedMessages)}, 입력=${JSON.stringify(actual)}`
                         };
                     }
                 },
