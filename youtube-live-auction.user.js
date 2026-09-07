@@ -9494,19 +9494,21 @@ ${xmlRows.join('')}
             const previousDecomposed = decomposeHangulSyllables(previousCharacter);
             const hasFinal = previousDecomposed.length > 2;
             const previousFinal = hasFinal ? previousDecomposed[2] : '';
-            const canContinueCompoundFinal =
+            const canContinueCurrentComposition =
                 Number.isInteger(activeCompositionStart) &&
-                activeCompositionStart < regionStart &&
+                activeCompositionStart < regionStart;
+            const canContinueCompoundFinal =
+                canContinueCurrentComposition &&
                 !!HANGUL_COMBINED_FINALS[previousFinal + firstJamo];
             if (
                 (
                     isHangulConsonant(firstJamo) &&
+                    canContinueCurrentComposition &&
                     (!hasFinal || canContinueCompoundFinal)
                 ) ||
                 (
                     isHangulVowel(firstJamo) &&
-                    Number.isInteger(activeCompositionStart) &&
-                    activeCompositionStart < regionStart
+                    canContinueCurrentComposition
                 )
             ) {
                 regionStart--;
