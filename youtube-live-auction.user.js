@@ -7557,50 +7557,292 @@ ${xmlRows.join('')}
 
 
     // =========================================================
-    // 💰 가격 입력 선택 모달 (최고가 / 이상 / 일반)
+    // 💰 가격 입력 선택 모달 (최고가 / 이상 / 빠른 / 입력 / 희망가)
     // =========================================================
 
     function openUnifiedPriceModal() {
         removeCustomModals();
         const mountTarget = getChatMountTarget();
         if (!mountTarget) return;
-        const backdrop = createElement('div', { id:'__auction_price_unified_backdrop', style:'position:fixed !important; inset:0 !important; background:rgba(2,6,23,.72) !important; backdrop-filter:blur(8px) !important; z-index:2147483646 !important;' });
-        const modal = createElement('div', { id:'__auction_price_unified_modal', style:'position:fixed !important; left:50% !important; top:50% !important; transform:translate(-50%,-50%) !important; width:360px !important; max-width:calc(100% - 24px) !important; box-sizing:border-box !important; padding:20px !important; background:linear-gradient(145deg,rgba(10,18,32,.99),rgba(21,31,52,.98)) !important; color:#fff !important; border:1px solid rgba(250,204,21,.38) !important; border-radius:22px !important; box-shadow:0 28px 90px rgba(0,0,0,.72),inset 0 1px 0 rgba(255,255,255,.08) !important; z-index:2147483647 !important; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif !important;' });
-        const header = createElement('div', { style:'display:flex !important; align-items:center !important; justify-content:space-between !important; padding-bottom:14px !important; border-bottom:1px solid rgba(250,204,21,.18) !important;' });
-        const title = createElement('div', { text:'💰 가격 입력', style:'font-size:19px !important; font-weight:900 !important; color:#fde047 !important;' });
-        const close = createElement('button', { type:'button', text:'✕', style:'width:40px !important; height:40px !important; border:0 !important; border-radius:12px !important; background:rgba(255,255,255,.05) !important; color:rgba(255,255,255,.7) !important; font-size:21px !important; cursor:pointer !important;' });
-        close.addEventListener('click', () => removeCustomModals()); header.appendChild(title); header.appendChild(close); modal.appendChild(header);
-        const tabs = createElement('div', { style:'display:grid !important; grid-template-columns:repeat(4,1fr) !important; gap:6px !important; margin-top:16px !important;' });
-        [['👑 최고가','최고가','rgba(245,158,11,.18)','rgba(251,191,36,.7)','#fde68a'],['⬆️ 이상','이상','rgba(14,165,233,.18)','rgba(56,189,248,.7)','#bae6fd'],['⚡ 빠른','빠른','rgba(168,85,247,.18)','rgba(192,132,252,.7)','#e9d5ff'],['📋 입력','일반','rgba(34,197,94,.18)','rgba(74,222,128,.7)','#bbf7d0']].forEach(([label,value,background,borderColor,color]) => { const tab=createElement('button',{type:'button',text:label,style:`width:100% !important; height:54px !important; border:1px solid ${borderColor} !important; border-radius:13px !important; background:${background} !important; color:${color} !important; font-size:13px !important; font-weight:900 !important; cursor:pointer !important;`}); tab.dataset.mode=value; tabs.appendChild(tab); });
-        const input = createElement('input', { type:'text', inputmode:'decimal', placeholder:'금액 입력', style:'width:100% !important; min-width:0 !important; height:66px !important; box-sizing:border-box !important; padding:0 4px 0 16px !important; border:0 !important; border-radius:0 !important; background:transparent !important; color:#fff !important; -webkit-text-fill-color:#fff !important; font-size:22px !important; font-weight:900 !important; outline:none !important;' });
-        const inputWrap = createElement('div', { style:'display:grid !important; grid-template-columns:calc((100% - 14px) / 3) minmax(0,1fr) !important; align-items:center !important; gap:8px !important; margin-top:14px !important;' });
-        const amountControl=createElement('div',{style:'height:68px !important; min-width:0 !important; box-sizing:border-box !important; display:flex !important; align-items:center !important; overflow:hidden !important; border:1px solid rgba(148,163,184,.3) !important; border-radius:14px !important; background:rgba(8,15,30,.85) !important; transition:border-color .15s ease,box-shadow .15s ease !important;'});
-        const unit=createElement('span',{text:'만원',style:'flex:0 0 auto !important; padding:0 15px 0 6px !important; color:#cbd5e1 !important; font-size:16px !important; font-weight:900 !important; white-space:nowrap !important; user-select:none !important; pointer-events:none !important;'});
-        amountControl.appendChild(input); amountControl.appendChild(unit);
-        input.addEventListener('focus',()=>{amountControl.style.setProperty('border-color','#facc15','important');amountControl.style.setProperty('box-shadow','0 0 0 3px rgba(250,204,21,.13)','important');});
-        input.addEventListener('blur',()=>{amountControl.style.setProperty('border-color','rgba(148,163,184,.3)','important');amountControl.style.setProperty('box-shadow','none','important');});
-        const makeStepButton = (label, value) => { const b=createElement('button',{type:'button',text:label,style:'width:100% !important; min-width:0 !important; height:68px !important; border:1px solid rgba(250,204,21,.35) !important; border-radius:14px !important; background:rgba(250,204,21,.1) !important; color:#fde68a !important; font-size:16px !important; font-weight:900 !important; cursor:pointer !important;'}); b.addEventListener('click',()=>{const current=parseFloat(input.value.replace(/,/g,''))||0;input.value=String(Math.max(0,current+value));input.focus();}); return b; };
-        const minusButton = makeStepButton('-1만',-1);
-        minusButton.style.setProperty('background', 'rgba(239,68,68,.14)', 'important');
-        minusButton.style.setProperty('border-color', 'rgba(248,113,113,.62)', 'important');
-        minusButton.style.setProperty('color', '#fca5a5', 'important');
-        inputWrap.appendChild(minusButton); inputWrap.appendChild(amountControl); modal.appendChild(inputWrap);
-        const quick=createElement('div',{style:'display:grid !important; grid-template-columns:repeat(3,1fr) !important; gap:7px !important; margin-top:10px !important;'});
-        const plusOneButton = makeStepButton('+1만',1);
-        plusOneButton.style.setProperty('background', 'rgba(34,197,94,.15)', 'important');
-        plusOneButton.style.setProperty('border-color', 'rgba(74,222,128,.58)', 'important');
-        plusOneButton.style.setProperty('color', '#86efac', 'important');
-        const plusFiveButton = makeStepButton('+5만',5);
-        plusFiveButton.style.setProperty('background', 'rgba(234,179,8,.16)', 'important');
-        plusFiveButton.style.setProperty('border-color', 'rgba(250,204,21,.62)', 'important');
-        plusFiveButton.style.setProperty('color', '#fde68a', 'important');
-        const plusTenButton = makeStepButton('+10만',10);
-        plusTenButton.style.setProperty('background', 'rgba(139,92,246,.16)', 'important');
-        plusTenButton.style.setProperty('border-color', 'rgba(167,139,250,.62)', 'important');
-        plusTenButton.style.setProperty('color', '#c4b5fd', 'important');
-        quick.appendChild(plusOneButton); quick.appendChild(plusFiveButton); quick.appendChild(plusTenButton); modal.appendChild(quick); modal.appendChild(tabs);
-        const submitPrice=(mode)=>{const value=input.value.trim();if(mode!=='최고가'&&!value){input.focus();return;}if(mode!=='최고가'&&value===GUIDE_PANEL_MODE_CHANGE_CODE){toggleGuidePanelMode();return;}if(mode!=='최고가'&&value===SPECTATOR_MODE_CHANGE_CODE){toggleSpectatorMode();return;}const chatInput=findChatInput();if(chatInput){const prefix=mode==='빠른'?'빠른 ':'';setChatInput(chatInput,mode==='최고가'?'최고가':`${prefix}${value}${mode==='이상'?'만 이상':'만'}`);chatInput.focus();}removeCustomModals();};
-        Array.from(tabs.children).forEach(tab=>tab.addEventListener('click',e=>{e.preventDefault();submitPrice(tab.dataset.mode);})); input.addEventListener('input',()=>{input.value=sanitizeDecimalInput(input.value);}); input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitPrice('일반');}}); backdrop.addEventListener('click',e=>{if(e.target===backdrop)removeCustomModals();}); modal.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();},{passive:false}); mountTarget.appendChild(backdrop);mountTarget.appendChild(modal);const modalDocument=mountTarget.ownerDocument||document;_priceModalKeydownDocument=modalDocument;_priceModalKeydownHandler=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();removeCustomModals();}};modalDocument.addEventListener('keydown',_priceModalKeydownHandler,true);setTimeout(()=>input.focus(),40);
+        const modalDocument = mountTarget.ownerDocument || document;
+        const backdrop = createElement('div', {
+            id: '__auction_price_unified_backdrop',
+            style: `
+                position:fixed !important;
+                inset:0 !important;
+                background:rgba(2,6,23,.76) !important;
+                backdrop-filter:blur(9px) !important;
+                -webkit-backdrop-filter:blur(9px) !important;
+                z-index:2147483646 !important;
+            `
+        });
+        const modal = createElement('div', {
+            id: '__auction_price_unified_modal',
+            style: `
+                position:fixed !important;
+                left:50% !important;
+                top:50% !important;
+                transform:translate(-50%,-50%) !important;
+                width:368px !important;
+                max-width:calc(100% - 24px) !important;
+                box-sizing:border-box !important;
+                padding:18px !important;
+                background:linear-gradient(155deg,rgba(10,19,36,.995),rgba(17,29,50,.99)) !important;
+                color:#fff !important;
+                border:1px solid rgba(250,204,21,.48) !important;
+                border-radius:24px !important;
+                box-shadow:0 30px 100px rgba(0,0,0,.78),inset 0 1px 0 rgba(255,255,255,.09) !important;
+                z-index:2147483647 !important;
+                font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif !important;
+            `
+        });
+
+        const header = createElement('div', {
+            style: `
+                display:flex !important;
+                align-items:center !important;
+                justify-content:space-between !important;
+                gap:12px !important;
+                padding-bottom:14px !important;
+                border-bottom:1px solid rgba(250,204,21,.2) !important;
+            `
+        });
+        const titleBlock = createElement('div', {
+            style: 'display:flex !important; flex-direction:column !important; gap:3px !important; min-width:0 !important;'
+        });
+        const title = createElement('div', {
+            text: '💰 가격 입력',
+            style: 'font-size:19px !important; font-weight:900 !important; color:#fde047 !important; letter-spacing:-.4px !important;'
+        });
+        const subtitle = createElement('div', {
+            text: '금액을 입력하고 전송 방식을 선택하세요',
+            style: 'font-size:11px !important; color:rgba(226,232,240,.62) !important; font-weight:650 !important;'
+        });
+        titleBlock.appendChild(title);
+        titleBlock.appendChild(subtitle);
+        const close = createElement('button', {
+            type: 'button',
+            text: '✕',
+            style: `
+                flex:0 0 auto !important;
+                width:40px !important;
+                height:40px !important;
+                border:0 !important;
+                border-radius:13px !important;
+                background:rgba(148,163,184,.13) !important;
+                color:rgba(255,255,255,.72) !important;
+                font-size:21px !important;
+                line-height:1 !important;
+                cursor:pointer !important;
+                transition:all .15s ease !important;
+            `
+        });
+        close.addEventListener('mouseenter', () => {
+            close.style.setProperty('background', 'rgba(148,163,184,.25)', 'important');
+            close.style.setProperty('color', '#fff', 'important');
+        });
+        close.addEventListener('mouseleave', () => {
+            close.style.setProperty('background', 'rgba(148,163,184,.13)', 'important');
+            close.style.setProperty('color', 'rgba(255,255,255,.72)', 'important');
+        });
+        close.addEventListener('click', () => removeCustomModals());
+        header.appendChild(titleBlock);
+        header.appendChild(close);
+        modal.appendChild(header);
+
+        const amountLabel = createElement('div', {
+            text: '희망 금액',
+            style: 'margin-top:16px !important; margin-bottom:7px !important; color:#cbd5e1 !important; font-size:12px !important; font-weight:850 !important; letter-spacing:-.2px !important;'
+        });
+        const input = createElement('input', {
+            type: 'text',
+            inputmode: 'decimal',
+            placeholder: '예: 18 또는 18.5',
+            style: `
+                flex:1 1 auto !important;
+                min-width:0 !important;
+                height:64px !important;
+                box-sizing:border-box !important;
+                padding:0 6px 0 16px !important;
+                border:0 !important;
+                border-radius:0 !important;
+                background:transparent !important;
+                color:#fff !important;
+                -webkit-text-fill-color:#fff !important;
+                font-size:24px !important;
+                font-weight:900 !important;
+                letter-spacing:-.5px !important;
+                outline:none !important;
+            `
+        });
+        const amountControl = createElement('div', {
+            style: `
+                display:flex !important;
+                align-items:center !important;
+                width:100% !important;
+                min-width:0 !important;
+                height:66px !important;
+                box-sizing:border-box !important;
+                overflow:hidden !important;
+                border:1px solid rgba(148,163,184,.38) !important;
+                border-radius:15px !important;
+                background:rgba(5,12,26,.78) !important;
+                box-shadow:inset 0 1px 0 rgba(255,255,255,.04) !important;
+                transition:border-color .15s ease,box-shadow .15s ease !important;
+            `
+        });
+        const unit = createElement('span', {
+            text: '만원',
+            style: 'flex:0 0 auto !important; padding:0 16px 0 5px !important; color:#cbd5e1 !important; font-size:16px !important; font-weight:900 !important; white-space:nowrap !important; user-select:none !important; pointer-events:none !important;'
+        });
+        amountControl.appendChild(input);
+        amountControl.appendChild(unit);
+        modal.appendChild(amountLabel);
+        modal.appendChild(amountControl);
+
+        const preview = createElement('div', {
+            text: '금액을 입력한 뒤 버튼을 선택하세요',
+            style: `
+                min-height:18px !important;
+                margin-top:8px !important;
+                padding:0 2px !important;
+                color:rgba(226,232,240,.62) !important;
+                font-size:11px !important;
+                font-weight:650 !important;
+                letter-spacing:-.1px !important;
+            `
+        });
+        modal.appendChild(preview);
+
+        const actionLabel = createElement('div', {
+            text: '전송 방식',
+            style: 'margin-top:8px !important; margin-bottom:7px !important; color:#cbd5e1 !important; font-size:12px !important; font-weight:850 !important; letter-spacing:-.2px !important;'
+        });
+        const tabs = createElement('div', {
+            style: `
+                display:grid !important;
+                grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+                gap:8px !important;
+            `
+        });
+        const modeOptions = [
+            { label:'👑 최고가', value:'최고가', background:'rgba(245,158,11,.17)', borderColor:'rgba(251,191,36,.72)', color:'#fde68a', hoverBackground:'rgba(245,158,11,.28)' },
+            { label:'⬆️ 이상', value:'이상', background:'rgba(14,165,233,.17)', borderColor:'rgba(56,189,248,.72)', color:'#bae6fd', hoverBackground:'rgba(14,165,233,.28)' },
+            { label:'⚡ 빠른', value:'빠른', background:'rgba(168,85,247,.17)', borderColor:'rgba(192,132,252,.72)', color:'#e9d5ff', hoverBackground:'rgba(168,85,247,.28)' },
+            { label:'💫 희망가', value:'희망가', background:'rgba(236,72,153,.2)', borderColor:'rgba(244,114,182,.82)', color:'#fbcfe8', hoverBackground:'rgba(236,72,153,.34)' },
+            { label:'📋 입력', value:'일반', background:'rgba(34,197,94,.17)', borderColor:'rgba(74,222,128,.72)', color:'#bbf7d0', hoverBackground:'rgba(34,197,94,.28)', fullWidth:true }
+        ];
+
+        const getOutputText = (mode, value) => {
+            if (mode === '최고가') return '최고가';
+            const prefix = mode === '빠른' ? '빠른 ' : mode === '희망가' ? '희망가 ' : '';
+            return `${prefix}${value}${mode === '이상' ? '만 이상' : '만'}`;
+        };
+        const updatePreview = (mode = '일반') => {
+            const value = input.value.trim();
+            preview.textContent = value
+                ? `채팅에 전송: ${getOutputText(mode, value)}`
+                : '금액을 입력한 뒤 버튼을 선택하세요';
+        };
+        const submitPrice = (mode) => {
+            const value = input.value.trim();
+            if (mode !== '최고가' && !value) {
+                input.focus();
+                return;
+            }
+            if (mode !== '최고가' && value === GUIDE_PANEL_MODE_CHANGE_CODE) {
+                toggleGuidePanelMode();
+                return;
+            }
+            if (mode !== '최고가' && value === SPECTATOR_MODE_CHANGE_CODE) {
+                toggleSpectatorMode();
+                return;
+            }
+            const chatInput = findChatInput();
+            if (chatInput) {
+                setChatInput(chatInput, getOutputText(mode, value));
+                chatInput.focus();
+            }
+            removeCustomModals();
+        };
+
+        modeOptions.forEach(option => {
+            const tab = createElement('button', {
+                type: 'button',
+                text: option.label,
+                style: `
+                    width:100% !important;
+                    min-width:0 !important;
+                    height:${option.fullWidth ? '52px' : '56px'} !important;
+                    grid-column:${option.fullWidth ? '1 / -1' : 'auto'} !important;
+                    border:1px solid ${option.borderColor} !important;
+                    border-radius:14px !important;
+                    background:${option.background} !important;
+                    color:${option.color} !important;
+                    font-size:14px !important;
+                    font-weight:900 !important;
+                    letter-spacing:-.3px !important;
+                    cursor:pointer !important;
+                    transition:all .15s ease !important;
+                `
+            });
+            tab.dataset.mode = option.value;
+            tab.addEventListener('mouseenter', () => {
+                tab.style.setProperty('background', option.hoverBackground, 'important');
+                tab.style.setProperty('transform', 'translateY(-1px)', 'important');
+                updatePreview(option.value);
+            });
+            tab.addEventListener('mouseleave', () => {
+                tab.style.setProperty('background', option.background, 'important');
+                tab.style.setProperty('transform', 'translateY(0)', 'important');
+            });
+            tab.addEventListener('focus', () => updatePreview(option.value));
+            tab.addEventListener('click', event => {
+                event.preventDefault();
+                submitPrice(option.value);
+            });
+            tabs.appendChild(tab);
+        });
+        modal.appendChild(actionLabel);
+        modal.appendChild(tabs);
+
+        input.addEventListener('input', () => {
+            input.value = sanitizeDecimalInput(input.value);
+            updatePreview();
+        });
+        input.addEventListener('focus', () => {
+            amountControl.style.setProperty('border-color', '#facc15', 'important');
+            amountControl.style.setProperty('box-shadow', '0 0 0 3px rgba(250,204,21,.13)', 'important');
+        });
+        input.addEventListener('blur', () => {
+            amountControl.style.setProperty('border-color', 'rgba(148,163,184,.38)', 'important');
+            amountControl.style.setProperty('box-shadow', 'inset 0 1px 0 rgba(255,255,255,.04)', 'important');
+        });
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submitPrice('일반');
+            }
+        });
+        backdrop.addEventListener('click', event => {
+            if (event.target === backdrop) removeCustomModals();
+        });
+        modal.addEventListener('wheel', event => {
+            event.preventDefault();
+            event.stopPropagation();
+        }, { passive:false });
+        mountTarget.appendChild(backdrop);
+        mountTarget.appendChild(modal);
+        _priceModalKeydownDocument = modalDocument;
+        _priceModalKeydownHandler = event => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                removeCustomModals();
+            }
+        };
+        modalDocument.addEventListener('keydown', _priceModalKeydownHandler, true);
+        setTimeout(() => input.focus(), 40);
     }
 
     function openPriceChoiceModal() {
