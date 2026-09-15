@@ -11112,7 +11112,7 @@ ${xmlRows.join('')}
 
     function collectChatItemsFromMutation(mutation) {
         const items = new Set();
-        const addNode = node => {
+        const addNode = (node, includeDescendants = false) => {
             if (!node) return;
 
             const element = node.nodeType === Node.TEXT_NODE
@@ -11129,13 +11129,26 @@ ${xmlRows.join('')}
                 if (parentItem) items.add(parentItem);
             }
 
-            if (typeof element.querySelectorAll === 'function') {
+            // 새로 삽입된 작은 하위 트리만 탐색한다. mutation.target은
+            // 보통 전체 #items 컨테이너이므로 여기서 descendants를 검색하면
+            // 채팅 한 줄마다 기존 채팅 전체를 다시 훑게 된다.
+            if (
+                includeDescendants &&
+                node.nodeType === Node.ELEMENT_NODE &&
+                typeof element.querySelectorAll === 'function'
+            ) {
                 element.querySelectorAll(CHAT_ITEM_SELECTOR).forEach(item => items.add(item));
             }
         };
 
+        // characterData 변경이나 기존 메시지 내부 DOM 변경은 가장 가까운
+        // 메시지 하나만 확인한다. 전체 컨테이너 검색은 하지 않는다.
         addNode(mutation.target);
-        mutation.addedNodes.forEach(addNode);
+
+        // 새 renderer가 wrapper 안에 삽입되는 경우에만 새로 추가된 하위 트리를
+        // 탐색한다. 기존 채팅 목록에는 접근하지 않으므로 mutation 비용이
+        // 현재 채팅량에 비례해 누적되지 않는다.
+        mutation.addedNodes.forEach(node => addNode(node, true));
         return Array.from(items);
     }
 
