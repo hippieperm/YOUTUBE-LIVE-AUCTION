@@ -19,11 +19,21 @@
 
     'use strict';
 
-    // 일반 라이브 페이지에서는 최상위 문서가 chatframe 내부를 담당한다.
+    // 일반 YouTube 라이브에서는 최상위 문서가 chatframe 내부를 담당한다.
     // Tampermonkey 설정에 따라 iframe 주입이 제한되어도 UI가 사라지지 않게 하고,
     // iframe 안에서는 별도 인스턴스를 만들지 않아 중복 UI를 막는다.
+    // 단, file:// 로 연 로컬 시뮬레이터는 브라우저가 부모 문서의 iframe 접근을
+    // 제한할 수 있으므로 embeddedChat iframe 인스턴스가 직접 실행되게 한다.
     const isStandaloneLiveChat = window.location.pathname.startsWith('/live_chat');
-    if (window.top !== window) {
+    const isLocalFile = window.location.protocol === 'file:';
+    const isLocalSimulatorFrame = isLocalFile &&
+        new URLSearchParams(window.location.search).get('embeddedChat') === '1';
+
+    if (window.top !== window && !isLocalFile) {
+        return;
+    }
+
+    if (window.top === window && isLocalFile && !isStandaloneLiveChat && !isLocalSimulatorFrame) {
         return;
     }
 
