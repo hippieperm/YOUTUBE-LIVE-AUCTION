@@ -19,10 +19,11 @@
 
     'use strict';
 
-    // 일반 라이브 페이지와 chatframe에 스크립트가 동시에 주입되면 서로의 UI를
-    // 다시 만들 수 있다. 실제 채팅 문서(iframe 또는 단독 채팅 팝아웃)만 담당한다.
+    // 일반 라이브 페이지에서는 최상위 문서가 chatframe 내부를 담당한다.
+    // Tampermonkey 설정에 따라 iframe 주입이 제한되어도 UI가 사라지지 않게 하고,
+    // iframe 안에서는 별도 인스턴스를 만들지 않아 중복 UI를 막는다.
     const isStandaloneLiveChat = window.location.pathname.startsWith('/live_chat');
-    if (window.top === window && !isStandaloneLiveChat) {
+    if (window.top !== window) {
         return;
     }
 
@@ -2544,6 +2545,27 @@
     let _lastOpenBidListModalTime = 0;
 
     function getTargetDocs() {
+        if (isStandaloneLiveChat) {
+            return [document];
+        }
+
+        // 일반 라이브 페이지는 최상위 문서에서 실행되므로 실제 UI·채팅 감시
+        // 대상은 chatframe의 document여야 한다. iframe이 아직 로드되지 않은
+        // 초기 턴에는 현재 document를 반환하고, load/재시도 시 다시 찾는다.
+        try {
+            const input = findChatInput();
+            if (input && input.ownerDocument) {
+                return [input.ownerDocument];
+            }
+        } catch (e) {}
+
+        try {
+            const iframe = document.querySelector('iframe#chatframe');
+            if (iframe && iframe.contentDocument) {
+                return [iframe.contentDocument];
+            }
+        } catch (e) {}
+
         return [document];
     }
 
